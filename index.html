@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản - Hệ thống quản lý học sinh</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css?v=15114">
+    <!-- Thêm thư viện XLSX để xuất file Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- ExcelJS: xuất file VNEDU có định dạng, đường viền, căn lề -->
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+    <!-- Thư viện biểu đồ Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- ============================================================
+         WEBSITE GIỚI THIỆU / TRANG CHỦ CÔNG KHAI
+         Không truy cập dữ liệu Supabase trước khi đăng nhập
+         ============================================================ -->
+    <div id="publicSite" class="public-site">
+        <header class="site-header">
+            <div class="site-container site-nav-wrap">
+                <a class="site-brand" href="#trang-chu" aria-label="Trang chủ">
+                    <div class="site-brand-mark site-brand-logo"><img src="assets/logo-phan-hieu-tran-quoc-toan.png" alt="Logo Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản" decoding="async"></div>
+                    <div>
+                        <strong id="publicSchoolName" class="public-school-name"><span>TRƯỜNG TIỂU HỌC - TRUNG HỌC CƠ SỞ & TRUNG HỌC PHỔ THÔNG LẠI SƠN</span><em>PHÂN HIỆU TRƯỜNG TIỂU HỌC TRẦN QUỐC TOẢN</em></strong>
+                        <span>Kỷ cương · Tình thương · Trách nhiệm</span>
+                    </div>
+                </a>
+                <div class="site-top-motto"><i class="fas fa-school-flag"></i><span>Cổng thông tin điện tử nhà trường</span></div>
+                <button type="button" id="publicMobileMenuBtn" class="public-mobile-menu-btn" aria-label="Mở menu website" aria-expanded="false" aria-controls="publicMobileMenu"><i class="fas fa-bars"></i></button>
+                <button class="site-login-btn" data-open-login><i class="fas fa-lock"></i> Đăng nhập</button>
+            </div>
+        </header>
+        <div id="publicMobileMenu" class="public-mobile-menu" aria-hidden="true">
+            <div class="public-mobile-menu-panel">
+                <div class="public-mobile-menu-head"><strong>Danh mục website</strong><button type="button" id="publicMobileMenuClose" aria-label="Đóng menu"><i class="fas fa-xmark"></i></button></div>
+                <nav aria-label="Điều hướng website trên điện thoại">
+                    <a href="#trang-chu"><i class="fas fa-house"></i><span>Trang chủ</span></a>
+                    <a href="#gioi-thieu"><i class="fas fa-school"></i><span>Giới thiệu</span></a>
+                    <a href="#tin-tuc"><i class="fas fa-newspaper"></i><span>Tin tức - Sự kiện</span></a>
+                    <a href="#hinh-anh"><i class="fas fa-images"></i><span>Thư viện ảnh</span></a>
+                    <a href="#video"><i class="fas fa-circle-play"></i><span>Video hoạt động</span></a>
+                    <a href="#tai-lieu"><i class="fas fa-folder-open"></i><span>Tài liệu công khai</span></a>
+                    <a href="#lien-he"><i class="fas fa-phone"></i><span>Liên hệ</span></a>
+                </nav>
+                <button class="public-mobile-manage-btn" data-open-login><i class="fas fa-right-to-bracket"></i> Vào hệ thống quản lý</button>
+            </div>
+        </div>
+
+        <main>
+            <section id="trang-chu" class="site-hero public-u-hero">
+                <div class="hero-pattern"></div>
+                <div class="site-container public-u-shell">
+                    <aside class="public-u-side public-u-left" aria-label="Menu nội dung">
+                        <div class="u-side-title"><i class="fas fa-bars"></i><span>Danh mục</span></div>
+                        <nav class="u-side-nav">
+                            <a href="#trang-chu" class="active"><i class="fas fa-house"></i><span>Trang chủ</span></a>
+                            <a href="#gioi-thieu"><i class="fas fa-school"></i><span>Giới thiệu</span></a>
+                            <a href="#tin-tuc"><i class="fas fa-newspaper"></i><span>Tin tức - Sự kiện</span></a>
+                            <a href="#hinh-anh"><i class="fas fa-images"></i><span>Thư viện ảnh</span></a>
+                            <a href="#video"><i class="fas fa-circle-play"></i><span>Video hoạt động</span></a>
+                            <a href="#tai-lieu"><i class="fas fa-folder-open"></i><span>Tài liệu công khai</span></a>
+                        </nav>
+                    </aside>
+                    <div class="public-u-center">
+                        <div class="hero-banner-frame" id="publicHeroBanner" aria-label="Banner hoạt động nhà trường">
+                            <div id="publicHeroSlides" class="public-hero-slides">
+                                <figure class="public-hero-slide active" data-hero-index="0">
+                                    <img src="assets/banner-lai-son.png" alt="Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản" class="hero-banner-image" decoding="async" fetchpriority="high">
+                                </figure>
+                            </div>
+                            <button type="button" class="public-hero-arrow public-hero-prev" id="publicHeroPrev" aria-label="Ảnh banner trước"><i class="fas fa-chevron-left"></i></button>
+                            <button type="button" class="public-hero-arrow public-hero-next" id="publicHeroNext" aria-label="Ảnh banner tiếp theo"><i class="fas fa-chevron-right"></i></button>
+                            <div id="publicHeroDots" class="public-hero-dots" aria-label="Chọn ảnh banner"><button type="button" class="active" data-hero-dot="0" aria-label="Ảnh banner 1"></button></div>
+                            <span class="hero-banner-shine"></span>
+                        </div>
+                        <div class="public-school-ticker" aria-label="Thông điệp nhà trường">
+                            <div class="public-school-ticker-label"><i class="fas fa-bullhorn"></i><span>THÔNG ĐIỆP NHÀ TRƯỜNG</span></div>
+                            <div class="public-school-ticker-window">
+                                <div class="public-school-ticker-track">
+                                    <span>Học để biết - Học để làm - Học để chung sống - Học để khẳng định mình</span><b>★</b><span>Mỗi ngày đến trường là một ngày vui</span><b>★</b><span>Yêu thương - Đồng hành - Cùng tiến bộ</span><b>★</b><span>Vì học sinh thân yêu</span><b>★</b><span>Xây dựng trường học an toàn - thân thiện - hạnh phúc</span><b>★</b>
+                                    <span>Học để biết - Học để làm - Học để chung sống - Học để khẳng định mình</span><b>★</b><span>Mỗi ngày đến trường là một ngày vui</span><b>★</b><span>Yêu thương - Đồng hành - Cùng tiến bộ</span><b>★</b><span>Vì học sinh thân yêu</span><b>★</b><span>Xây dựng trường học an toàn - thân thiện - hạnh phúc</span><b>★</b>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <aside class="public-u-side public-u-right" aria-label="Tiện ích">
+                        <div class="u-side-title"><i class="fas fa-bolt"></i><span>Tiện ích</span></div>
+                        <div class="u-school-year"><i class="far fa-calendar-alt"></i><span>Năm học</span><b id="publicSchoolYear">2026-2027</b><small id="publicTodayLabel"></small></div>
+                        <div class="u-utility-block">
+                            <div class="u-utility-heading"><i class="fas fa-bullhorn"></i><span>Thông báo mới</span><a href="#tin-tuc" aria-label="Xem khu vực tin tức">Xem</a></div>
+                            <div id="publicAnnouncementList" class="u-announcement-list"><span class="u-utility-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải...</span></div>
+                        </div>
+                        <div class="u-utility-block">
+                            <div class="u-utility-heading"><i class="fas fa-link"></i><span>Liên kết nhanh</span><a href="#lien-ket" aria-label="Xem tất cả liên kết">Tất cả</a></div>
+                            <div id="publicQuickLinks" class="u-quick-links"><span class="u-utility-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải...</span></div>
+                        </div>
+                        <a class="u-contact-link" href="#lien-he"><i class="fas fa-phone"></i><span>Thông tin liên hệ</span></a>
+                        <button class="u-manage-btn" data-open-login><i class="fas fa-right-to-bracket"></i><span>Vào hệ thống quản lý</span></button>
+                    </aside>
+                </div>
+                <div class="hero-wave"></div>
+            </section>
+
+            <section id="chuc-nang" class="site-section feature-section public-management-feature">
+                <div class="site-container">
+                    <div class="section-heading">
+                        <span>HỆ THỐNG QUẢN LÝ</span>
+                        <h2>Các chức năng nổi bật</h2>
+                        <p>Truy cập nhanh những nghiệp vụ giáo viên sử dụng thường xuyên.</p>
+                    </div>
+                    <div class="feature-grid">
+                        <button class="feature-card feature-blue" data-open-login><i class="fas fa-users"></i><strong>Quản lý học sinh</strong><span>Thông tin, lớp học và hồ sơ chi tiết</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-green" data-open-login><i class="fas fa-graduation-cap"></i><strong>Điểm & đánh giá</strong><span>Đánh giá theo môn và học kỳ</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-purple" data-open-login><i class="fas fa-calendar-check"></i><strong>Điểm danh</strong><span>Theo dõi chuyên cần theo lớp</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-orange" data-open-login><i class="fas fa-comments"></i><strong>Nhận xét học tập</strong><span>Ghi nhận và theo dõi nhận xét</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-cyan" data-open-login><i class="fas fa-chart-column"></i><strong>Thống kê - báo cáo</strong><span>Tổng hợp dữ liệu trực quan</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-red" data-open-login><i class="fas fa-medal"></i><strong>Khen thưởng - kỷ luật</strong><span>Theo dõi thành tích và nhắc nhở</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                    </div>
+                </div>
+            </section>
+
+            <section id="gioi-thieu" class="site-section about-school-section">
+                <div class="site-container about-school-grid">
+                    <div class="about-school-visual">
+                        <img src="assets/logo-phan-hieu-tran-quoc-toan.png" alt="Logo Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản" decoding="async">
+                        <div class="about-school-badge"><i class="fas fa-location-dot"></i><span>Kiên Hải · An Giang</span></div>
+                    </div>
+                    <div class="about-school-copy">
+                        <div class="section-heading section-heading-left"><span>GIỚI THIỆU NHÀ TRƯỜNG</span><h2>Nơi gieo tri thức giữa miền biển đảo</h2></div>
+                        <p><strong>Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản</strong>. Website là không gian kết nối thông tin nhà trường và hệ thống quản lý học sinh dành cho cán bộ, giáo viên.</p>
+                        <p>Nhà trường hướng đến môi trường giáo dục thân thiện, an toàn, ứng dụng công nghệ hiệu quả và đồng hành cùng học sinh trong quá trình học tập, rèn luyện.</p>
+                        <div class="school-values"><span><i class="fas fa-heart"></i> Tình thương</span><span><i class="fas fa-book-open-reader"></i> Tri thức</span><span><i class="fas fa-shield-heart"></i> Trách nhiệm</span></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tin-tuc" class="site-section public-news-section">
+                <div class="site-container">
+                    <div class="section-heading"><span>TIN TỨC & SỰ KIỆN</span><h2>Thông tin nổi bật</h2><p>Cập nhật hoạt động, sự kiện và những thông tin mới nhất của nhà trường.</p></div>
+                    <div id="publicNewsToolbar" class="public-news-toolbar" aria-label="Bộ lọc tin tức"></div>
+                    <div id="publicNewsGrid" class="news-grid public-news-grid-pro"><div class="public-content-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải tin tức...</div></div>
+                </div>
+            </section>
+
+            <section id="hinh-anh" class="site-section public-gallery-section">
+                <div class="site-container">
+                    <div class="section-heading"><span>HÌNH ẢNH HOẠT ĐỘNG</span><h2>Khoảnh khắc Lại Sơn</h2><p>Ảnh hoạt động được Ban quản trị cập nhật trực tiếp từ máy tính hoặc điện thoại.</p></div>
+                    <div id="publicGalleryToolbar" class="public-gallery-toolbar" aria-label="Bộ lọc thư viện ảnh"></div>
+                    <div id="publicGalleryGrid" class="public-gallery-grid"><div class="public-content-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải hình ảnh...</div></div>
+                </div>
+            </section>
+
+            <section id="video" class="site-section public-video-section">
+                <div class="site-container">
+                    <div class="section-heading"><span>VIDEO HOẠT ĐỘNG</span><h2>Góc nhìn sinh động</h2><p>Hỗ trợ video tải lên, video bằng đường dẫn và YouTube; người xem không cần đăng nhập.</p></div>
+                    <div id="publicVideoToolbar" class="public-video-toolbar" aria-label="Bộ lọc video"></div>
+                    <div id="publicVideoGrid" class="public-video-grid"><div class="public-content-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải video...</div></div>
+                </div>
+            </section>
+
+            <section id="tai-lieu" class="site-section document-section">
+                <div class="site-container">
+                    <div class="section-heading"><span>THƯ VIỆN TÀI LIỆU</span><h2>Tài liệu & hướng dẫn</h2><p>Văn bản, biểu mẫu và tài liệu được nhà trường công khai để tra cứu thuận tiện.</p></div>
+                    <div id="publicDocumentToolbar" class="public-document-toolbar" aria-label="Tìm kiếm và lọc tài liệu"></div>
+                    <div id="publicDocumentGrid" class="document-grid"><div class="public-content-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải tài liệu...</div></div>
+                </div>
+            </section>
+
+            <section id="lien-ket" class="site-section public-links-section">
+                <div class="site-container">
+                    <div class="section-heading"><span>LIÊN KẾT HỮU ÍCH</span><h2>Kết nối các hệ thống giáo dục</h2><p>Các website bên ngoài mở ở tab mới và không yêu cầu đăng nhập vào hệ thống quản lý học sinh của website này.</p></div>
+                    <div id="publicLinksGrid" class="public-links-grid">
+                        <div class="public-content-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải liên kết...</div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="lien-he" class="site-section contact-section">
+                <div class="site-container contact-grid">
+                    <div class="contact-copy"><div class="section-heading section-heading-left"><span>LIÊN HỆ</span><h2>Kết nối với nhà trường</h2></div><p>Khi cần trao đổi công việc, vui lòng liên hệ theo các thông tin dưới đây.</p><div class="contact-items"><a href="tel:0942775343"><i class="fas fa-phone"></i><span><small>Điện thoại</small><b>0942 775 343</b></span></a><a href="mailto:vothanhdamkg1982@gmail.com"><i class="fas fa-envelope"></i><span><small>Email</small><b>vothanhdamkg1982@gmail.com</b></span></a><div><i class="fas fa-location-dot"></i><span><small>Địa chỉ</small><b>Ấp Bãi Nhà A, Đặc khu Kiên Hải, tỉnh An Giang</b></span></div></div></div>
+                    <div class="contact-map-placeholder"><i class="fas fa-map-location-dot"></i><strong>TRƯỜNG TIỂU HỌC-TRUNG HỌC CƠ SỞ<br>&amp; TRUNG HỌC PHỔ THÔNG LẠI SƠN</strong><span>Ấp Bãi Nhà A · Kiên Hải · An Giang</span><small>Bản đồ trực tuyến có thể tích hợp khi có đường dẫn vị trí chính thức.</small></div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="site-footer">
+            <div class="site-container footer-grid">
+                <div class="footer-brand"><div class="site-brand-mark site-brand-logo"><img src="assets/logo-phan-hieu-tran-quoc-toan.png" alt="Logo Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản" decoding="async"></div><div><strong>TRƯỜNG TIỂU HỌC-TRUNG HỌC CƠ SỞ & TRUNG HỌC PHỔ THÔNG LẠI SƠN_PHÂN HIỆU TRƯỜNG TIỂU HỌC TRẦN QUỐC TOẢN</strong><p>Đặc khu Kiên Hải, tỉnh An Giang</p></div></div>
+                <div><h4>Liên kết nhanh</h4><a href="#trang-chu">Trang chủ</a><a href="#gioi-thieu">Giới thiệu</a><a href="#tin-tuc">Tin tức</a><a href="#hinh-anh">Hình ảnh</a><a href="#video">Video</a><a href="#tai-lieu">Tài liệu</a><a href="#lien-ket">Liên kết</a></div>
+                <div><h4>Hỗ trợ</h4><a href="#">Hướng dẫn sử dụng</a><a href="#">Câu hỏi thường gặp</a><button class="footer-login-link" data-open-login>Đăng nhập hệ thống</button></div>
+                <div><h4>Liên hệ</h4><p><i class="fas fa-location-dot"></i> Ấp Bãi Nhà A, Đặc khu Kiên Hải, tỉnh An Giang</p><p><i class="fas fa-phone"></i> <a href="tel:0942775343">0942 775 343</a></p><p><i class="fas fa-envelope"></i> <a href="mailto:vothanhdamkg1982@gmail.com">vothanhdamkg1982@gmail.com</a></p></div>
+            </div>
+            <div class="site-container footer-bottom"><span>© 2026 Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản.</span><span>Đặc khu Kiên Hải, tỉnh An Giang</span></div>
+        </footer>
+        <button id="publicBackToTop" class="public-back-to-top" aria-label="Lên đầu trang"><i class="fas fa-arrow-up"></i></button>
+
+        <div id="publicVideoModal" class="public-post-modal hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Xem video hoạt động">
+            <div class="public-post-modal-card public-video-modal-card">
+                <button type="button" class="public-post-modal-close" onclick="closePublicVideoModal()" aria-label="Đóng"><i class="fas fa-xmark"></i></button>
+                <div id="publicVideoModalBody" class="public-video-modal-body"></div>
+            </div>
+        </div>
+        <div id="publicMediaModal" class="public-post-modal hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Xem hình ảnh">
+            <div class="public-post-modal-backdrop" onclick="closePublicMediaModal()"></div>
+            <div class="public-media-modal-shell">
+                <button class="public-post-modal-close" onclick="closePublicMediaModal()" aria-label="Đóng"><i class="fas fa-xmark"></i></button>
+                <div id="publicMediaModalBody" class="public-media-modal-body"></div>
+            </div>
+        </div>
+        <div id="publicPostModal" class="public-post-modal hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Chi tiết bài viết">
+            <div class="public-post-modal-backdrop" onclick="closePublicPostDetail()"></div>
+            <div class="public-post-modal-shell">
+                <button class="public-post-modal-close" onclick="closePublicPostDetail()" aria-label="Đóng bài viết"><i class="fas fa-xmark"></i></button>
+                <div id="publicPostModalBody" class="public-post-modal-body"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Modal Container -->
+    <div id="modalContainer" class="modal-overlay hidden">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 id="modalTitle">Xác nhận</h3>
+                <button id="modalClose" class="modal-close"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="modalBody" class="modal-body"></div>
+            <div class="modal-footer">
+                <button id="modalCancel" class="btn btn-secondary">Hủy</button>
+                <button id="modalConfirm" class="btn btn-primary">Xác nhận</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen hidden">
+        <div class="login-box">
+            <button type="button" id="loginCloseBtn" class="login-close-btn" aria-label="Đóng"><i class="fas fa-times"></i></button>
+            <div class="login-logo login-school-logo">
+                <img src="assets/logo-lai-son.png" alt="Logo Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản" decoding="async">
+            </div>
+            <h2 class="login-title">Đăng nhập hệ thống</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Email / Tên đăng nhập</label>
+                    <input type="text" id="loginUsername" placeholder="admin@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label>Mật khẩu</label>
+                    <div style="position: relative;">
+                        <input type="password" id="loginPassword" placeholder="••••••••" required>
+                        <span id="togglePassword" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer;">
+                            <i class="fas fa-eye"></i>
+                        </span>
+                    </div>
+                </div>
+                <div class="flex-between" style="margin: 0.5rem 0;">
+                    <label style="font-size: 0.85rem; display: flex; align-items: center; gap: 0.3rem;">
+                        <input type="checkbox" id="rememberMe"> Ghi nhớ đăng nhập
+                    </label>
+                    <a href="#" id="forgotPassword" style="font-size: 0.85rem; color: var(--primary);">Quên mật khẩu?</a>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Đăng nhập</button>
+                <!-- NÚT ĐĂNG NHẬP GOOGLE -->
+<div style="margin-top: 15px; text-align: center;">
+    <div style="display: flex; align-items: center; margin-bottom: 12px;">
+        <div style="flex: 1; height: 1px; background-color: #ddd;"></div>
+        <span style="padding: 0 10px; color: #777; font-size: 0.85rem;">HOẶC</span>
+        <div style="flex: 1; height: 1px; background-color: #ddd;"></div>
+    </div>
+    
+    <button type="button" id="googleLoginBtn" class="btn btn-block" style="
+        width: 100%;
+        padding: 10px;
+        background-color: #ffffff;
+        color: #333333;
+        border: 1px solid #cccccc;
+        border-radius: 4px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        cursor: pointer;
+    ">
+        <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.617z"/>
+            <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+            <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+            <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+        </svg>
+        Đăng nhập bằng Google
+    </button>
+</div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App (Hidden until login) -->
+    <div id="app" class="app hidden">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo admin-school-logo">
+                    <img src="assets/logo-lai-son.png" alt="Logo Lại Sơn">
+                    <span><b>LẠI SƠN</b><small>Quản trị hệ thống</small></span>
+                </div>
+                <button id="toggleSidebar" class="sidebar-toggle"><i class="fas fa-bars"></i></button>
+            </div>
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-page="dashboard"><i class="fas fa-chart-pie"></i> <span>Dashboard</span></a>
+                <a href="#" class="nav-item admin-public-nav" data-page="public-content"><i class="fas fa-globe"></i> <span>Nội dung website</span></a>
+                <a href="#" class="nav-item" data-page="classes"><i class="fas fa-chalkboard-teacher"></i> <span>Lớp</span></a>
+                <a href="#" class="nav-item" data-page="students"><i class="fas fa-user-graduate"></i> <span>Học sinh</span></a>
+                <a href="#" class="nav-item" data-page="search"><i class="fas fa-search"></i> <span>Tìm kiếm</span></a>
+                <a href="#" class="nav-item" data-page="attendance"><i class="fas fa-clipboard-check"></i> <span>Điểm danh</span></a>
+                <a href="#" class="nav-item" data-page="scores"><i class="fas fa-pencil-alt"></i> <span>Điểm</span></a>
+                <a href="#" class="nav-item" data-page="rewards"><i class="fas fa-medal"></i> <span>Khen thưởng</span></a>
+                <a href="#" class="nav-item" data-page="disciplines"><i class="fas fa-gavel"></i> <span>Kỷ luật</span></a>
+                <a href="#" class="nav-item" data-page="learning-comments">
+    <i class="fas fa-book-open"></i>
+    <span>Nhận xét học tập</span>
+</a>
+                <a href="#" class="nav-item" data-page="files"><i class="fas fa-folder-open"></i> <span>File</span></a>
+                <a href="#" class="nav-item" data-page="statistics"><i class="fas fa-chart-bar"></i> <span>Thống kê</span></a>
+                <a href="#" class="nav-item" data-page="wheel"><i class="fas fa-dharmachakra"></i> <span>Vòng quay</span></a> <!-- THÊM DÒNG NÀY -->
+                <a href="#" class="nav-item" data-page="settings"><i class="fas fa-cog"></i> <span>Cài đặt</span></a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Topbar -->
+            <header class="topbar">
+                <button id="toggleSidebarMobile" class="sidebar-toggle-mobile"><i class="fas fa-bars"></i></button>
+                <h2 id="pageTitle">Dashboard</h2>
+                <div class="topbar-right">
+                    <button id="publicHomeBtn" class="btn-icon" title="Trang chủ website"><i class="fas fa-house"></i></button>
+                    <button id="darkModeToggle" class="btn-icon" title="Chế độ tối"><i class="fas fa-moon"></i></button>
+                    <span id="topbarCurrentUserName" style="color: var(--text-secondary); margin-right: 10px;">Người dùng</span>
+                    <button id="logoutBtn" class="btn-icon" title="Đăng xuất"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <div id="pageContainer" class="page-container">
+                <!-- Content will be rendered here -->
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="supabase.js?v=14858"></script>
+    <script type="module" src="script.js?v=15113"></script>
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+</body>
+</html>
