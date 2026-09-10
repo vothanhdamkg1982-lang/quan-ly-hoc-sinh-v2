@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=151183';
+import { supabase } from './supabase.js?v=151200';
 
 
 // ============================================================
@@ -4912,12 +4912,40 @@ function viewFile(id) {
     const isImage = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'].includes(ext);
     const isPDF = ext === 'pdf';
     const isText = ['txt', 'csv', 'log', 'md', 'json', 'xml'].includes(ext);
+    const isOffice = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext);
 
     let contentHTML = '';
     if (isImage) {
-        contentHTML = `<img src="${file.url}" style="max-width:100%; max-height:500px; display:block; margin:auto;">`;
+        contentHTML = `
+            <div style="text-align:center;">
+                <img src="${file.url}" style="max-width:100%; max-height:68vh; display:block; margin:auto; object-fit:contain;">
+                <div style="margin-top:1rem;">
+                    <button class="btn btn-primary" onclick="downloadFile('${file.id}')"><i class="fas fa-download"></i> Tải xuống</button>
+                </div>
+            </div>`;
     } else if (isPDF) {
-        contentHTML = `<iframe src="${file.url}" style="width:100%; height:500px; border:none;"></iframe>`;
+        contentHTML = `
+            <iframe src="${file.url}" style="width:100%; height:65vh; min-height:480px; border:none; border-radius:8px;"></iframe>
+            <div class="text-center" style="margin-top:0.75rem;">
+                <button class="btn btn-primary" onclick="downloadFile('${file.id}')"><i class="fas fa-download"></i> Tải xuống</button>
+            </div>`;
+    } else if (isOffice) {
+        // BƯỚC 151.20: Word/Excel/PowerPoint xem trực tiếp bằng Microsoft Office Online Viewer.
+        // file.url là public URL của Supabase Storage nên Office Viewer có thể truy cập để hiển thị.
+        const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(file.url)}`;
+        contentHTML = `
+            <div style="width:100%;">
+                <iframe src="${officeViewerUrl}"
+                        title="Xem trước ${file.name.replace(/"/g, '&quot;')}"
+                        style="width:100%; height:68vh; min-height:520px; border:1px solid var(--border); border-radius:8px; background:#fff;"
+                        allowfullscreen></iframe>
+                <div class="text-center" style="margin-top:0.75rem;">
+                    <button class="btn btn-primary" onclick="downloadFile('${file.id}')"><i class="fas fa-download"></i> Tải xuống</button>
+                </div>
+                <p class="text-muted text-center" style="font-size:0.78rem; margin-top:0.5rem;">
+                    Nếu tài liệu chưa hiện ngay, vui lòng chờ vài giây để Office Online tải bản xem trước.
+                </p>
+            </div>`;
     } else if (isText) {
         try {
             fetch(file.url)
@@ -4932,7 +4960,7 @@ function viewFile(id) {
                 .catch(() => {
                     showToast('Không thể tải nội dung file.', 'error');
                 });
-            contentHTML = `<p>Đang tải nội dung...</p>`;
+            contentHTML = `<p>Đang tải nội dung...</p><div class="text-center" style="margin-top:0.75rem;"><button class="btn btn-primary" onclick="downloadFile('${file.id}')"><i class="fas fa-download"></i> Tải xuống</button></div>`;
         } catch(e) {
             contentHTML = `<p class="text-muted">Không thể hiển thị nội dung file này.</p>`;
         }
