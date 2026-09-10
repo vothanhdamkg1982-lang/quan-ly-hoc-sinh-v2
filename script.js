@@ -4846,9 +4846,13 @@ async function openUploadFile() {
             }
 
             try {
-                const fileExt = file.name.split('.').pop();
-                const fileName = `${Date.now()}_${file.name}`;
-                const filePath = `documents/${fileName}`;
+                // BƯỚC 151.19: Storage key chỉ dùng ký tự an toàn.
+                // Giữ nguyên tên gốc có dấu trong app3_files.file_name để hiển thị/tải xuống.
+                const rawExt = file.name.includes('.') ? file.name.split('.').pop() : '';
+                const safeExt = String(rawExt || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
+                const uniquePart = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 36);
+                const storageFileName = `${Date.now()}_${uniquePart}${safeExt ? `.${safeExt}` : ''}`;
+                const filePath = `documents/${storageFileName}`;
 
                 const { data: uploadData, error: uploadErr } = await supabase.storage
                     .from('app3-files')
