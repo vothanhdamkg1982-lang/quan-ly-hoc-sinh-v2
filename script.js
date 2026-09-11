@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=151503';
+import { supabase } from './supabase.js?v=151539';
 
 
 // ============================================================
@@ -2262,58 +2262,80 @@ function renderLearningComments() {
     const studentMap = new Map((APP_STATE.students || []).map(student => [student.db_uuid, student]));
 
     return `
-        <div class="card">
-            <div class="flex-between mb-2">
-                <div>
-                    <h3 class="card-title"><i class="fas fa-book-open"></i> Nhận xét học tập</h3>
-                    <p class="text-muted">Ghi nhận quá trình tiến bộ, cố gắng hoặc những điểm cần hỗ trợ của học sinh.</p>
+        <section class="learning-comments-pro-page">
+            <div class="learning-comments-header">
+                <div class="learning-comments-title">
+                    <span class="learning-comments-title-icon"><i class="fas fa-book-open"></i></span>
+                    <div>
+                        <span class="learning-comments-kicker">THEO DÕI HỌC TẬP</span>
+                        <h2>Nhận xét học tập</h2>
+                        <p>Ghi nhận quá trình tiến bộ, cố gắng hoặc những điểm cần hỗ trợ của học sinh.</p>
+                    </div>
                 </div>
-                <button class="btn btn-primary btn-sm" onclick="openAddLearningComment()">
+                <button class="btn btn-primary btn-sm learning-comments-add-btn" onclick="openAddLearningComment()">
                     <i class="fas fa-plus"></i> Thêm nhận xét
                 </button>
             </div>
-            <div class="form-group mb-2">
-                <label for="learningCommentStudentFilter"><strong>Chọn học sinh</strong></label>
-                <select id="learningCommentStudentFilter" onchange="filterLearningCommentsByStudent(this.value)">
-                    <option value="">-- Tất cả học sinh --</option>
-                    ${(APP_STATE.students || []).map(s => `<option value="${s.db_uuid}">${s.fullName}</option>`).join('')}
-                </select>
+
+            <div class="learning-comments-filter-card">
+                <div class="learning-comments-filter-icon"><i class="fas fa-filter"></i></div>
+                <div class="learning-comments-filter-control">
+                    <label for="learningCommentStudentFilter">Lọc theo học sinh</label>
+                    <select id="learningCommentStudentFilter" onchange="filterLearningCommentsByStudent(this.value)">
+                        <option value="">Tất cả học sinh</option>
+                        ${(APP_STATE.students || []).map(s => `<option value="${s.db_uuid}">${s.fullName}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="learning-comments-total">
+                    <span>Tổng nhận xét</span>
+                    <strong>${comments.length}</strong>
+                </div>
             </div>
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>STT</th><th>Lớp</th><th>Môn</th><th>Học sinh</th><th>Thời điểm</th>
-                            <th>Diễn biến</th><th>Nội dung</th><th>Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody id="learningCommentsTableBody">
-                        ${comments.length === 0
-                            ? '<tr><td colspan="8" class="text-center text-muted">Chưa có nhận xét học tập nào.</td></tr>'
-                            : comments.map((c, index) => {
-                                const student = studentMap.get(c.studentId);
-                                return `
-                                    <tr data-student-id="${c.studentId}">
-                                        <td>${index + 1}</td>
-                                        <td>${getContextClassName(c.classId)}</td>
-                                        <td>${c.subject || '—'}</td>
-                                        <td>${student ? student.fullName : 'Không xác định'}</td>
-                                        <td>${c.commentDatetime ? new Date(c.commentDatetime).toLocaleString('vi-VN') : ''}</td>
-                                        <td>${c.commentType || '—'}</td>
-                                        <td>${c.content || ''}</td>
-                                        <td class="text-center">
-                                            <div class="action-buttons">
-                                                <button class="btn btn-info btn-sm" title="Xem nhận xét" onclick="viewLearningComment('${c.id}')"><i class="fas fa-eye"></i></button>
-                                                <button class="btn btn-warning btn-sm" title="Sửa nhận xét" onclick="editLearningComment('${c.id}')"><i class="fas fa-edit"></i></button>
-                                                <button class="btn btn-danger btn-sm" title="Xóa nhận xét" onclick="deleteLearningComment('${c.id}')"><i class="fas fa-trash"></i></button>
-                                            </div>
-                                        </td>
-                                    </tr>`;
-                            }).join('')}
-                    </tbody>
-                </table>
+
+            <div class="learning-comments-table-card">
+                <div class="learning-comments-table-heading">
+                    <span class="learning-comments-table-icon"><i class="fas fa-list-check"></i></span>
+                    <div>
+                        <h3>Danh sách nhận xét</h3>
+                        <p>Xem, chỉnh sửa hoặc xóa nhận xét học tập đã ghi nhận.</p>
+                    </div>
+                </div>
+                <div class="table-wrapper learning-comments-table-wrapper">
+                    <table class="learning-comments-table">
+                        <thead>
+                            <tr>
+                                <th>STT</th><th>Lớp</th><th>Môn</th><th>Học sinh</th><th>Thời điểm</th>
+                                <th>Diễn biến</th><th>Nội dung</th><th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="learningCommentsTableBody">
+                            ${comments.length === 0
+                                ? '<tr><td colspan="8" class="text-center text-muted learning-comments-empty">Chưa có nhận xét học tập nào.</td></tr>'
+                                : comments.map((c, index) => {
+                                    const student = studentMap.get(c.studentId);
+                                    return `
+                                        <tr data-student-id="${c.studentId}">
+                                            <td>${index + 1}</td>
+                                            <td>${getContextClassName(c.classId)}</td>
+                                            <td>${c.subject || '—'}</td>
+                                            <td class="learning-comment-student">${student ? student.fullName : 'Không xác định'}</td>
+                                            <td>${c.commentDatetime ? new Date(c.commentDatetime).toLocaleString('vi-VN') : ''}</td>
+                                            <td><span class="learning-comment-type">${c.commentType || '—'}</span></td>
+                                            <td class="learning-comment-content">${c.content || ''}</td>
+                                            <td class="text-center">
+                                                <div class="action-buttons learning-comment-actions">
+                                                    <button class="btn btn-info btn-sm" title="Xem nhận xét" onclick="viewLearningComment('${c.id}')"><i class="fas fa-eye"></i></button>
+                                                    <button class="btn btn-warning btn-sm" title="Sửa nhận xét" onclick="editLearningComment('${c.id}')"><i class="fas fa-edit"></i></button>
+                                                    <button class="btn btn-danger btn-sm" title="Xóa nhận xét" onclick="deleteLearningComment('${c.id}')"><i class="fas fa-trash"></i></button>
+                                                </div>
+                                            </td>
+                                        </tr>`;
+                                }).join('')}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>`;
+        </section>`;
 }
 
 window.filterLearningCommentsByStudent = function(studentUuid) {
@@ -4758,6 +4780,13 @@ window.millionaireFillAIPasteExample = millionaireFillAIPasteExample;
 window.runAdminHealthCheck = runAdminHealthCheck;
 
 
+
+// ============================================================
+// BƯỚC 151.49.2N-FINAL - EXPORT HANDLER CHO INLINE ONCLICK
+// ============================================================
+window.closeStudentInlineEditor = closeStudentInlineEditor;
+window.goHome = goHome;
+
 // ============================================================
 // 4. RENDER PAGES
 // ============================================================
@@ -4828,6 +4857,7 @@ function renderPage(page) {
 
 function getPageTitle(page) {
     const titles = {
+        'learning-comments': 'Nhận xét học tập',
         dashboard: 'Dashboard',
         students: 'Học sinh',
         classes: 'Lớp',
@@ -4857,16 +4887,66 @@ function renderDashboard() {
     const classes = APP_STATE.classes;
 
     return `
-        <div class="stats-grid">
-            <div class="stat-card"><div class="stat-icon"><i class="fas fa-user-graduate"></i></div><div class="stat-value">${total}</div><div class="stat-label">Tổng HS</div></div>
-            <div class="stat-card"><div class="stat-icon"><i class="fas fa-chalkboard"></i></div><div class="stat-value">${classes.length}</div><div class="stat-label">Số lớp</div></div>
-            <div class="stat-card"><div class="stat-icon"><i class="fas fa-male" style="color:#2563eb;"></i></div><div class="stat-value">${male}</div><div class="stat-label">Nam</div></div>
-            <div class="stat-card"><div class="stat-icon"><i class="fas fa-female" style="color:#ec4899;"></i></div><div class="stat-value">${female}</div><div class="stat-label">Nữ</div></div>
-        </div>
-        <div class="chart-grid">
-            <div class="chart-box"><canvas id="chartGender"></canvas></div>
-            <div class="chart-box"><canvas id="chartClass"></canvas></div>
-        </div>
+        <section class="dashboard-overview">
+            <div class="stats-grid dashboard-stats-grid">
+                <div class="stat-card dashboard-stat stat-total">
+                    <div class="stat-icon"><i class="fas fa-user-graduate"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">${total}</div>
+                        <div class="stat-label">Tổng học sinh</div>
+                    </div>
+                </div>
+                <div class="stat-card dashboard-stat stat-class">
+                    <div class="stat-icon"><i class="fas fa-chalkboard"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">${classes.length}</div>
+                        <div class="stat-label">Số lớp</div>
+                    </div>
+                </div>
+                <div class="stat-card dashboard-stat stat-male">
+                    <div class="stat-icon"><i class="fas fa-male"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">${male}</div>
+                        <div class="stat-label">Học sinh nam</div>
+                    </div>
+                </div>
+                <div class="stat-card dashboard-stat stat-female">
+                    <div class="stat-icon"><i class="fas fa-female"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">${female}</div>
+                        <div class="stat-label">Học sinh nữ</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-grid dashboard-chart-grid">
+                <div class="chart-box dashboard-chart-card">
+                    <div class="dashboard-chart-head">
+                        <div>
+                            <span class="dashboard-chart-kicker">CƠ CẤU HỌC SINH</span>
+                            <h3>Nam / Nữ</h3>
+                        </div>
+                        <i class="fas fa-venus-mars"></i>
+                    </div>
+                    <div class="dashboard-chart-canvas">
+                        <canvas id="chartGender"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-box dashboard-chart-card">
+                    <div class="dashboard-chart-head">
+                        <div>
+                            <span class="dashboard-chart-kicker">QUY MÔ LỚP HỌC</span>
+                            <h3>Số học sinh theo lớp</h3>
+                        </div>
+                        <i class="fas fa-chart-column"></i>
+                    </div>
+                    <div class="dashboard-chart-canvas">
+                        <canvas id="chartClass"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
     `;
 }
 
@@ -6382,22 +6462,26 @@ function renderClasses() {
     updateClassCounts();
     const classOptions = APP_STATE.classes.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
     return `
-        <div class="card">
-            <div class="flex-between mb-2">
-                <h3 class="card-title"><i class="fas fa-chalkboard-teacher"></i> Danh sách lớp</h3>
-                <div class="flex gap-2">
-                    <button class="btn btn-primary btn-sm" onclick="openAddClass()"><i class="fas fa-plus"></i> Thêm lớp</button>
-                    <div class="flex gap-1" style="align-items:center;">
-                        <select id="exportClassSelect" style="padding:0.3rem 0.6rem;border:1px solid var(--border);border-radius:4px;">
-                            <option value="">Chọn lớp</option>
+        <div class="card classes-card">
+            <div class="classes-toolbar">
+                <div class="classes-heading">
+                    <span class="classes-kicker">HỌC SINH & LỚP</span>
+                    <h3 class="card-title"><i class="fas fa-chalkboard-teacher"></i> Danh sách lớp</h3>
+                    <span class="classes-count">${APP_STATE.classes.length} lớp</span>
+                </div>
+                <div class="classes-actions">
+                    <div class="classes-export">
+                        <select id="exportClassSelect" aria-label="Chọn lớp để xuất">
+                            <option value="">Chọn lớp để xuất</option>
                             ${classOptions}
                         </select>
                         <button class="btn btn-success btn-sm" onclick="exportClassList()"><i class="fas fa-file-excel"></i> Xuất danh sách</button>
                     </div>
+                    <button class="btn btn-primary btn-sm classes-add-btn" onclick="openAddClass()"><i class="fas fa-plus"></i> Thêm lớp</button>
                 </div>
             </div>
-            <div class="table-wrapper">
-                <table>
+            <div class="table-wrapper classes-table-wrapper">
+                <table class="classes-table">
                     <thead><tr><th>STT</th><th>Tên lớp</th><th>Khối</th><th>GVCN</th><th>Sĩ số</th><th>Nam</th><th>Nữ</th><th>Thao tác</th></tr></thead>
                     <tbody id="classTableBody"></tbody>
                 </table>
@@ -6544,53 +6628,115 @@ function renderScores() {
     const classOptions = scoreAccessibleClasses.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
     const scoreSubjectNames = getVisibleSubjectNames();
 
-const subjectOptions = scoreSubjectNames
-    .map(sub => `<option value="${sub}" ${sub === APP_STATE.currentSubject ? 'selected' : ''}>${sub}</option>`)
-    .join('');
+    const subjectOptions = scoreSubjectNames
+        .map(sub => `<option value="${sub}" ${sub === APP_STATE.currentSubject ? 'selected' : ''}>${sub}</option>`)
+        .join('');
 
     return `
-        <div class="card">
-            <div class="flex-between mb-2">
-                <h3 class="card-title"><i class="fas fa-pencil-alt"></i> Quản lý điểm</h3>
-                <div class="flex gap-2" style="flex-wrap:wrap;">
-                    <div class="form-group" style="margin:0; min-width:130px;">
-                        <label style="font-size:0.75rem;">Chọn môn</label>
-                        <select id="scoreSubject" onchange="switchSubject(this.value)" style="padding:0.3rem 0.6rem;">
-                            ${subjectOptions}
-                        </select>
+        <section class="scores-pro-page">
+            <div class="scores-pro-header">
+                <div class="scores-pro-title">
+                    <span class="scores-title-icon"><i class="fas fa-pencil-alt"></i></span>
+                    <div>
+                        <span class="scores-kicker">ĐÁNH GIÁ HỌC TẬP</span>
+                        <h2>Quản lý điểm</h2>
+                        <p>Nhập và theo dõi kết quả môn <strong>${APP_STATE.currentSubject}</strong> theo từng giai đoạn đánh giá.</p>
                     </div>
-                    <select id="exportScoreClass" style="padding:0.3rem 0.6rem;border:1px solid var(--border);border-radius:4px;">
-                        <option value="">Chọn lớp</option>
+                </div>
+
+                <div class="scores-header-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="downloadScoreImportTemplate()">
+                        <i class="fas fa-download"></i> Mẫu nhập điểm
+                    </button>
+                    <button class="btn btn-primary btn-sm" onclick="document.getElementById('scoreImportInput').click()">
+                        <i class="fas fa-file-import"></i> Nhập điểm Excel
+                    </button>
+                    <input type="file" id="scoreImportInput" accept=".xlsx,.xls" style="display:none" onchange="importScoresExcel(event)">
+                </div>
+            </div>
+
+            <div class="scores-control-card">
+                <div class="scores-control-item">
+                    <label>Môn học</label>
+                    <select id="scoreSubject" onchange="switchSubject(this.value)">
+                        ${subjectOptions}
+                    </select>
+                </div>
+
+                <div class="scores-control-item">
+                    <label>Lớp hiển thị</label>
+                    <select id="scoreClass" onchange="initScoreTable()">
+                        <option value="">Tất cả lớp</option>
                         ${classOptions}
                     </select>
-                    <button class="btn btn-success btn-sm" onclick="exportScoreClass()"><i class="fas fa-file-excel"></i> Xuất điểm</button>
-                    <button class="btn btn-secondary btn-sm" onclick="downloadScoreImportTemplate()"><i class="fas fa-download"></i> Mẫu nhập điểm</button>
-                    <button class="btn btn-primary btn-sm" onclick="document.getElementById('scoreImportInput').click()"><i class="fas fa-file-import"></i> Nhập điểm Excel</button>
-                    <input type="file" id="scoreImportInput" accept=".xlsx,.xls" style="display:none" onchange="importScoresExcel(event)">
-                    <select id="vneduPeriod" onchange="initScoreTable()" style="padding:0.3rem 0.6rem;border:1px solid var(--border);border-radius:4px;">
-                        <option value="gk1">VNEDU - Giữa kỳ 1</option><option value="ck1">VNEDU - Cuối kỳ 1</option>
-                        <option value="gk2">VNEDU - Giữa kỳ 2</option><option value="ck2">VNEDU - Cuối kỳ 2</option>
+                </div>
+
+                <div class="scores-control-item scores-search-item">
+                    <label>Tìm học sinh</label>
+                    <div class="scores-search-wrap">
+                        <i class="fas fa-magnifying-glass"></i>
+                        <input type="text" id="scoreSearch" placeholder="Nhập mã học sinh hoặc họ tên..." oninput="initScoreTable()">
+                    </div>
+                </div>
+
+                <div class="scores-control-item">
+                    <label>Giai đoạn VNEDU</label>
+                    <select id="vneduPeriod" onchange="initScoreTable()">
+                        <option value="gk1">Giữa kỳ 1</option>
+                        <option value="ck1">Cuối kỳ 1</option>
+                        <option value="gk2">Giữa kỳ 2</option>
+                        <option value="ck2">Cuối kỳ 2</option>
                     </select>
-                    <button class="btn btn-success btn-sm" onclick="exportVnEduScores()"><i class="fas fa-file-export"></i> Xuất VNEDU lớp</button>
-                    <button class="btn btn-info btn-sm" onclick="document.getElementById('vneduScoreImportInput').click()"><i class="fas fa-file-import"></i> Nhập VNEDU lớp</button>
+                </div>
+            </div>
+
+            <div class="scores-actions-card">
+                <div class="scores-export-group">
+                    <select id="exportScoreClass">
+                        <option value="">Chọn lớp để xuất</option>
+                        ${classOptions}
+                    </select>
+                    <button class="btn btn-success btn-sm" onclick="exportScoreClass()">
+                        <i class="fas fa-file-excel"></i> Xuất điểm
+                    </button>
+                </div>
+
+                <div class="scores-vnedu-actions">
+                    <button class="btn btn-success btn-sm" onclick="exportVnEduScores()">
+                        <i class="fas fa-file-export"></i> Xuất VNEDU lớp
+                    </button>
+                    <button class="btn btn-info btn-sm" onclick="document.getElementById('vneduScoreImportInput').click()">
+                        <i class="fas fa-file-import"></i> Nhập VNEDU lớp
+                    </button>
                     <input type="file" id="vneduScoreImportInput" accept=".xlsx,.xls" style="display:none" onchange="importVnEduScoresExcel(event)">
-                    <button class="btn btn-success btn-sm" onclick="exportVnEduTeachingWorkbook()"><i class="fas fa-file-excel"></i> Xuất các môn tôi dạy</button>
-                    <button class="btn btn-info btn-sm" onclick="document.getElementById('vneduTeachingImportInput').click()"><i class="fas fa-file-import"></i> Nhập các môn tôi dạy</button>
+                    <button class="btn btn-success btn-sm" onclick="exportVnEduTeachingWorkbook()">
+                        <i class="fas fa-file-excel"></i> Xuất các môn tôi dạy
+                    </button>
+                    <button class="btn btn-info btn-sm" onclick="document.getElementById('vneduTeachingImportInput').click()">
+                        <i class="fas fa-file-import"></i> Nhập các môn tôi dạy
+                    </button>
                     <input type="file" id="vneduTeachingImportInput" accept=".xlsx,.xls" style="display:none" onchange="importVnEduTeachingWorkbook(event)">
                 </div>
             </div>
-            <p class="text-muted mb-2">Nhập điểm cho môn <strong>${APP_STATE.currentSubject}</strong> theo Thông tư 27.</p>
-            <div class="search-bar">
-                <input type="text" id="scoreSearch" placeholder="Tìm học sinh..." oninput="initScoreTable()">
-                <select id="scoreClass" onchange="initScoreTable()"><option value="">Tất cả lớp</option>${classOptions}</select>
+
+            <div class="scores-table-card">
+                <div class="scores-table-head">
+                    <div>
+                        <span class="scores-table-icon"><i class="fas fa-table-list"></i></span>
+                        <div>
+                            <h3>Bảng điểm học sinh</h3>
+                            <p>Môn hiện tại: <strong>${APP_STATE.currentSubject}</strong>. Các thay đổi vẫn được lưu theo từng học sinh.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-wrapper scores-table-wrapper">
+                    <table class="scores-table">
+                        <thead><tr id="scoreTableHead"></tr></thead>
+                        <tbody id="scoreTableBody"></tbody>
+                    </table>
+                </div>
             </div>
-            <div class="table-wrapper">
-                <table>
-                    <thead><tr id="scoreTableHead"></tr></thead>
-                    <tbody id="scoreTableBody"></tbody>
-                </table>
-            </div>
-        </div>
+        </section>
     `;
 }
 
@@ -6847,28 +6993,68 @@ function renderAttendance() {
     const classOptions = (attendanceClasses || []).map(c => `<option value="${c.name}">${c.name}</option>`).join('');
 
     return `
-        <div class="card">
-            <div class="flex-between mb-2">
-                <h3 class="card-title"><i class="fas fa-clipboard-check"></i> Điểm danh</h3>
-                <button class="btn btn-success btn-sm" onclick="exportAttendanceExcel()"><i class="fas fa-file-excel"></i> Xuất Excel</button>
+        <section class="attendance-pro-page">
+            <div class="attendance-pro-header">
+                <div class="attendance-pro-title">
+                    <span class="attendance-title-icon"><i class="fas fa-clipboard-check"></i></span>
+                    <div>
+                        <span class="attendance-kicker">THEO DÕI CHUYÊN CẦN</span>
+                        <h2>Điểm danh học sinh</h2>
+                        <p>Chọn lớp và ngày để cập nhật nhanh tình trạng chuyên cần của học sinh.</p>
+                    </div>
+                </div>
+                <button class="btn btn-success attendance-export-btn" onclick="exportAttendanceExcel()">
+                    <i class="fas fa-file-excel"></i> Xuất Excel
+                </button>
             </div>
-            <div class="flex gap-2 mb-2" style="flex-wrap:wrap;">
-                <div class="form-group" style="flex:1; min-width:150px;">
+
+            <div class="attendance-filter-card">
+                <div class="attendance-filter-item">
                     <label>Chọn lớp</label>
                     <select id="attendanceClass" onchange="loadAttendance()">${classOptions}</select>
                 </div>
-                <div class="form-group" style="flex:1; min-width:150px;">
-                    <label>Ngày</label>
+                <div class="attendance-filter-item">
+                    <label>Ngày điểm danh</label>
                     <input type="date" id="attendanceDate" value="${today}" onchange="loadAttendance()">
                 </div>
-                <div class="form-group" style="align-self:flex-end;">
-                    <button class="btn btn-primary" onclick="saveAttendance()"><i class="fas fa-save"></i> Lưu điểm danh</button>
+                <button class="btn btn-primary attendance-save-btn" onclick="saveAttendance()">
+                    <i class="fas fa-save"></i> Lưu điểm danh
+                </button>
+            </div>
+
+            <div class="attendance-list-card">
+                <div class="attendance-list-head">
+                    <div>
+                        <span class="attendance-list-icon"><i class="fas fa-users"></i></span>
+                        <div>
+                            <h3>Danh sách điểm danh</h3>
+                            <p>Có mặt là trạng thái mặc định; thay đổi từng học sinh khi cần.</p>
+                        </div>
+                    </div>
+                    <div class="attendance-status-guide attendance-filter-buttons" aria-label="Lọc trạng thái điểm danh">
+                        <button type="button" class="attendance-filter-chip active" data-filter="all" onclick="filterAttendanceStatus('all', this)">
+                            <i class="fas fa-users"></i> Tất cả
+                        </button>
+                        <button type="button" class="attendance-filter-chip" data-filter="present" onclick="filterAttendanceStatus('present', this)">
+                            <i class="fas fa-circle"></i> Có mặt
+                        </button>
+                        <button type="button" class="attendance-filter-chip" data-filter="absent" onclick="filterAttendanceStatus('absent', this)">
+                            <i class="fas fa-circle"></i> Vắng / Phép
+                        </button>
+                        <button type="button" class="attendance-filter-chip" data-filter="late" onclick="filterAttendanceStatus('late', this)">
+                            <i class="fas fa-circle"></i> Muộn
+                        </button>
+                    </div>
+                </div>
+                <div id="attendanceTableWrapper" class="attendance-table-body">
+                    <div class="attendance-empty-state">
+                        <i class="fas fa-calendar-check"></i>
+                        <strong>Chọn lớp và ngày để xem danh sách</strong>
+                        <span>Danh sách học sinh và trạng thái điểm danh sẽ hiển thị tại đây.</span>
+                    </div>
                 </div>
             </div>
-            <div id="attendanceTableWrapper">
-                <p class="text-muted">Chọn lớp và ngày để xem danh sách điểm danh.</p>
-            </div>
-        </div>
+        </section>
     `;
 }
 
@@ -6877,19 +7063,19 @@ async function loadAttendance() {
     const date = document.getElementById('attendanceDate').value;
     const wrapper = document.getElementById('attendanceTableWrapper');
     if (!clsName || !date) {
-        wrapper.innerHTML = '<p class="text-muted">Vui lòng chọn lớp và ngày.</p>';
+        wrapper.innerHTML = '<div class="attendance-empty-state"><i class="fas fa-calendar-check"></i><strong>Vui lòng chọn lớp và ngày</strong><span>Chọn đầy đủ thông tin phía trên để tải danh sách.</span></div>';
         return;
     }
 
     const classObj = APP_STATE.classes.find(c => c.name === clsName);
     if (!classObj) {
-        wrapper.innerHTML = '<p class="text-muted">Lớp không tồn tại.</p>';
+        wrapper.innerHTML = '<div class="attendance-empty-state"><i class="fas fa-circle-exclamation"></i><strong>Lớp không tồn tại</strong><span>Vui lòng chọn lại lớp từ danh sách.</span></div>';
         return;
     }
 
     const students = APP_STATE.students.filter(s => s.class === clsName);
     if (students.length === 0) {
-        wrapper.innerHTML = '<p class="text-muted">Lớp này chưa có học sinh.</p>';
+        wrapper.innerHTML = '<div class="attendance-empty-state"><i class="fas fa-user-slash"></i><strong>Lớp này chưa có học sinh</strong><span>Chưa có dữ liệu học sinh để điểm danh.</span></div>';
         return;
     }
 
@@ -6906,8 +7092,8 @@ async function loadAttendance() {
 
     const statusOptions = ['Có mặt', 'Vắng', 'Phép', 'Không phép', 'Muộn'];
     let html = `
-        <div class="table-wrapper">
-            <table>
+        <div class="table-wrapper attendance-table-wrapper">
+            <table class="attendance-table">
                 <thead><tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Trạng thái</th></tr></thead>
                 <tbody>
     `;
@@ -6916,7 +7102,7 @@ async function loadAttendance() {
         const status = record ? record.status : 'Có mặt';
         const options = statusOptions.map(opt => `<option value="${opt}" ${opt === status ? 'selected' : ''}>${opt}</option>`).join('');
         html += `
-            <tr>
+            <tr class="attendance-student-row" data-attendance-status="${status}">
                 <td>${idx + 1}</td>
                 <td>${s.id}</td>
                 <td>${s.fullName}</td>
@@ -6933,7 +7119,36 @@ async function loadAttendance() {
     applyViewerReadOnlyUI();
 }
 
+
+function filterAttendanceStatus(filter, button) {
+    const wrapper = document.getElementById('attendanceTableWrapper');
+    if (!wrapper) return;
+
+    const rows = wrapper.querySelectorAll('.attendance-student-row');
+    rows.forEach(row => {
+        const statusSelect = row.querySelector('.attendance-status');
+        const status = statusSelect ? statusSelect.value : (row.dataset.attendanceStatus || 'Có mặt');
+
+        let visible = true;
+        if (filter === 'present') visible = status === 'Có mặt';
+        if (filter === 'absent') visible = ['Vắng', 'Phép', 'Không phép'].includes(status);
+        if (filter === 'late') visible = status === 'Muộn';
+
+        row.style.display = visible ? '' : 'none';
+    });
+
+    document.querySelectorAll('.attendance-filter-chip').forEach(chip => {
+        chip.classList.toggle('active', chip === button);
+    });
+}
+
 async function updateAttendanceStatus(date, classId, studentUuid, status) {
+    const changedSelect = document.querySelector(`.attendance-status[data-student="${studentUuid}"]`);
+    if (changedSelect) {
+        const changedRow = changedSelect.closest('.attendance-student-row');
+        if (changedRow) changedRow.dataset.attendanceStatus = status;
+    }
+
     if (!requireEditPermission('cập nhật điểm danh')) { loadAttendance(); return; }
     try {
         const { error } = await supabase
@@ -6996,27 +7211,83 @@ function renderRewards() {
     const rewards = APP_STATE.rewards || [];
     const studentMap = Object.fromEntries((APP_STATE.students || []).map(s => [s.db_uuid, s.fullName]));
     return `
-        <div class="card">
-            <div class="flex-between mb-2">
-                <h3 class="card-title"><i class="fas fa-medal"></i> Khen thưởng</h3>
-                <div class="flex gap-2">
-                    <button class="btn btn-primary btn-sm" onclick="openAddReward()"><i class="fas fa-plus"></i> Thêm</button>
-                    <button class="btn btn-success btn-sm" onclick="exportRewards()"><i class="fas fa-file-excel"></i> Xuất Excel</button>
+        <section class="rewards-pro-page">
+            <div class="rewards-pro-header">
+                <div class="rewards-pro-title">
+                    <span class="rewards-title-icon"><i class="fas fa-medal"></i></span>
+                    <div>
+                        <span class="rewards-kicker">GHI NHẬN THÀNH TÍCH</span>
+                        <h2>Khen thưởng</h2>
+                        <p>Quản lý các thành tích, biểu dương và khen thưởng của học sinh theo lớp và môn học.</p>
+                    </div>
+                </div>
+                <div class="rewards-header-actions">
+                    <button class="btn btn-primary btn-sm" onclick="openAddReward()">
+                        <i class="fas fa-plus"></i> Thêm khen thưởng
+                    </button>
+                    <button class="btn btn-success btn-sm" onclick="exportRewards()">
+                        <i class="fas fa-file-excel"></i> Xuất Excel
+                    </button>
                 </div>
             </div>
-            <div class="table-wrapper"><table>
-                <thead><tr><th>STT</th><th>Lớp</th><th>Môn</th><th>Học sinh</th><th>Ngày</th><th>Nội dung</th><th>Người quyết định</th><th>Thao tác</th></tr></thead>
-                <tbody>
-                    ${rewards.length === 0 ? '<tr><td colspan="8" class="text-center text-muted">Chưa có khen thưởng nào.</td></tr>' :
-                    rewards.map((r, i) => `<tr>
-                        <td>${i + 1}</td><td>${getContextClassName(r.classId)}</td><td>${r.subject || 'Dữ liệu cũ'}</td>
-                        <td>${studentMap[r.studentId] || 'Không xác định'}</td><td>${formatDate(r.date)}</td>
-                        <td>${r.content}</td><td>${r.decisionBy || ''}</td>
-                        <td><button class="btn-icon" onclick="deleteReward('${r.id}')" style="color:#dc2626;"><i class="fas fa-trash"></i></button></td>
-                    </tr>`).join('')}
-                </tbody>
-            </table></div>
-        </div>`;
+
+            <div class="rewards-summary-card">
+                <div class="rewards-summary-icon"><i class="fas fa-award"></i></div>
+                <div>
+                    <span>Tổng số khen thưởng</span>
+                    <strong>${rewards.length}</strong>
+                </div>
+                <div class="rewards-summary-note">
+                    <i class="fas fa-circle-info"></i>
+                    <span>Dữ liệu được lưu theo đúng lớp, môn và học sinh.</span>
+                </div>
+            </div>
+
+            <div class="rewards-table-card">
+                <div class="rewards-table-heading">
+                    <span class="rewards-table-icon"><i class="fas fa-list-check"></i></span>
+                    <div>
+                        <h3>Danh sách khen thưởng</h3>
+                        <p>Theo dõi nội dung, ngày ghi nhận và người quyết định.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrapper rewards-table-wrapper">
+                    <table class="rewards-table">
+                        <thead>
+                            <tr>
+                                <th>STT</th>
+                                <th>Lớp</th>
+                                <th>Môn</th>
+                                <th>Học sinh</th>
+                                <th>Ngày</th>
+                                <th>Nội dung</th>
+                                <th>Người quyết định</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rewards.length === 0
+                                ? '<tr><td colspan="8" class="text-center text-muted rewards-empty">Chưa có khen thưởng nào.</td></tr>'
+                                : rewards.map((r, i) => `<tr>
+                                    <td>${i + 1}</td>
+                                    <td>${getContextClassName(r.classId)}</td>
+                                    <td><span class="reward-subject-badge">${r.subject || 'Dữ liệu cũ'}</span></td>
+                                    <td class="reward-student-name">${studentMap[r.studentId] || 'Không xác định'}</td>
+                                    <td>${formatDate(r.date)}</td>
+                                    <td class="reward-content-cell">${r.content}</td>
+                                    <td>${r.decisionBy || ''}</td>
+                                    <td class="text-center">
+                                        <button class="btn-icon reward-delete-btn" onclick="deleteReward('${r.id}')" title="Xóa khen thưởng">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>`;
 }
 
 function openAddReward() {
@@ -7083,28 +7354,77 @@ async function deleteReward(id) {
 function renderDisciplines() {
     const disciplines = APP_STATE.disciplines || [];
     const studentMap = Object.fromEntries((APP_STATE.students || []).map(s => [s.db_uuid, s.fullName]));
+
     return `
-        <div class="card">
-            <div class="flex-between mb-2">
-                <h3 class="card-title"><i class="fas fa-gavel"></i> Kỷ luật</h3>
-                <div class="flex gap-2">
-                    <button class="btn btn-primary btn-sm" onclick="openAddDiscipline()"><i class="fas fa-plus"></i> Thêm</button>
-                    <button class="btn btn-success btn-sm" onclick="exportDisciplines()"><i class="fas fa-file-excel"></i> Xuất Excel</button>
+        <section class="disciplines-pro-page">
+            <div class="disciplines-header">
+                <div class="disciplines-title">
+                    <span class="disciplines-title-icon"><i class="fas fa-gavel"></i></span>
+                    <div>
+                        <span class="disciplines-kicker">QUẢN LÝ RÈN LUYỆN</span>
+                        <h2>Kỷ luật</h2>
+                        <p>Theo dõi các trường hợp vi phạm, nội dung xử lý và người quyết định.</p>
+                    </div>
+                </div>
+                <div class="disciplines-header-actions">
+                    <button class="btn btn-primary btn-sm" onclick="openAddDiscipline()">
+                        <i class="fas fa-plus"></i> Thêm kỷ luật
+                    </button>
+                    <button class="btn btn-success btn-sm" onclick="exportDisciplines()">
+                        <i class="fas fa-file-excel"></i> Xuất Excel
+                    </button>
                 </div>
             </div>
-            <div class="table-wrapper"><table>
-                <thead><tr><th>STT</th><th>Lớp</th><th>Môn</th><th>Học sinh</th><th>Ngày</th><th>Nội dung</th><th>Người quyết định</th><th>Thao tác</th></tr></thead>
-                <tbody>
-                    ${disciplines.length === 0 ? '<tr><td colspan="8" class="text-center text-muted">Chưa có kỷ luật nào.</td></tr>' :
-                    disciplines.map((d, i) => `<tr>
-                        <td>${i + 1}</td><td>${getContextClassName(d.classId)}</td><td>${d.subject || 'Dữ liệu cũ'}</td>
-                        <td>${studentMap[d.studentId] || 'Không xác định'}</td><td>${formatDate(d.date)}</td>
-                        <td>${d.content}</td><td>${d.decisionBy || ''}</td>
-                        <td><button class="btn-icon" onclick="deleteDiscipline('${d.id}')" style="color:#dc2626;"><i class="fas fa-trash"></i></button></td>
-                    </tr>`).join('')}
-                </tbody>
-            </table></div>
-        </div>`;
+
+            <div class="disciplines-summary-card">
+                <div class="disciplines-summary-icon"><i class="fas fa-list-check"></i></div>
+                <div>
+                    <span>Tổng số bản ghi kỷ luật</span>
+                    <strong>${disciplines.length}</strong>
+                </div>
+            </div>
+
+            <div class="disciplines-table-card">
+                <div class="disciplines-table-heading">
+                    <span class="disciplines-table-icon"><i class="fas fa-table-list"></i></span>
+                    <div>
+                        <h3>Danh sách kỷ luật</h3>
+                        <p>Danh sách được quản lý theo lớp, môn học và từng học sinh.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrapper disciplines-table-wrapper">
+                    <table class="disciplines-table">
+                        <thead>
+                            <tr>
+                                <th>STT</th><th>Lớp</th><th>Môn</th><th>Học sinh</th><th>Ngày</th>
+                                <th>Nội dung</th><th>Người quyết định</th><th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${disciplines.length === 0
+                                ? '<tr><td colspan="8" class="text-center text-muted disciplines-empty">Chưa có kỷ luật nào.</td></tr>'
+                                : disciplines.map((d, i) => `
+                                    <tr>
+                                        <td>${i + 1}</td>
+                                        <td>${getContextClassName(d.classId)}</td>
+                                        <td><span class="disciplines-subject-badge">${d.subject || 'Dữ liệu cũ'}</span></td>
+                                        <td class="disciplines-student-name">${studentMap[d.studentId] || 'Không xác định'}</td>
+                                        <td>${formatDate(d.date)}</td>
+                                        <td class="disciplines-content">${d.content}</td>
+                                        <td>${d.decisionBy || ''}</td>
+                                        <td class="text-center">
+                                            <button class="btn-icon disciplines-delete-btn" onclick="deleteDiscipline('${d.id}')" title="Xóa kỷ luật">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>`;
 }
 
 function openAddDiscipline() {
@@ -7204,60 +7524,94 @@ function renderFiles() {
     if (!Array.isArray(files)) {
         APP_STATE.files = [];
     }
+
     return `
-        <div class="card">
-            <div class="flex-between mb-2">
-                <h3 class="card-title"><i class="fas fa-folder-open"></i> Quản lý file</h3>
-                <button class="btn btn-primary btn-sm" onclick="openUploadFile()"><i class="fas fa-upload"></i> Tải lên</button>
+        <section class="files-pro-page">
+            <div class="files-pro-header">
+                <div class="files-pro-title">
+                    <span class="files-title-icon"><i class="fas fa-folder-open"></i></span>
+                    <div>
+                        <span class="files-kicker">KHO TÀI LIỆU</span>
+                        <h2>Quản lý file</h2>
+                        <p>Lưu trữ và quản lý tài liệu dùng trong hệ thống. Mỗi file tối đa 20MB.</p>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm files-upload-btn" onclick="openUploadFile()">
+                    <i class="fas fa-upload"></i> Tải file lên
+                </button>
             </div>
-            <div class="table-wrapper">
-                <table>
-                    <thead><tr>
-                        <th>STT</th>
-                        <th>Tên file</th>
-                        <th>Loại</th>
-                        <th>Dung lượng</th>
-                        <th>Ngày tải</th>
-                        <th>Mô tả</th>
-                        <th>Thao tác</th>
-                    </tr></thead>
-                    <tbody>
-                        ${files.length === 0 ? '<tr><td colspan="7" class="text-center text-muted">Chưa có file nào.</td></tr>' :
-                        files.map((f, i) => {
-                            const fileInfo = getFileDisplayInfo(f);
-                            return `
-                            <tr>
-                                <td>${i+1}</td>
-                                <td>
-                                    <div class="file-name-cell">
-                                        <span class="file-kind-icon ${fileInfo.className}" title="${fileInfo.label}">
-                                            <i class="fas ${fileInfo.icon}"></i>
-                                        </span>
-                                        <span class="file-name-text">${f.name}</span>
-                                    </div>
-                                </td>
-                                <td><span class="file-type-badge ${fileInfo.className}"><i class="fas ${fileInfo.icon}"></i> ${fileInfo.label}</span></td>
-                                <td>${f.size}</td>
-                                <td>${formatDate(f.uploadDate)}</td>
-                                <td>${f.desc || ''}</td>
-                                <td>
-                                    <div class="table-actions file-actions">
-                                        ${f.url ? `<button class="btn-icon file-action-view" onclick="viewFile('${f.id}')" title="Xem trực tiếp" aria-label="Xem trực tiếp"><i class="fas fa-eye"></i></button>` : `<span class="text-muted file-action-disabled" title="File mẫu không có dữ liệu"><i class="fas fa-eye-slash"></i></span>`}
-                                        <button class="btn-icon file-action-download" onclick="downloadFile('${f.id}')" title="Tải xuống" aria-label="Tải xuống"><i class="fas fa-download"></i></button>
-                                        <button class="btn-icon file-action-edit" onclick="editFile('${f.id}')" title="Sửa thông tin" aria-label="Sửa thông tin"><i class="fas fa-pen"></i></button>
-                                        <button class="btn-icon file-action-delete" onclick="deleteFile('${f.id}')" title="Xóa file" aria-label="Xóa file"><i class="fas fa-trash"></i></button>
-                                    </div>
-                                </td>
-                            </tr>
-                        `}).join('')}
-                    </tbody>
-                </table>
+
+            <div class="files-summary-row">
+                <div class="files-summary-card">
+                    <span class="files-summary-icon"><i class="fas fa-file"></i></span>
+                    <div><span>Tổng số file</span><strong>${files.length}</strong></div>
+                </div>
+                <div class="files-summary-card">
+                    <span class="files-summary-icon"><i class="fas fa-hard-drive"></i></span>
+                    <div><span>Dung lượng đã dùng</span><strong>${calculateTotalSize()} <small>/ 100MB</small></strong></div>
+                </div>
             </div>
-            <div class="text-muted mt-2" style="font-size:0.8rem;">
-                <i class="fas fa-info-circle"></i> Tổng dung lượng đã dùng: ${calculateTotalSize()} / 4MB. 
-                <span class="text-muted">(Mỗi file tối đa 2MB)</span>
+
+            <div class="files-table-card">
+                <div class="files-table-heading">
+                    <span class="files-table-icon"><i class="fas fa-list"></i></span>
+                    <div>
+                        <h3>Danh sách tài liệu</h3>
+                        <p>Xem, tải xuống, sửa thông tin hoặc xóa các file đã lưu.</p>
+                    </div>
+                </div>
+
+                <div class="table-wrapper files-table-wrapper">
+                    <table class="files-table">
+                        <thead><tr>
+                            <th>STT</th>
+                            <th>Tên file</th>
+                            <th>Loại</th>
+                            <th>Dung lượng</th>
+                            <th>Ngày tải</th>
+                            <th>Mô tả</th>
+                            <th>Thao tác</th>
+                        </tr></thead>
+                        <tbody>
+                            ${files.length === 0
+                                ? '<tr><td colspan="7" class="text-center text-muted files-empty">Chưa có file nào.</td></tr>'
+                                : files.map((f, i) => {
+                                    const fileInfo = getFileDisplayInfo(f);
+                                    return `
+                                    <tr>
+                                        <td>${i + 1}</td>
+                                        <td>
+                                            <div class="file-name-cell">
+                                                <span class="file-kind-icon ${fileInfo.className}" title="${fileInfo.label}">
+                                                    <i class="fas ${fileInfo.icon}"></i>
+                                                </span>
+                                                <span class="file-name-text">${f.name}</span>
+                                            </div>
+                                        </td>
+                                        <td><span class="file-type-badge ${fileInfo.className}"><i class="fas ${fileInfo.icon}"></i> ${fileInfo.label}</span></td>
+                                        <td>${f.size}</td>
+                                        <td>${formatDate(f.uploadDate)}</td>
+                                        <td class="files-description">${f.desc || ''}</td>
+                                        <td>
+                                            <div class="table-actions file-actions">
+                                                ${f.url ? `<button class="btn-icon file-action-view" onclick="viewFile('${f.id}')" title="Xem trực tiếp" aria-label="Xem trực tiếp"><i class="fas fa-eye"></i></button>` : `<span class="text-muted file-action-disabled" title="File mẫu không có dữ liệu"><i class="fas fa-eye-slash"></i></span>`}
+                                                <button class="btn-icon file-action-download" onclick="downloadFile('${f.id}')" title="Tải xuống" aria-label="Tải xuống"><i class="fas fa-download"></i></button>
+                                                <button class="btn-icon file-action-edit" onclick="editFile('${f.id}')" title="Sửa thông tin" aria-label="Sửa thông tin"><i class="fas fa-pen"></i></button>
+                                                <button class="btn-icon file-action-delete" onclick="deleteFile('${f.id}')" title="Xóa file" aria-label="Xóa file"><i class="fas fa-trash"></i></button>
+                                            </div>
+                                        </td>
+                                    </tr>`;
+                                }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="files-capacity-note">
+                    <i class="fas fa-circle-info"></i>
+                    <span>Tổng dung lượng đã dùng: <strong>${calculateTotalSize()}</strong> / 100MB · Mỗi file tối đa 20MB</span>
+                </div>
             </div>
-        </div>
+        </section>
     `;
 }
 
@@ -7338,14 +7692,14 @@ async function ensureValidSupabaseSessionForUpload() {
 async function openUploadFile() {
     if (!requireEditPermission('tải file lên')) return;
     const totalMB = parseFloat(calculateTotalSize());
-    const MAX_TOTAL_MB = 4;
+    const MAX_TOTAL_MB = 100;
     if (totalMB >= MAX_TOTAL_MB) {
         showToast(`Dung lượng đã đạt giới hạn ${MAX_TOTAL_MB}MB. Vui lòng xóa bớt file cũ.`, 'error');
         return;
     }
 
     showModal('Tải file lên', `
-        <div class="form-group"><label>Chọn file (tối đa 2MB)</label><input type="file" id="fileInput" style="padding:0.5rem;"></div>
+        <div class="form-group"><label>Chọn file (tối đa 20MB)</label><input type="file" id="fileInput" style="padding:0.5rem;"></div>
         <div class="form-group"><label>Mô tả (không bắt buộc)</label><input type="text" id="fileDesc" placeholder="Ghi chú..."></div>
         <div class="text-muted" style="font-size:0.8rem; margin-top:0.5rem;">
             <i class="fas fa-info-circle"></i> Dung lượng còn trống: ${(MAX_TOTAL_MB - totalMB).toFixed(2)} MB
@@ -7358,9 +7712,9 @@ async function openUploadFile() {
                 return;
             }
             const file = input.files[0];
-            const MAX_FILE_SIZE = 2 * 1024 * 1024;
+            const MAX_FILE_SIZE = 20 * 1024 * 1024;
             if (file.size > MAX_FILE_SIZE) {
-                showToast('File quá lớn! Chỉ hỗ trợ file dưới 2MB.', 'error');
+                showToast('File quá lớn! Chỉ hỗ trợ file tối đa 20MB.', 'error');
                 return;
             }
 
@@ -7729,116 +8083,158 @@ async function deleteFile(id) {
 // ============================================================
 function renderStatistics() {
     const statSubject =
-    APP_STATE.statSubject ||
-    APP_STATE.studentSubject ||
-    APP_STATE.currentSubject ||
-    APP_STATE.subjectCatalog?.[0]?.name ||
-    SUBJECTS[0] ||
-    'Tin học';
+        APP_STATE.statSubject ||
+        APP_STATE.studentSubject ||
+        APP_STATE.currentSubject ||
+        APP_STATE.subjectCatalog?.[0]?.name ||
+        SUBJECTS[0] ||
+        'Tin học';
 
-APP_STATE.statSubject = statSubject;
+    APP_STATE.statSubject = statSubject;
 
-const statAccessibleClasses = getAccessibleClassesForSubject(statSubject);
-const statAllowedClassIds = new Set(statAccessibleClasses.map(c => c.id));
-const statClass = APP_STATE.statClass || '';
+    const statAccessibleClasses = getAccessibleClassesForSubject(statSubject);
+    const statAllowedClassIds = new Set(statAccessibleClasses.map(c => c.id));
+    const statClass = APP_STATE.statClass || '';
 
-// Thống kê chỉ trên các lớp thực sự học môn đang chọn, kể cả tài khoản admin.
-let statStudents = APP_STATE.students.filter(student => statAllowedClassIds.has(student.class_id));
-if (statClass) statStudents = statStudents.filter(student => student.class === statClass);
+    let statStudents = APP_STATE.students.filter(student => statAllowedClassIds.has(student.class_id));
+    if (statClass) statStudents = statStudents.filter(student => student.class === statClass);
 
-// Khen thưởng / kỷ luật phải đi theo đúng lớp báo cáo và môn đang chọn.
-const statSubjectId = getSubjectId(statSubject);
-const statClassObj = statClass ? APP_STATE.classes.find(c => c.name === statClass) : null;
-const matchesStatScope = item => {
-    const classMatched = !statClass || item.classId === statClassObj?.id;
-    const subjectMatched = !statSubjectId || item.subjectId === statSubjectId || item.subject === statSubject;
-    return classMatched && subjectMatched;
-};
-const statRewards = (APP_STATE.rewards || []).filter(matchesStatScope);
-const statDisciplines = (APP_STATE.disciplines || []).filter(matchesStatScope);
+    const statSubjectId = getSubjectId(statSubject);
+    const statClassObj = statClass ? APP_STATE.classes.find(c => c.name === statClass) : null;
+    const matchesStatScope = item => {
+        const classMatched = !statClass || item.classId === statClassObj?.id;
+        const subjectMatched = !statSubjectId || item.subjectId === statSubjectId || item.subject === statSubject;
+        return classMatched && subjectMatched;
+    };
 
-let competenceEvaluated = 0;
-let qualityEvaluated = 0;
+    const statRewards = (APP_STATE.rewards || []).filter(matchesStatScope);
+    const statDisciplines = (APP_STATE.disciplines || []).filter(matchesStatScope);
 
-statStudents.forEach(student => {
-    const subjectScore = APP_STATE.scores[student.id]?.[statSubject];
+    let competenceEvaluated = 0;
+    let qualityEvaluated = 0;
 
-    if (subjectScore?.competence?.trim()) {
-        competenceEvaluated++;
-    }
+    statStudents.forEach(student => {
+        const subjectScore = APP_STATE.scores[student.id]?.[statSubject];
+        if (subjectScore?.competence?.trim()) competenceEvaluated++;
+        if (subjectScore?.quality?.trim()) qualityEvaluated++;
+    });
 
-    if (subjectScore?.quality?.trim()) {
-        qualityEvaluated++;
-    }
-});
+    const competenceNotEvaluated = statStudents.length - competenceEvaluated;
+    const qualityNotEvaluated = statStudents.length - qualityEvaluated;
 
-const competenceNotEvaluated =
-    statStudents.length - competenceEvaluated;
-
-const qualityNotEvaluated =
-    statStudents.length - qualityEvaluated;
     return `
-        <div class="card">
-            <h3 class="card-title"><i class="fas fa-chart-bar"></i> Thống kê chi tiết</h3>
-            <div class="form-group" style="max-width: 300px; margin-bottom: 16px;">
-    <label>Môn học</label>
-    <select id="statSubjectSelect" onchange="switchStatSubject(this.value)">
-        ${
-            getVisibleSubjectNames()
-            .map(subject => `
-                <option value="${subject}" ${
-                    subject === (
-                        APP_STATE.statSubject ||
-                        APP_STATE.studentSubject ||
-                        APP_STATE.currentSubject ||
-                        SUBJECTS[0]
-                    ) ? 'selected' : ''
-                }>
-                    ${subject}
-                </option>
-            `).join('')
-        }
-    </select>
-</div>
-            <div class="flex gap-2 mb-2" style="flex-wrap:wrap;align-items:end">
-                <div class="form-group" style="margin:0;min-width:180px"><label>Lớp báo cáo</label><select id="advancedReportClass" onchange="refreshAdvancedStatistics()"><option value="">Tất cả lớp</option>${statAccessibleClasses.map(c => `<option value="${c.name}" ${c.name === statClass ? 'selected' : ''}>${c.name}</option>`).join('')}</select></div>
-                <div class="form-group" style="margin:0;min-width:180px"><label>Môn báo cáo</label><select id="advancedReportSubject">${getVisibleSubjectNames().map(name=>`<option value="${name}" ${name===statSubject?'selected':''}>${name}</option>`).join('')}</select></div>
-                <button class="btn btn-success" onclick="exportAdvancedReport()"><i class="fas fa-file-excel"></i> Xuất báo cáo nâng cao</button>
+        <section class="statistics-pro-page">
+            <div class="statistics-header">
+                <div class="statistics-title">
+                    <span class="statistics-title-icon"><i class="fas fa-chart-bar"></i></span>
+                    <div>
+                        <span class="statistics-kicker">TỔNG HỢP DỮ LIỆU</span>
+                        <h2>Thống kê chi tiết</h2>
+                        <p>Theo dõi số liệu học sinh, đánh giá, khen thưởng và kỷ luật theo môn/lớp.</p>
+                    </div>
+                </div>
+                <button class="btn btn-success btn-sm statistics-export-btn" onclick="exportAdvancedReport()">
+                    <i class="fas fa-file-excel"></i> Xuất báo cáo nâng cao
+                </button>
             </div>
-            <div class="chart-grid">
-    <div class="chart-box"><canvas id="statGradeChart"></canvas></div>
-    <div class="chart-box"><canvas id="statGenderChart"></canvas></div>
-    <div class="chart-box"><canvas id="statCompetenceChart"></canvas></div>
-    <div class="chart-box"><canvas id="statQualityChart"></canvas></div>
-</div>
-            <div class="stats-grid mt-2">
-                <div class="stat-card"><div class="stat-label">Tổng học sinh</div><div class="stat-value">${statStudents.length}</div></div>
-                <div class="stat-card"><div class="stat-label">Số lớp</div><div class="stat-value">${statClass ? 1 : statAccessibleClasses.length}</div></div>
-                <div class="stat-card"><div class="stat-label">Khen thưởng</div><div class="stat-value">${statRewards.length}</div></div>
-                <div class="stat-card"><div class="stat-label">Kỷ luật</div><div class="stat-value">${statDisciplines.length}</div></div>
+
+            <div class="statistics-filter-card">
+                <div class="statistics-filter-item">
+                    <label>Môn thống kê</label>
+                    <select id="statSubjectSelect" onchange="switchStatSubject(this.value)">
+                        ${
+                            getVisibleSubjectNames()
+                            .map(subject => `
+                                <option value="${subject}" ${
+                                    subject === (
+                                        APP_STATE.statSubject ||
+                                        APP_STATE.studentSubject ||
+                                        APP_STATE.currentSubject ||
+                                        SUBJECTS[0]
+                                    ) ? 'selected' : ''
+                                }>${subject}</option>
+                            `).join('')
+                        }
+                    </select>
+                </div>
+
+                <div class="statistics-filter-item">
+                    <label>Lớp báo cáo</label>
+                    <select id="advancedReportClass" onchange="refreshAdvancedStatistics()">
+                        <option value="">Tất cả lớp</option>
+                        ${statAccessibleClasses.map(c => `<option value="${c.name}" ${c.name === statClass ? 'selected' : ''}>${c.name}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div class="statistics-filter-item">
+                    <label>Môn báo cáo</label>
+                    <select id="advancedReportSubject">
+                        ${getVisibleSubjectNames().map(name => `<option value="${name}" ${name === statSubject ? 'selected' : ''}>${name}</option>`).join('')}
+                    </select>
+                </div>
             </div>
-            <div class="stats-grid mt-2">
-    <div class="stat-card">
-        <div class="stat-label">Đã đánh giá NL - ${statSubject}</div>
-        <div class="stat-value">${competenceEvaluated}</div>
-    </div>
 
-    <div class="stat-card">
-        <div class="stat-label">Chưa đánh giá NL - ${statSubject}</div>
-        <div class="stat-value">${competenceNotEvaluated}</div>
-    </div>
+            <div class="statistics-summary-grid">
+                <div class="statistics-summary-card summary-students">
+                    <span class="statistics-summary-icon"><i class="fas fa-user-graduate"></i></span>
+                    <div><span>Tổng học sinh</span><strong>${statStudents.length}</strong></div>
+                </div>
+                <div class="statistics-summary-card summary-classes">
+                    <span class="statistics-summary-icon"><i class="fas fa-school"></i></span>
+                    <div><span>Số lớp</span><strong>${statClass ? 1 : statAccessibleClasses.length}</strong></div>
+                </div>
+                <div class="statistics-summary-card summary-rewards">
+                    <span class="statistics-summary-icon"><i class="fas fa-medal"></i></span>
+                    <div><span>Khen thưởng</span><strong>${statRewards.length}</strong></div>
+                </div>
+                <div class="statistics-summary-card summary-disciplines">
+                    <span class="statistics-summary-icon"><i class="fas fa-gavel"></i></span>
+                    <div><span>Kỷ luật</span><strong>${statDisciplines.length}</strong></div>
+                </div>
+            </div>
 
-    <div class="stat-card">
-        <div class="stat-label">Đã đánh giá PC - ${statSubject}</div>
-        <div class="stat-value">${qualityEvaluated}</div>
-    </div>
+            <div class="statistics-chart-grid">
+                <div class="statistics-chart-card">
+                    <div class="statistics-chart-head"><span>Học sinh theo khối</span><i class="fas fa-chart-column"></i></div>
+                    <div class="statistics-chart-canvas"><canvas id="statGradeChart"></canvas></div>
+                </div>
+                <div class="statistics-chart-card">
+                    <div class="statistics-chart-head"><span>Cơ cấu giới tính</span><i class="fas fa-venus-mars"></i></div>
+                    <div class="statistics-chart-canvas"><canvas id="statGenderChart"></canvas></div>
+                </div>
+                <div class="statistics-chart-card">
+                    <div class="statistics-chart-head"><span>Năng lực - ${statSubject}</span><i class="fas fa-brain"></i></div>
+                    <div class="statistics-chart-canvas"><canvas id="statCompetenceChart"></canvas></div>
+                </div>
+                <div class="statistics-chart-card">
+                    <div class="statistics-chart-head"><span>Phẩm chất - ${statSubject}</span><i class="fas fa-star"></i></div>
+                    <div class="statistics-chart-canvas"><canvas id="statQualityChart"></canvas></div>
+                </div>
+            </div>
 
-    <div class="stat-card">
-        <div class="stat-label">Chưa đánh giá PC - ${statSubject}</div>
-        <div class="stat-value">${qualityNotEvaluated}</div>
-    </div>
-</div>
-        </div>
+            <div class="statistics-eval-grid">
+                <div class="statistics-eval-card eval-done">
+                    <span>Đã đánh giá NL</span>
+                    <strong>${competenceEvaluated}</strong>
+                    <small>${statSubject}</small>
+                </div>
+                <div class="statistics-eval-card eval-pending">
+                    <span>Chưa đánh giá NL</span>
+                    <strong>${competenceNotEvaluated}</strong>
+                    <small>${statSubject}</small>
+                </div>
+                <div class="statistics-eval-card eval-done">
+                    <span>Đã đánh giá PC</span>
+                    <strong>${qualityEvaluated}</strong>
+                    <small>${statSubject}</small>
+                </div>
+                <div class="statistics-eval-card eval-pending">
+                    <span>Chưa đánh giá PC</span>
+                    <strong>${qualityNotEvaluated}</strong>
+                    <small>${statSubject}</small>
+                </div>
+            </div>
+        </section>
     `;
 }
 function refreshAdvancedStatistics() {
@@ -8009,35 +8405,86 @@ chartInstances.statQuality = new Chart(
 // ============================================================
 function renderSearch() {
     return `
-        <div class="card">
-            <h3 class="card-title"><i class="fas fa-search"></i> Tìm kiếm nâng cao</h3>
-            <div class="form-group" style="max-width: 300px; margin-bottom: 16px;">
-    <label>Môn học</label>
-    <select id="searchSubjectSelect" onchange="switchSearchSubject(this.value)">
-        ${
-            getVisibleSubjectNames()
-            .map(subject => `
-                <option value="${subject}" ${
-                    subject === (
-                        APP_STATE.searchSubject ||
-                        APP_STATE.studentSubject ||
-                        APP_STATE.currentSubject ||
-                        SUBJECTS[0]
-                    ) ? 'selected' : ''
-                }>
-                    ${subject}
-                </option>
-            `).join('')
-        }
-    </select>
-</div>
-            <div class="search-bar">
-                <input type="text" id="globalSearch" placeholder="Nhập từ khóa..." oninput="globalSearch()">
-                <select id="searchField" onchange="globalSearch()"><option value="all">Tất cả</option><option value="id">Mã HS</option><option value="fullName">Họ tên</option><option value="class">Lớp</option><option value="grade">Khối</option><option value="competence">Năng lực</option><option value="quality">Phẩm chất</option></select>
-                <button class="btn btn-primary btn-sm" onclick="globalSearch()"><i class="fas fa-search"></i> Tìm</button>
+        <section class="search-pro-page">
+            <div class="search-pro-header">
+                <div class="search-pro-title">
+                    <span class="search-title-icon"><i class="fas fa-search"></i></span>
+                    <div>
+                        <span class="search-kicker">TRA CỨU HỌC SINH</span>
+                        <h2>Tìm kiếm nâng cao</h2>
+                        <p>Tìm nhanh theo mã học sinh, họ tên, lớp, khối, năng lực hoặc phẩm chất.</p>
+                    </div>
+                </div>
             </div>
-            <div id="searchResults"></div>
-        </div>
+
+            <div class="search-filter-card">
+                <div class="search-filter-item">
+                    <label>Môn học</label>
+                    <select id="searchSubjectSelect" onchange="switchSearchSubject(this.value)">
+                        ${
+                            getVisibleSubjectNames()
+                            .map(subject => `
+                                <option value="${subject}" ${
+                                    subject === (
+                                        APP_STATE.searchSubject ||
+                                        APP_STATE.studentSubject ||
+                                        APP_STATE.currentSubject ||
+                                        SUBJECTS[0]
+                                    ) ? 'selected' : ''
+                                }>
+                                    ${subject}
+                                </option>
+                            `).join('')
+                        }
+                    </select>
+                </div>
+
+                <div class="search-filter-item search-filter-keyword">
+                    <label>Từ khóa</label>
+                    <div class="search-keyword-wrap">
+                        <i class="fas fa-magnifying-glass"></i>
+                        <input type="text" id="globalSearch" placeholder="Nhập từ khóa..." oninput="globalSearch()">
+                    </div>
+                </div>
+
+                <div class="search-filter-item">
+                    <label>Tìm theo</label>
+                    <select id="searchField" onchange="globalSearch()">
+                        <option value="all">Tất cả</option>
+                        <option value="id">Mã HS</option>
+                        <option value="fullName">Họ tên</option>
+                        <option value="class">Lớp</option>
+                        <option value="grade">Khối</option>
+                        <option value="competence">Năng lực</option>
+                        <option value="quality">Phẩm chất</option>
+                    </select>
+                </div>
+
+                <button class="btn btn-primary search-submit-btn" onclick="globalSearch()">
+                    <i class="fas fa-search"></i>
+                    <span>Tìm kiếm</span>
+                </button>
+            </div>
+
+            <div class="search-results-card">
+                <div class="search-results-head">
+                    <div>
+                        <span class="search-results-icon"><i class="fas fa-list-check"></i></span>
+                        <div>
+                            <h3>Kết quả tìm kiếm</h3>
+                            <p>Kết quả sẽ hiển thị theo môn học và tiêu chí đang chọn.</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="searchResults" class="search-results-body">
+                    <div class="search-empty-state">
+                        <i class="fas fa-magnifying-glass"></i>
+                        <strong>Nhập từ khóa để tìm kiếm</strong>
+                        <span>Hệ thống sẽ lọc trực tiếp trong dữ liệu học sinh hiện có.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
     `;
 }
 function switchSearchSubject(subject) {
@@ -8066,7 +8513,7 @@ function globalSearch() {
 
     if (!kw) {
         container.innerHTML =
-            '<p class="text-muted">Nhập từ khóa để tìm kiếm.</p>';
+            '<div class="search-empty-state"><i class="fas fa-magnifying-glass"></i><strong>Nhập từ khóa để tìm kiếm</strong><span>Hệ thống sẽ lọc trực tiếp trong dữ liệu học sinh hiện có.</span></div>';
         return;
     }
 
@@ -8122,7 +8569,7 @@ function globalSearch() {
 
     if (results.length === 0) {
         container.innerHTML =
-            '<p class="text-muted">Không tìm thấy kết quả.</p>';
+            '<div class="search-empty-state search-empty-none"><i class="fas fa-circle-info"></i><strong>Không tìm thấy kết quả</strong><span>Hãy thử từ khóa khác hoặc thay đổi tiêu chí tìm kiếm.</span></div>';
         return;
     }
 
@@ -8163,9 +8610,7 @@ function globalSearch() {
             </table>
         </div>
 
-        <p class="text-muted mt-2">
-            Tìm thấy ${results.length} kết quả - Môn: ${searchSubject}
-        </p>
+        <div class="search-result-summary"><i class="fas fa-circle-check"></i><span>Tìm thấy <strong>${results.length}</strong> kết quả</span><span class="search-result-subject">Môn: <strong>${searchSubject}</strong></span></div>
     `;
 }
 
@@ -8396,80 +8841,217 @@ function renderSettings() {
     const subjects = APP_STATE.allSubjectCatalog?.length
         ? APP_STATE.allSubjectCatalog
         : SUBJECT_CONFIG.map(subject => ({ ...subject, grades: [1,2,3,4,5], active: true }));
+
     const subjectRows = subjects.map(subject => {
         const grades = Array.isArray(subject.grades) ? subject.grades.map(String) : [];
         return `
             <tr>
-                <td><strong>${subject.name}</strong><div class="text-muted" style="font-size:.75rem">${subject.id}</div></td>
+                <td>
+                    <strong>${subject.name}</strong>
+                    <div class="text-muted settings-subject-id">${subject.id}</div>
+                </td>
                 <td>
                     <div class="subject-grade-list">
-                        ${[1,2,3,4,5].map(g => `<label><input type="checkbox" class="subject-grade" data-subject-id="${subject.id}" value="${g}" ${grades.includes(String(g)) ? 'checked' : ''}> ${g}</label>`).join('')}
+                        ${[1,2,3,4,5].map(g => `
+                            <label class="settings-grade-chip">
+                                <input type="checkbox" class="subject-grade" data-subject-id="${subject.id}" value="${g}" ${grades.includes(String(g)) ? 'checked' : ''}>
+                                <span>Khối ${g}</span>
+                            </label>
+                        `).join('')}
                     </div>
                 </td>
-                <td><label class="switch-inline"><input type="checkbox" id="subjectActive_${subject.id}" ${subject.active !== false ? 'checked' : ''}> <span>${subject.active !== false ? 'Đang bật' : 'Đang tắt'}</span></label></td>
-                <td><button class="btn btn-primary btn-sm" onclick="saveSubjectConfig('${subject.id}')"><i class="fas fa-save"></i> Lưu</button></td>
+                <td>
+                    <label class="switch-inline settings-switch">
+                        <input type="checkbox" id="subjectActive_${subject.id}" ${subject.active !== false ? 'checked' : ''}>
+                        <span>${subject.active !== false ? 'Đang bật' : 'Đang tắt'}</span>
+                    </label>
+                </td>
+                <td>
+                    <button class="btn btn-primary btn-sm settings-subject-save" onclick="saveSubjectConfig('${subject.id}')">
+                        <i class="fas fa-save"></i> Lưu
+                    </button>
+                </td>
             </tr>`;
     }).join('');
+
     return `
-        <div class="card">
-            <h3 class="card-title"><i class="fas fa-cog"></i> Cài đặt</h3>
-            <div class="form-grid">
-                <div class="form-group"><label>Tên trường</label><input type="text" id="setSchoolName" value="${settings.schoolName || ''}"></div>
-                <div class="form-group"><label>Năm học</label><input type="text" id="setSchoolYear" value="${settings.schoolYear || ''}"></div>
-                <div class="form-group"><label>Giáo viên</label><input type="text" id="setTeacherName" value="${settings.teacherName || ''}"></div>
-                <div class="form-group"><label>Giao diện</label><select id="setTheme"><option value="light" ${settings.theme === 'light' ? 'selected' : ''}>Sáng</option><option value="dark" ${settings.theme === 'dark' ? 'selected' : ''}>Tối</option></select></div>
+        <section class="settings-pro-page">
+            <div class="settings-pro-header">
+                <div class="settings-pro-title">
+                    <span class="settings-title-icon"><i class="fas fa-cog"></i></span>
+                    <div>
+                        <span class="settings-kicker">CẤU HÌNH HỆ THỐNG</span>
+                        <h2>Cài đặt</h2>
+                        <p>Quản lý thông tin trường, giao diện, môn học, sao lưu và bảo mật tài khoản.</p>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm settings-save-main" onclick="saveSettings()">
+                    <i class="fas fa-save"></i> Lưu cài đặt
+                </button>
             </div>
-            <button class="btn btn-primary" onclick="saveSettings()"><i class="fas fa-save"></i> Lưu cài đặt</button>
-            <hr class="my-3">
-            <h4><i class="fas fa-book"></i> Quản lý môn học</h4>
-            <p class="text-muted">Bật/tắt môn và chọn các khối lớp áp dụng. Môn bị tắt sẽ không xuất hiện trong các màn hình nhập liệu mới nhưng dữ liệu cũ vẫn được giữ.</p>
-            <div class="table-wrapper"><table><thead><tr><th>Môn học</th><th>Khối áp dụng</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>${subjectRows}</tbody></table></div>
+
+            <div class="settings-section-card">
+                <div class="settings-section-head">
+                    <span class="settings-section-icon"><i class="fas fa-school"></i></span>
+                    <div>
+                        <h3>Thông tin chung</h3>
+                        <p>Các thông tin hiển thị trong hệ thống và giao diện quản trị.</p>
+                    </div>
+                </div>
+                <div class="settings-section-body">
+                    <div class="settings-form-grid">
+                        <div class="form-group">
+                            <label>Tên trường</label>
+                            <input type="text" id="setSchoolName" value="${settings.schoolName || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Năm học</label>
+                            <input type="text" id="setSchoolYear" value="${settings.schoolYear || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Giáo viên</label>
+                            <input type="text" id="setTeacherName" value="${settings.teacherName || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Giao diện</label>
+                            <select id="setTheme">
+                                <option value="light" ${settings.theme === 'light' ? 'selected' : ''}>Sáng</option>
+                                <option value="dark" ${settings.theme === 'dark' ? 'selected' : ''}>Tối</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section-card">
+                <div class="settings-section-head">
+                    <span class="settings-section-icon"><i class="fas fa-book"></i></span>
+                    <div>
+                        <h3>Quản lý môn học</h3>
+                        <p>Bật/tắt môn và chọn các khối lớp áp dụng. Dữ liệu cũ vẫn được giữ khi tắt môn.</p>
+                    </div>
+                </div>
+                <div class="settings-section-body settings-subject-body">
+                    <div class="table-wrapper settings-subject-table-wrapper">
+                        <table class="settings-subject-table">
+                            <thead>
+                                <tr><th>Môn học</th><th>Khối áp dụng</th><th>Trạng thái</th><th>Thao tác</th></tr>
+                            </thead>
+                            <tbody>${subjectRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             ${isAdmin() ? `
-            <hr class="my-3">
-            <div class="settings-public-shortcut">
-              <span class="settings-public-icon"><i class="fas fa-globe"></i></span>
-              <div><h4>Nội dung website công khai</h4><p>Phần quản trị Tin tức, Tài liệu, Hình ảnh & Video, Thông báo và Liên kết đã được tách thành module riêng để thao tác rõ ràng hơn.</p></div>
-              <button class="btn btn-primary" onclick="renderPage('public-content')"><i class="fas fa-arrow-up-right-from-square"></i> Mở module nội dung</button>
+            <div class="settings-section-card settings-public-card">
+                <div class="settings-public-shortcut">
+                    <span class="settings-public-icon"><i class="fas fa-globe"></i></span>
+                    <div>
+                        <h3>Nội dung website công khai</h3>
+                        <p>Quản trị Tin tức, Tài liệu, Hình ảnh & Video, Thông báo và Liên kết trong module riêng.</p>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="renderPage('public-content')">
+                        <i class="fas fa-arrow-up-right-from-square"></i> Mở module nội dung
+                    </button>
+                </div>
             </div>
             ` : ''}
-            <hr class="my-3">
-            <h4><i class="fas fa-database"></i> Sao lưu & khôi phục</h4>
-            ${isAdmin() ? `
-            <div class="flex gap-2" style="flex-wrap:wrap">
-                <button id="backupJsonBtn" class="btn btn-success" onclick="backupAllData()"><i class="fas fa-download"></i> Sao lưu JSON</button>
-                <button class="btn btn-warning" onclick="document.getElementById('mergeBackupInput').click()"><i class="fas fa-code-merge"></i> Hợp nhất JSON</button>
-                <button class="btn btn-danger" onclick="document.getElementById('fullRestoreBackupInput').click()"><i class="fas fa-rotate-left"></i> Khôi phục toàn bộ</button>
-                <input type="file" id="mergeBackupInput" accept=".json" style="display:none" onchange="mergeBackupData(event)">
-                <input type="file" id="fullRestoreBackupInput" accept=".json" style="display:none" onchange="fullRestoreBackupData(event)">
-            </div>
-            <p class="text-muted mt-2" style="font-size:.8rem"><strong>Hợp nhất JSON:</strong> ghi đè/thêm theo khóa hiện có, không xóa dữ liệu mới. <strong>Khôi phục toàn bộ:</strong> đưa các bảng nghiệp vụ về đúng snapshot trong file; dữ liệu không có trong backup sẽ bị xóa. Full Restore chỉ hoạt động sau khi kích hoạt RPC Supabase ở Bước 109.</p>
-            ` : `<p class="text-muted mt-2" style="font-size:.85rem"><i class="fas fa-lock"></i> Chỉ tài khoản Admin được sử dụng Sao lưu, Hợp nhất và Khôi phục toàn bộ dữ liệu.</p>`}
-            <hr class="my-3">
-            <h4><i class="fas fa-users-cog"></i> Người dùng & phân quyền</h4>
-            <div id="userRolePanel"><p class="text-muted">Đang kiểm tra cấu hình phân quyền...</p></div>
-            ${isAdmin() ? `
-            <hr class="my-3">
-            <div style="border:1px solid var(--border);border-radius:12px;padding:1rem;background:rgba(37,99,235,.04);">
-                <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+
+            <div class="settings-section-card">
+                <div class="settings-section-head">
+                    <span class="settings-section-icon"><i class="fas fa-database"></i></span>
                     <div>
-                        <h4 style="margin:0;"><i class="fas fa-heart-pulse"></i> Health Check hệ thống</h4>
-                        <p class="text-muted" style="margin:.35rem 0 0;">
-                            Kiểm tra nhanh Auth, Supabase, các bảng chính, Storage và thư viện. Chỉ đọc, không tự sửa dữ liệu.
-                        </p>
+                        <h3>Sao lưu & khôi phục</h3>
+                        <p>Bảo vệ dữ liệu bằng sao lưu JSON hoặc khôi phục khi cần.</p>
                     </div>
-                    <button id="btnRunHealthCheck" class="btn btn-primary" onclick="runAdminHealthCheck()">
+                </div>
+                <div class="settings-section-body">
+                    ${isAdmin() ? `
+                    <div class="settings-backup-actions">
+                        <button id="backupJsonBtn" class="btn btn-success" onclick="backupAllData()">
+                            <i class="fas fa-download"></i> Sao lưu JSON
+                        </button>
+                        <button class="btn btn-warning" onclick="document.getElementById('mergeBackupInput').click()">
+                            <i class="fas fa-code-merge"></i> Hợp nhất JSON
+                        </button>
+                        <button class="btn btn-danger" onclick="document.getElementById('fullRestoreBackupInput').click()">
+                            <i class="fas fa-rotate-left"></i> Khôi phục toàn bộ
+                        </button>
+                        <input type="file" id="mergeBackupInput" accept=".json" style="display:none" onchange="mergeBackupData(event)">
+                        <input type="file" id="fullRestoreBackupInput" accept=".json" style="display:none" onchange="fullRestoreBackupData(event)">
+                    </div>
+                    <div class="settings-note">
+                        <i class="fas fa-circle-info"></i>
+                        <span><strong>Hợp nhất JSON:</strong> ghi đè/thêm theo khóa hiện có, không xóa dữ liệu mới. <strong>Khôi phục toàn bộ:</strong> đưa dữ liệu nghiệp vụ về snapshot trong file backup.</span>
+                    </div>
+                    ` : `
+                    <div class="settings-note settings-note-locked">
+                        <i class="fas fa-lock"></i>
+                        <span>Chỉ tài khoản Admin được sử dụng Sao lưu, Hợp nhất và Khôi phục toàn bộ dữ liệu.</span>
+                    </div>`}
+                </div>
+            </div>
+
+            <div class="settings-section-card">
+                <div class="settings-section-head">
+                    <span class="settings-section-icon"><i class="fas fa-users-cog"></i></span>
+                    <div>
+                        <h3>Người dùng & phân quyền</h3>
+                        <p>Quản lý vai trò và phạm vi truy cập của tài khoản hệ thống.</p>
+                    </div>
+                </div>
+                <div class="settings-section-body">
+                    <div id="userRolePanel">
+                        <p class="text-muted">Đang kiểm tra cấu hình phân quyền...</p>
+                    </div>
+                </div>
+            </div>
+
+            ${isAdmin() ? `
+            <div class="settings-section-card">
+                <div class="settings-section-head">
+                    <span class="settings-section-icon"><i class="fas fa-heart-pulse"></i></span>
+                    <div>
+                        <h3>Health Check hệ thống</h3>
+                        <p>Kiểm tra Auth, Supabase, các bảng chính, Storage và thư viện. Chỉ đọc, không tự sửa dữ liệu.</p>
+                    </div>
+                    <button id="btnRunHealthCheck" class="btn btn-primary btn-sm settings-health-btn" onclick="runAdminHealthCheck()">
                         <i class="fas fa-stethoscope"></i> Kiểm tra hệ thống
                     </button>
                 </div>
-                <div id="adminHealthCheckSummary" style="margin-top:1rem;"></div>
-                <div id="adminHealthCheckResult"></div>
+                <div class="settings-section-body">
+                    <div id="adminHealthCheckSummary"></div>
+                    <div id="adminHealthCheckResult"></div>
+                </div>
             </div>
             ` : ''}
-            <hr class="my-3">
-            <h4>Đổi mật khẩu</h4>
-            <div class="form-grid"><div class="form-group"><label>Mật khẩu mới</label><input type="password" id="newPassword" placeholder="••••••••"></div><div class="form-group"><label>Xác nhận</label><input type="password" id="confirmPassword" placeholder="••••••••"></div></div>
-            <button class="btn btn-warning" onclick="changePassword()"><i class="fas fa-key"></i> Đổi mật khẩu</button>
-        </div>`;
+
+            <div class="settings-section-card">
+                <div class="settings-section-head">
+                    <span class="settings-section-icon"><i class="fas fa-key"></i></span>
+                    <div>
+                        <h3>Đổi mật khẩu</h3>
+                        <p>Mật khẩu mới phải có ít nhất 6 ký tự.</p>
+                    </div>
+                </div>
+                <div class="settings-section-body">
+                    <div class="settings-password-grid">
+                        <div class="form-group">
+                            <label>Mật khẩu mới</label>
+                            <input type="password" id="newPassword" placeholder="••••••••">
+                        </div>
+                        <div class="form-group">
+                            <label>Xác nhận mật khẩu</label>
+                            <input type="password" id="confirmPassword" placeholder="••••••••">
+                        </div>
+                    </div>
+                    <button class="btn btn-warning settings-password-btn" onclick="changePassword()">
+                        <i class="fas fa-key"></i> Đổi mật khẩu
+                    </button>
+                </div>
+            </div>
+        </section>`;
 }
 
 function initSettings() { loadUserRolePanel(); }
@@ -12309,3 +12891,6 @@ window.showAuthenticatedApp = showAuthenticatedApp;
 
 window.setPublicDocumentCategory=setPublicDocumentCategory;
 window.setPublicDocumentSearch=setPublicDocumentSearch;
+
+// BƯỚC 151.49.2F-R2: export bộ lọc trạng thái cho inline onclick
+window.filterAttendanceStatus = filterAttendanceStatus;

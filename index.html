@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản - Hệ thống quản lý học sinh</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=151503">
+    <link rel="stylesheet" href="style.css?v=151539">
     <!-- Thêm thư viện XLSX để xuất file Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- ExcelJS: xuất file VNEDU có định dạng, đường viền, căn lề -->
@@ -342,24 +342,44 @@
                 <button id="toggleSidebar" class="sidebar-toggle"><i class="fas fa-bars"></i></button>
             </div>
             <nav class="nav-menu">
-                <a href="#" class="nav-item active" data-page="dashboard"><i class="fas fa-chart-pie"></i> <span>Dashboard</span></a>
-                <a href="#" class="nav-item admin-public-nav" data-page="public-content"><i class="fas fa-globe"></i> <span>Nội dung website</span></a>
-                <a href="#" class="nav-item" data-page="classes"><i class="fas fa-chalkboard-teacher"></i> <span>Lớp</span></a>
-                <a href="#" class="nav-item" data-page="students"><i class="fas fa-user-graduate"></i> <span>Học sinh</span></a>
-                <a href="#" class="nav-item" data-page="search"><i class="fas fa-search"></i> <span>Tìm kiếm</span></a>
-                <a href="#" class="nav-item" data-page="attendance"><i class="fas fa-clipboard-check"></i> <span>Điểm danh</span></a>
-                <a href="#" class="nav-item" data-page="scores"><i class="fas fa-pencil-alt"></i> <span>Điểm</span></a>
-                <a href="#" class="nav-item" data-page="rewards"><i class="fas fa-medal"></i> <span>Khen thưởng</span></a>
-                <a href="#" class="nav-item" data-page="disciplines"><i class="fas fa-gavel"></i> <span>Kỷ luật</span></a>
-                <a href="#" class="nav-item" data-page="learning-comments">
-    <i class="fas fa-book-open"></i>
-    <span>Nhận xét học tập</span>
-</a>
-                <a href="#" class="nav-item" data-page="files"><i class="fas fa-folder-open"></i> <span>File</span></a>
-                <a href="#" class="nav-item" data-page="statistics"><i class="fas fa-chart-bar"></i> <span>Thống kê</span></a>
-                <a href="#" class="nav-item" data-page="wheel"><i class="fas fa-dharmachakra"></i> <span>Vòng quay</span></a>
-                <a href="#" class="nav-item" data-page="millionaire"><i class="fas fa-coins"></i> <span>Ai là triệu phú</span></a> <!-- THÊM DÒNG NÀY -->
-                <a href="#" class="nav-item" data-page="settings"><i class="fas fa-cog"></i> <span>Cài đặt</span></a>
+                <div class="nav-group">
+                    <div class="nav-group-label"><span>Tổng quan</span></div>
+                    <a href="#" class="nav-item active" data-page="dashboard"><i class="fas fa-chart-pie"></i> <span>Dashboard</span></a>
+                    <a href="#" class="nav-item admin-public-nav" data-page="public-content"><i class="fas fa-globe"></i> <span>Nội dung website</span></a>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-group-label"><span>Học sinh & lớp</span></div>
+                    <a href="#" class="nav-item" data-page="classes"><i class="fas fa-chalkboard-teacher"></i> <span>Lớp</span></a>
+                    <a href="#" class="nav-item" data-page="students"><i class="fas fa-user-graduate"></i> <span>Học sinh</span></a>
+                    <a href="#" class="nav-item" data-page="search"><i class="fas fa-search"></i> <span>Tìm kiếm</span></a>
+                    <a href="#" class="nav-item" data-page="attendance"><i class="fas fa-clipboard-check"></i> <span>Điểm danh</span></a>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-group-label"><span>Học tập</span></div>
+                    <a href="#" class="nav-item" data-page="scores"><i class="fas fa-pencil-alt"></i> <span>Điểm</span></a>
+                    <a href="#" class="nav-item" data-page="learning-comments"><i class="fas fa-book-open"></i> <span>Nhận xét học tập</span></a>
+                    <a href="#" class="nav-item" data-page="rewards"><i class="fas fa-medal"></i> <span>Khen thưởng</span></a>
+                    <a href="#" class="nav-item" data-page="disciplines"><i class="fas fa-gavel"></i> <span>Kỷ luật</span></a>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-group-label"><span>Hồ sơ & báo cáo</span></div>
+                    <a href="#" class="nav-item" data-page="files"><i class="fas fa-folder-open"></i> <span>File</span></a>
+                    <a href="#" class="nav-item" data-page="statistics"><i class="fas fa-chart-bar"></i> <span>Thống kê</span></a>
+                </div>
+
+                <div class="nav-group">
+                    <div class="nav-group-label"><span>Công cụ</span></div>
+                    <a href="#" class="nav-item" data-page="wheel"><i class="fas fa-dharmachakra"></i> <span>Vòng quay</span></a>
+                    <a href="#" class="nav-item" data-page="millionaire"><i class="fas fa-coins"></i> <span>Ai là triệu phú</span></a>
+                </div>
+
+                <div class="nav-group nav-group-system">
+                    <div class="nav-group-label"><span>Hệ thống</span></div>
+                    <a href="#" class="nav-item" data-page="settings"><i class="fas fa-cog"></i> <span>Cài đặt</span></a>
+                </div>
             </nav>
         </aside>
 
@@ -367,13 +387,21 @@
         <main class="main-content">
             <!-- Topbar -->
             <header class="topbar">
-                <button id="toggleSidebarMobile" class="sidebar-toggle-mobile"><i class="fas fa-bars"></i></button>
-                <h2 id="pageTitle">Dashboard</h2>
+                <div class="topbar-left">
+                    <button id="toggleSidebarMobile" class="sidebar-toggle-mobile"><i class="fas fa-bars"></i></button>
+                    <div class="topbar-title-wrap">
+                        <span class="topbar-eyebrow">HỆ THỐNG QUẢN LÝ</span>
+                        <h2 id="pageTitle">Dashboard</h2>
+                    </div>
+                </div>
                 <div class="topbar-right">
-                    <button id="publicHomeBtn" class="btn-icon" title="Trang chủ website"><i class="fas fa-house"></i></button>
-                    <button id="darkModeToggle" class="btn-icon" title="Chế độ tối"><i class="fas fa-moon"></i></button>
-                    <span id="topbarCurrentUserName" style="color: var(--text-secondary); margin-right: 10px;">Người dùng</span>
-                    <button id="logoutBtn" class="btn-icon" title="Đăng xuất"><i class="fas fa-sign-out-alt"></i></button>
+                    <button id="publicHomeBtn" class="btn-icon topbar-action" title="Trang chủ website"><i class="fas fa-house"></i></button>
+                    <button id="darkModeToggle" class="btn-icon topbar-action" title="Chế độ tối"><i class="fas fa-moon"></i></button>
+                    <div class="topbar-user-chip" title="Tài khoản đang đăng nhập">
+                        <span class="topbar-user-avatar"><i class="fas fa-user"></i></span>
+                        <span id="topbarCurrentUserName">Người dùng</span>
+                    </div>
+                    <button id="logoutBtn" class="btn-icon topbar-action topbar-logout" title="Đăng xuất"><i class="fas fa-sign-out-alt"></i></button>
                 </div>
             </header>
 
@@ -396,7 +424,7 @@
             setTimeout(() => document.getElementById('loginUsername')?.focus(), 50);
         };
     </script>
-    <script type="module" src="script.js?v=151503"></script>
+    <script type="module" src="script.js?v=151539"></script>
     <div id="sidebarOverlay" class="sidebar-overlay"></div>
 </body>
 </html>
