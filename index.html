@@ -30,7 +30,7 @@
                 </a>
                 <div class="site-top-motto"><i class="fas fa-school-flag"></i><span>Cổng thông tin điện tử nhà trường</span></div>
                 <button type="button" id="publicMobileMenuBtn" class="public-mobile-menu-btn" aria-label="Mở menu website" aria-expanded="false" aria-controls="publicMobileMenu"><i class="fas fa-bars"></i></button>
-                <button class="site-login-btn" data-open-login><i class="fas fa-lock"></i> Đăng nhập</button>
+                <button class="site-login-btn" data-open-login onclick="openLoginFallback()"><i class="fas fa-lock"></i> Đăng nhập</button>
             </div>
         </header>
         <div id="publicMobileMenu" class="public-mobile-menu" aria-hidden="true">
@@ -45,7 +45,7 @@
                     <a href="#tai-lieu"><i class="fas fa-folder-open"></i><span>Tài liệu công khai</span></a>
                     <a href="#lien-he"><i class="fas fa-phone"></i><span>Liên hệ</span></a>
                 </nav>
-                <button class="public-mobile-manage-btn" data-open-login><i class="fas fa-right-to-bracket"></i> Vào hệ thống quản lý</button>
+                <button class="public-mobile-manage-btn" data-open-login onclick="openLoginFallback()"><i class="fas fa-right-to-bracket"></i> Vào hệ thống quản lý</button>
             </div>
         </div>
 
@@ -98,7 +98,7 @@
                             <div id="publicQuickLinks" class="u-quick-links"><span class="u-utility-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải...</span></div>
                         </div>
                         <a class="u-contact-link" href="#lien-he"><i class="fas fa-phone"></i><span>Thông tin liên hệ</span></a>
-                        <button class="u-manage-btn" data-open-login><i class="fas fa-right-to-bracket"></i><span>Vào hệ thống quản lý</span></button>
+                        <button class="u-manage-btn" data-open-login onclick="openLoginFallback()"><i class="fas fa-right-to-bracket"></i><span>Vào hệ thống quản lý</span></button>
                     </aside>
                 </div>
                 <div class="hero-wave"></div>
@@ -112,12 +112,12 @@
                         <p>Truy cập nhanh những nghiệp vụ giáo viên sử dụng thường xuyên.</p>
                     </div>
                     <div class="feature-grid">
-                        <button class="feature-card feature-blue" data-open-login><i class="fas fa-users"></i><strong>Quản lý học sinh</strong><span>Thông tin, lớp học và hồ sơ chi tiết</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
-                        <button class="feature-card feature-green" data-open-login><i class="fas fa-graduation-cap"></i><strong>Điểm & đánh giá</strong><span>Đánh giá theo môn và học kỳ</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
-                        <button class="feature-card feature-purple" data-open-login><i class="fas fa-calendar-check"></i><strong>Điểm danh</strong><span>Theo dõi chuyên cần theo lớp</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
-                        <button class="feature-card feature-orange" data-open-login><i class="fas fa-comments"></i><strong>Nhận xét học tập</strong><span>Ghi nhận và theo dõi nhận xét</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
-                        <button class="feature-card feature-cyan" data-open-login><i class="fas fa-chart-column"></i><strong>Thống kê - báo cáo</strong><span>Tổng hợp dữ liệu trực quan</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
-                        <button class="feature-card feature-red" data-open-login><i class="fas fa-medal"></i><strong>Khen thưởng - kỷ luật</strong><span>Theo dõi thành tích và nhắc nhở</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-blue" data-open-login onclick="openLoginFallback()"><i class="fas fa-users"></i><strong>Quản lý học sinh</strong><span>Thông tin, lớp học và hồ sơ chi tiết</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-green" data-open-login onclick="openLoginFallback()"><i class="fas fa-graduation-cap"></i><strong>Điểm & đánh giá</strong><span>Đánh giá theo môn và học kỳ</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-purple" data-open-login onclick="openLoginFallback()"><i class="fas fa-calendar-check"></i><strong>Điểm danh</strong><span>Theo dõi chuyên cần theo lớp</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-orange" data-open-login onclick="openLoginFallback()"><i class="fas fa-comments"></i><strong>Nhận xét học tập</strong><span>Ghi nhận và theo dõi nhận xét</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-cyan" data-open-login onclick="openLoginFallback()"><i class="fas fa-chart-column"></i><strong>Thống kê - báo cáo</strong><span>Tổng hợp dữ liệu trực quan</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
+                        <button class="feature-card feature-red" data-open-login onclick="openLoginFallback()"><i class="fas fa-medal"></i><strong>Khen thưởng - kỷ luật</strong><span>Theo dõi thành tích và nhắc nhở</span><b>Truy cập <i class="fas fa-arrow-right"></i></b></button>
                     </div>
                 </div>
             </section>
@@ -190,7 +190,7 @@
             <div class="site-container footer-grid">
                 <div class="footer-brand"><div class="site-brand-mark site-brand-logo"><img src="assets/logo-phan-hieu-tran-quoc-toan.png" alt="Logo Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản" decoding="async"></div><div><strong>TRƯỜNG TIỂU HỌC-TRUNG HỌC CƠ SỞ & TRUNG HỌC PHỔ THÔNG LẠI SƠN_PHÂN HIỆU TRƯỜNG TIỂU HỌC TRẦN QUỐC TOẢN</strong><p>Đặc khu Kiên Hải, tỉnh An Giang</p></div></div>
                 <div><h4>Liên kết nhanh</h4><a href="#trang-chu">Trang chủ</a><a href="#gioi-thieu">Giới thiệu</a><a href="#tin-tuc">Tin tức</a><a href="#hinh-anh">Hình ảnh</a><a href="#video">Video</a><a href="#tai-lieu">Tài liệu</a><a href="#lien-ket">Liên kết</a></div>
-                <div><h4>Hỗ trợ</h4><a href="#">Hướng dẫn sử dụng</a><a href="#">Câu hỏi thường gặp</a><button class="footer-login-link" data-open-login>Đăng nhập hệ thống</button></div>
+                <div><h4>Hỗ trợ</h4><a href="#">Hướng dẫn sử dụng</a><a href="#">Câu hỏi thường gặp</a><button class="footer-login-link" data-open-login onclick="openLoginFallback()">Đăng nhập hệ thống</button></div>
                 <div><h4>Liên hệ</h4><p><i class="fas fa-location-dot"></i> Ấp Bãi Nhà A, Đặc khu Kiên Hải, tỉnh An Giang</p><p><i class="fas fa-phone"></i> <a href="tel:0942775343">0942 775 343</a></p><p><i class="fas fa-envelope"></i> <a href="mailto:vothanhdamkg1982@gmail.com">vothanhdamkg1982@gmail.com</a></p></div>
             </div>
             <div class="site-container footer-bottom"><span>© 2026 Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản.</span><span>Đặc khu Kiên Hải, tỉnh An Giang</span></div>
@@ -333,7 +333,8 @@
 </a>
                 <a href="#" class="nav-item" data-page="files"><i class="fas fa-folder-open"></i> <span>File</span></a>
                 <a href="#" class="nav-item" data-page="statistics"><i class="fas fa-chart-bar"></i> <span>Thống kê</span></a>
-                <a href="#" class="nav-item" data-page="wheel"><i class="fas fa-dharmachakra"></i> <span>Vòng quay</span></a> <!-- THÊM DÒNG NÀY -->
+                <a href="#" class="nav-item" data-page="wheel"><i class="fas fa-dharmachakra"></i> <span>Vòng quay</span></a>
+                <a href="#" class="nav-item" data-page="millionaire"><i class="fas fa-coins"></i> <span>Ai là triệu phú</span></a> <!-- THÊM DÒNG NÀY -->
                 <a href="#" class="nav-item" data-page="settings"><i class="fas fa-cog"></i> <span>Cài đặt</span></a>
             </nav>
         </aside>
@@ -359,7 +360,19 @@
         </main>
     </div>
 
-    <script type="module" src="script.js?v=151220"></script>
+
+    <script>
+        // BƯỚC 151.25.1: fallback tối thiểu để nút Đăng nhập luôn mở được form,
+        // kể cả khi event delegation của module chính khởi tạo chậm.
+        window.openLoginFallback = function () {
+            const loginScreen = document.getElementById('loginScreen');
+            if (!loginScreen) return;
+            loginScreen.classList.remove('hidden');
+            loginScreen.style.display = 'flex';
+            setTimeout(() => document.getElementById('loginUsername')?.focus(), 50);
+        };
+    </script>
+    <script type="module" src="script.js?v=151420"></script>
     <div id="sidebarOverlay" class="sidebar-overlay"></div>
 </body>
 </html>

@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=151200';
+import { supabase } from './supabase.js?v=151420';
 
 
 // ============================================================
@@ -38,10 +38,220 @@ const WHEEL_STATE = {
 };
 
 // ============================================================
+// BƯỚC 151.34 - LƯU / KHÔI PHỤC TRẠNG THÁI TRÒ CHƠI QUA localStorage
+// ============================================================
+const GAME_STATE_STORAGE_KEYS = {
+    wheel: 'qlhs_wheel_state_v1',
+    millionaire: 'qlhs_millionaire_state_v1'
+};
+
+let wheelStateHydratedFromStorage = false;
+let millionaireStateHydratedFromStorage = false;
+
+function saveWheelStateToStorage() {
+    try {
+        const snapshot = {
+            selectedClassId: WHEEL_STATE.selectedClassId || null,
+            selectedClassName: WHEEL_STATE.selectedClassName || '',
+            preventDuplicates: !!WHEEL_STATE.preventDuplicates,
+            presentationMode: !!WHEEL_STATE.presentationMode,
+            rotation: Number(WHEEL_STATE.rotation) || 0,
+            winnerId: WHEEL_STATE.winnerId || null,
+            participants: (WHEEL_STATE.participants || []).map(s => ({
+                id: s.id,
+                called: !!s.called,
+                enabled: s.enabled !== false
+            }))
+        };
+
+        localStorage.setItem(GAME_STATE_STORAGE_KEYS.wheel, JSON.stringify(snapshot));
+    } catch (err) {
+        console.warn('[151.34] Không lưu được trạng thái Vòng quay:', err);
+    }
+}
+
+function clearWheelStateStorage() {
+    try {
+        localStorage.removeItem(GAME_STATE_STORAGE_KEYS.wheel);
+    } catch (err) {}
+}
+
+function restoreWheelStateFromStorage() {
+    if (wheelStateHydratedFromStorage) return;
+    wheelStateHydratedFromStorage = true;
+
+    try {
+        const raw = localStorage.getItem(GAME_STATE_STORAGE_KEYS.wheel);
+        if (!raw) return;
+
+        const saved = JSON.parse(raw);
+        if (!saved || typeof saved !== 'object') return;
+
+        WHEEL_STATE.selectedClassId = saved.selectedClassId || null;
+        WHEEL_STATE.selectedClassName = saved.selectedClassName || '';
+        WHEEL_STATE.preventDuplicates = saved.preventDuplicates !== false;
+        WHEEL_STATE.presentationMode = !!saved.presentationMode;
+        WHEEL_STATE.rotation = Number(saved.rotation) || 0;
+        WHEEL_STATE.winnerId = saved.winnerId || null;
+
+        const savedParticipants = Array.isArray(saved.participants) ? saved.participants : [];
+        if (WHEEL_STATE.selectedClassId && savedParticipants.length) {
+            const classObj = (APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes || [])
+                .find(c => String(c.id) === String(WHEEL_STATE.selectedClassId));
+
+            let students = (APP_STATE.students || []).filter(
+                s => String(s.class_id) === String(WHEEL_STATE.selectedClassId)
+            );
+
+            if (!students.length && classObj) {
+                students = (APP_STATE.students || []).filter(
+                    s => s.class === classObj.name || s.class_code === classObj.name
+                );
+            }
+
+            const savedMap = new Map(savedParticipants.map(item => [String(item.id), item]));
+
+            WHEEL_STATE.participants = students
+                .map(student => {
+                    const old = savedMap.get(String(student.id));
+                    if (!old) return null;
+                    return {
+                        ...student,
+                        called: !!old.called,
+                        enabled: old.enabled !== false
+                    };
+                })
+                .filter(Boolean)
+                .sort((a, b) => String(a.fullName || '').localeCompare(String(b.fullName || ''), 'vi'));
+
+            WHEEL_STATE.remainingStudents = WHEEL_STATE.participants
+                .filter(s => s.enabled !== false && !s.called);
+
+            WHEEL_STATE.selectedStudents = WHEEL_STATE.participants
+                .filter(s => s.called);
+
+            WHEEL_STATE.currentWinner =
+                WHEEL_STATE.participants.find(s => String(s.id) === String(WHEEL_STATE.winnerId)) || null;
+        }
+    } catch (err) {
+        console.warn('[151.34] Không khôi phục được trạng thái Vòng quay:', err);
+    }
+}
+
+function sanitizeMillionaireStateForStorage() {
+    return {
+        started: !!MILLIONAIRE_STATE.started,
+        ended: !!MILLIONAIRE_STATE.ended,
+        level: Number(MILLIONAIRE_STATE.level) || 0,
+        locked: !!MILLIONAIRE_STATE.locked,
+        questions: Array.isArray(MILLIONAIRE_STATE.questions)
+            ? MILLIONAIRE_STATE.questions.map(q => ({
+                q: q.q,
+                a: Array.isArray(q.a) ? [...q.a] : [],
+                c: Number(q.c),
+                difficulty: q.difficulty || '',
+                grade: q.grade || '',
+                subject: q.subject || '',
+                topic: q.topic || ''
+            }))
+            : [],
+        usedSwitchIndexes: Array.isArray(MILLIONAIRE_STATE.usedSwitchIndexes)
+            ? [...MILLIONAIRE_STATE.usedSwitchIndexes]
+            : [],
+        lifelines: { ...MILLIONAIRE_STATE.lifelines },
+        hiddenAnswers: Array.isArray(MILLIONAIRE_STATE.hiddenAnswers)
+            ? [...MILLIONAIRE_STATE.hiddenAnswers]
+            : [],
+        selectedIndex: MILLIONAIRE_STATE.selectedIndex ?? null,
+        audienceResult: Array.isArray(MILLIONAIRE_STATE.audienceResult)
+            ? [...MILLIONAIRE_STATE.audienceResult]
+            : null,
+        phase: MILLIONAIRE_STATE.phase || 'idle',
+        soundEnabled: MILLIONAIRE_STATE.soundEnabled !== false,
+        selectedGrade: MILLIONAIRE_STATE.selectedGrade || 'all',
+        selectedSubject: MILLIONAIRE_STATE.selectedSubject || 'all',
+        selectedTopic: MILLIONAIRE_STATE.selectedTopic || 'all',
+        bankInfo: MILLIONAIRE_STATE.bankInfo ? { ...MILLIONAIRE_STATE.bankInfo } : null,
+        playMode: MILLIONAIRE_STATE.playMode || 'stop_on_wrong',
+        wrongAttempts: Array.isArray(MILLIONAIRE_STATE.wrongAttempts) ? [...MILLIONAIRE_STATE.wrongAttempts] : [],
+        timerEnabled: !!MILLIONAIRE_STATE.timerEnabled, timerSoundEnabled: MILLIONAIRE_STATE.timerSoundEnabled !== false,
+        timerSeconds: millionaireTimerTotalSeconds(), timerRemaining: Math.max(0, Number(MILLIONAIRE_STATE.timerRemaining ?? millionaireTimerTotalSeconds())),
+        message: MILLIONAIRE_STATE.message || ''
+    };
+}
+
+function saveMillionaireStateToStorage() {
+    try {
+        localStorage.setItem(
+            GAME_STATE_STORAGE_KEYS.millionaire,
+            JSON.stringify(sanitizeMillionaireStateForStorage())
+        );
+    } catch (err) {
+        console.warn('[151.34] Không lưu được trạng thái Ai là triệu phú:', err);
+    }
+}
+
+function clearMillionaireStateStorage() {
+    try {
+        localStorage.removeItem(GAME_STATE_STORAGE_KEYS.millionaire);
+    } catch (err) {}
+}
+
+function restoreMillionaireStateFromStorage() {
+    if (millionaireStateHydratedFromStorage) return;
+    millionaireStateHydratedFromStorage = true;
+
+    try {
+        const raw = localStorage.getItem(GAME_STATE_STORAGE_KEYS.millionaire);
+        if (!raw) return;
+
+        const saved = JSON.parse(raw);
+        if (!saved || typeof saved !== 'object') return;
+
+        MILLIONAIRE_STATE.started = !!saved.started;
+        MILLIONAIRE_STATE.ended = !!saved.ended;
+        MILLIONAIRE_STATE.level = Math.max(0, Math.min(15, Number(saved.level) || 0));
+        MILLIONAIRE_STATE.locked = !!saved.locked;
+        MILLIONAIRE_STATE.questions = Array.isArray(saved.questions)
+            ? saved.questions.map(q => ({ ...q, a: Array.isArray(q.a) ? [...q.a] : [] }))
+            : [];
+        MILLIONAIRE_STATE.usedSwitchIndexes = Array.isArray(saved.usedSwitchIndexes)
+            ? [...saved.usedSwitchIndexes]
+            : [];
+        MILLIONAIRE_STATE.lifelines = {
+            fifty: saved.lifelines?.fifty !== false,
+            audience: saved.lifelines?.audience !== false,
+            switch: saved.lifelines?.switch !== false
+        };
+        MILLIONAIRE_STATE.hiddenAnswers = Array.isArray(saved.hiddenAnswers)
+            ? [...saved.hiddenAnswers]
+            : [];
+        MILLIONAIRE_STATE.selectedIndex = saved.selectedIndex ?? null;
+        MILLIONAIRE_STATE.audienceResult = Array.isArray(saved.audienceResult)
+            ? [...saved.audienceResult]
+            : null;
+        MILLIONAIRE_STATE.phase = saved.phase || 'idle';
+        MILLIONAIRE_STATE.soundEnabled = saved.soundEnabled !== false;
+        MILLIONAIRE_STATE.selectedGrade = saved.selectedGrade || 'all';
+        MILLIONAIRE_STATE.selectedSubject = saved.selectedSubject || 'all';
+        MILLIONAIRE_STATE.selectedTopic = saved.selectedTopic || 'all';
+        MILLIONAIRE_STATE.bankInfo = saved.bankInfo || null;
+        MILLIONAIRE_STATE.playMode = ['stop_on_wrong','continue_on_wrong','retry_until_correct'].includes(saved.playMode) ? saved.playMode : 'stop_on_wrong';
+        MILLIONAIRE_STATE.wrongAttempts = Array.isArray(saved.wrongAttempts) ? [...saved.wrongAttempts] : [];
+        MILLIONAIRE_STATE.timerEnabled=!!saved.timerEnabled; MILLIONAIRE_STATE.timerSoundEnabled=saved.timerSoundEnabled!==false; MILLIONAIRE_STATE.timerSeconds=Math.max(1,Math.min(3599,Number(saved.timerSeconds)||30)); MILLIONAIRE_STATE.timerRemaining=Math.max(0,Number(saved.timerRemaining??MILLIONAIRE_STATE.timerSeconds)); MILLIONAIRE_STATE.timerIntervalId=null;
+        MILLIONAIRE_STATE.message = saved.message || 'Chọn bộ câu hỏi rồi nhấn “Bắt đầu”.';
+    } catch (err) {
+        console.warn('[151.34] Không khôi phục được trạng thái Ai là triệu phú:', err);
+    }
+}
+
+
+// ============================================================
 // RENDER WHEEL UI
 // ============================================================
 
 function renderWheel() {
+    restoreWheelStateFromStorage();
     return `
         <div class="wheel-page">
             <!-- Thanh điều khiển thu gọn trên 1 hàng -->
@@ -74,6 +284,9 @@ function renderWheel() {
                         </label>
                         <button class="btn btn-secondary btn-sm" onclick="resetWheel()" title="Đặt lại lượt quay">
                             <i class="fas fa-undo"></i>
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="endWheelSession()" title="Kết thúc vòng quay và trở về trạng thái ban đầu">
+                            <i class="fas fa-stop"></i> Kết thúc
                         </button>
                         <button class="btn btn-secondary btn-sm" onclick="togglePresentationMode()">
                             <i class="fas fa-expand"></i> Trình chiếu
@@ -164,15 +377,60 @@ function resizeWheelCanvas() {
     return !!WHEEL_STATE.ctx;
 }
 
+function restoreWheelUIFromState() {
+    const classSelect = document.getElementById('wheelClassSelect');
+    if (classSelect && WHEEL_STATE.selectedClassId) {
+        classSelect.value = String(WHEEL_STATE.selectedClassId);
+    }
+
+    const preventBox = document.getElementById('wheelPreventDuplicates');
+    if (preventBox) preventBox.checked = !!WHEEL_STATE.preventDuplicates;
+
+    syncWheelRemainingStudents();
+    updateWheelStats();
+    renderStudentList();
+
+    const resultDiv = document.getElementById('wheelResult');
+    if (resultDiv) {
+        if (WHEEL_STATE.currentWinner) {
+            resultDiv.style.display = 'block';
+
+            const winner = WHEEL_STATE.currentWinner;
+            const nameEl = document.getElementById('winnerName');
+            const classEl = document.getElementById('winnerClass');
+            if (nameEl) nameEl.textContent = winner.fullName || '';
+            if (classEl) classEl.textContent = `Lớp ${winner.class || winner.class_code || WHEEL_STATE.selectedClassName || 'Chưa phân lớp'}`;
+
+            const avatarImg = document.getElementById('winnerAvatar');
+            if (avatarImg) {
+                const avatarUrl = winner.avatar || winner.avatar_url || DEFAULT_AVATAR;
+                avatarImg.src = (typeof avatarUrl === 'string' && avatarUrl) ? avatarUrl : DEFAULT_AVATAR;
+                avatarImg.onerror = function() { this.src = DEFAULT_AVATAR; };
+            }
+        } else {
+            resultDiv.style.display = 'none';
+        }
+    }
+
+    drawWheel();
+}
+
 function initWheel() {
     if (!resizeWheelCanvas()) return;
 
+    // Chỉ tải lớp lần đầu. Nếu đã có participants thì khôi phục nguyên trạng
+    // called/enabled/currentWinner/rotation thay vì gọi loadWheelStudents() làm reset.
     if (WHEEL_STATE.selectedClassId) {
-        loadWheelStudents(WHEEL_STATE.selectedClassId);
+        if (Array.isArray(WHEEL_STATE.participants) && WHEEL_STATE.participants.length > 0) {
+            restoreWheelUIFromState();
+        } else {
+            loadWheelStudents(WHEEL_STATE.selectedClassId);
+        }
     } else {
         drawWheel();
+        updateWheelStats();
+        renderStudentList();
     }
-    updateWheelStats();
 
     // Vẽ lại sau khi layout mobile/Safari ổn định.
     requestAnimationFrame(() => {
@@ -342,6 +600,7 @@ function updateWheelStats() {
     if (countEl) countEl.textContent = enabled.length;
     if (calledEl) calledEl.textContent = called;
     if (remainingEl) remainingEl.textContent = WHEEL_STATE.preventDuplicates ? remaining.length : enabled.length;
+    saveWheelStateToStorage();
 }
 
 function getWheelStudents() {
@@ -675,6 +934,7 @@ function showWinner(winner) {
     
     WHEEL_STATE.currentWinner = winner;
     WHEEL_STATE.winnerId = winner.id;
+    saveWheelStateToStorage();
 
     // BƯỚC 151.5: vòng quay không cần tải ảnh cả lớp. Chỉ tải ảnh người trúng.
     ensureStudentAvatar(winner)
@@ -750,6 +1010,50 @@ if (WHEEL_STATE.preventDuplicates && syncWheelRemainingStudents().length === 0 &
     }
 }
     showToast(`🎉 Chúc mừng ${winner.fullName}!`, 'success', 3000);
+}
+
+function endWheelSession() {
+    if (WHEEL_STATE.isSpinning) {
+        showToast('Vòng quay đang chạy. Vui lòng chờ kết quả.', 'warning', 1800);
+        return;
+    }
+
+    const hasState =
+        !!WHEEL_STATE.selectedClassId ||
+        (WHEEL_STATE.participants?.length || 0) > 0 ||
+        (WHEEL_STATE.selectedStudents?.length || 0) > 0 ||
+        !!WHEEL_STATE.currentWinner;
+
+    if (hasState && !confirm('Kết thúc phiên Vòng quay hiện tại và trở về trạng thái ban đầu?')) {
+        return;
+    }
+
+    WHEEL_STATE.selectedClassId = null;
+    WHEEL_STATE.selectedClassName = '';
+    WHEEL_STATE.participants = [];
+    WHEEL_STATE.remainingStudents = [];
+    WHEEL_STATE.selectedStudents = [];
+    WHEEL_STATE.currentWinner = null;
+    WHEEL_STATE.preventDuplicates = true;
+    WHEEL_STATE.isSpinning = false;
+    WHEEL_STATE.rotation = 0;
+    WHEEL_STATE.winnerId = null;
+
+    const classSelect = document.getElementById('wheelClassSelect');
+    if (classSelect) classSelect.value = '';
+
+    const preventBox = document.getElementById('wheelPreventDuplicates');
+    if (preventBox) preventBox.checked = true;
+
+    const resultDiv = document.getElementById('wheelResult');
+    if (resultDiv) resultDiv.style.display = 'none';
+
+    updateWheelStats();
+    renderStudentList();
+    drawWheel();
+    clearWheelStateStorage();
+    saveWheelStateToStorage();
+    showToast('Đã kết thúc Vòng quay và trở về trạng thái ban đầu.', 'success', 1800);
 }
 
 function resetWheel() {
@@ -2367,11 +2671,2137 @@ window.deleteLearningComment = async function(commentId) {
         );
     }
 };
+
+// ============================================================
+// BƯỚC 151.29 - MODULE AI LÀ TRIỆU PHÚ (BẢN CƠ BẢN, LOCAL)
+// Không dùng Supabase. Không ảnh hưởng các module nghiệp vụ.
+// ============================================================
+
+const MILLIONAIRE_PRIZES = [
+    '200.000', '400.000', '600.000', '1.000.000', '2.000.000',
+    '3.000.000', '6.000.000', '10.000.000', '14.000.000', '22.000.000',
+    '30.000.000', '40.000.000', '60.000.000', '85.000.000', '150.000.000'
+];
+
+const MILLIONAIRE_SYSTEM_SUBJECTS = [
+    'Tiếng Việt',
+    'Toán',
+    'Đạo đức',
+    'Tự nhiên và Xã hội',
+    'Khoa học',
+    'Lịch sử và Địa lí',
+    'Ngoại ngữ 1',
+    'Âm nhạc',
+    'Mĩ thuật',
+    'Giáo dục thể chất',
+    'Tin học',
+    'Công nghệ',
+    'Hoạt động trải nghiệm'
+];
+
+const MILLIONAIRE_QUESTION_BANK = [
+    // ===== KHỐI 1 =====
+    { grade:'1', subject:'Toán', topic:'Số học', difficulty:'easy', q:'Số nào lớn hơn: 7 hay 5?', a:['5','6','7','4'], c:2 },
+    { grade:'1', subject:'Toán', topic:'Số học', difficulty:'easy', q:'2 + 3 bằng bao nhiêu?', a:['4','5','6','7'], c:1 },
+    { grade:'1', subject:'Toán', topic:'Hình học', difficulty:'easy', q:'Hình nào có 3 cạnh?', a:['Hình vuông','Hình tròn','Hình tam giác','Hình chữ nhật'], c:2 },
+    { grade:'1', subject:'Tiếng Việt', topic:'Từ và câu', difficulty:'easy', q:'Từ nào chỉ con vật?', a:['Bút','Mèo','Đẹp','Chạy'], c:1 },
+    { grade:'1', subject:'Tiếng Việt', topic:'Âm vần', difficulty:'easy', q:'Chữ nào đứng đầu từ “cá”?', a:['c','k','q','g'], c:0 },
+    { grade:'1', subject:'Tự nhiên và Xã hội', topic:'Cơ thể', difficulty:'medium', q:'Bộ phận nào giúp em nghe?', a:['Mắt','Tai','Mũi','Tay'], c:1 },
+    { grade:'1', subject:'Đạo đức', topic:'Ứng xử', difficulty:'medium', q:'Khi được người khác giúp đỡ, em nên nói gì?', a:['Không cần','Cảm ơn','Đi đi','Im lặng'], c:1 },
+    { grade:'1', subject:'Toán', topic:'Số học', difficulty:'medium', q:'Số liền sau của 9 là số nào?', a:['8','9','10','11'], c:2 },
+    { grade:'1', subject:'Tiếng Việt', topic:'Từ và câu', difficulty:'medium', q:'Từ nào chỉ hoạt động?', a:['Xanh','Bàn','Chạy','Đẹp'], c:2 },
+    { grade:'1', subject:'Tự nhiên và Xã hội', topic:'Gia đình', difficulty:'hard', q:'Người sinh ra bố hoặc mẹ của em thường được gọi là gì?', a:['Bạn','Ông bà','Thầy cô','Hàng xóm'], c:1 },
+
+    // ===== KHỐI 2 =====
+    { grade:'2', subject:'Toán', topic:'Số học', difficulty:'easy', q:'9 + 6 bằng bao nhiêu?', a:['13','14','15','16'], c:2 },
+    { grade:'2', subject:'Toán', topic:'Đại lượng', difficulty:'easy', q:'1 mét bằng bao nhiêu xăng-ti-mét?', a:['10','100','1000','50'], c:1 },
+    { grade:'2', subject:'Tiếng Việt', topic:'Từ và câu', difficulty:'easy', q:'Từ nào dưới đây là từ chỉ đặc điểm?', a:['Chạy','Xanh','Bàn','Mèo'], c:1 },
+    { grade:'2', subject:'Tự nhiên và Xã hội', topic:'Môi trường', difficulty:'easy', q:'Cây xanh cần gì để sống?', a:['Ánh sáng','Khói bụi','Rác','Bóng tối hoàn toàn'], c:0 },
+    { grade:'2', subject:'Đạo đức', topic:'Ứng xử', difficulty:'medium', q:'Khi làm sai, em nên làm gì?', a:['Đổ lỗi','Xin lỗi và sửa sai','Bỏ đi','Cãi lại'], c:1 },
+    { grade:'2', subject:'Toán', topic:'Số học', difficulty:'medium', q:'24 - 9 bằng bao nhiêu?', a:['13','14','15','16'], c:2 },
+    { grade:'2', subject:'Tiếng Việt', topic:'Chính tả', difficulty:'medium', q:'Từ nào viết đúng chính tả?', a:['xạch sẽ','sạch sẽ','sạch sẻ','xạch sẻ'], c:1 },
+    { grade:'2', subject:'Tự nhiên và Xã hội', topic:'An toàn', difficulty:'medium', q:'Khi qua đường, em nên làm gì trước?', a:['Chạy thật nhanh','Quan sát hai bên','Nhắm mắt','Đi giữa đường'], c:1 },
+    { grade:'2', subject:'Toán', topic:'Hình học', difficulty:'hard', q:'Hình chữ nhật có mấy góc vuông?', a:['2','3','4','5'], c:2 },
+    { grade:'2', subject:'Tiếng Việt', topic:'Từ và câu', difficulty:'hard', q:'Câu nào là câu hỏi?', a:['Em đi học.','Em đi học à?','Em hãy đi học.','Ôi, vui quá!'], c:1 },
+
+    // ===== KHỐI 3 =====
+    { grade:'3', subject:'Toán', topic:'Số học', difficulty:'easy', q:'7 × 8 bằng bao nhiêu?', a:['54','56','58','64'], c:1 },
+    { grade:'3', subject:'Toán', topic:'Đại lượng', difficulty:'easy', q:'1 giờ có bao nhiêu phút?', a:['30','45','60','90'], c:2 },
+    { grade:'3', subject:'Tiếng Việt', topic:'Từ và câu', difficulty:'easy', q:'Từ nào là từ chỉ hoạt động?', a:['Nhanh','Đọc','Sách','Đỏ'], c:1 },
+    { grade:'3', subject:'Tin học', topic:'Máy tính', difficulty:'easy', q:'Thiết bị nào dùng để gõ chữ vào máy tính?', a:['Màn hình','Bàn phím','Loa','Máy in'], c:1 },
+    { grade:'3', subject:'Tự nhiên và Xã hội', topic:'Cơ thể', difficulty:'medium', q:'Cơ quan nào bơm máu đi khắp cơ thể?', a:['Phổi','Tim','Dạ dày','Não'], c:1 },
+    { grade:'3', subject:'Toán', topic:'Số học', difficulty:'medium', q:'125 + 378 bằng bao nhiêu?', a:['493','503','513','523'], c:1 },
+    { grade:'3', subject:'Tiếng Việt', topic:'Từ và câu', difficulty:'medium', q:'Trong câu “Lan chăm chỉ học bài”, từ “chăm chỉ” chỉ gì?', a:['Sự vật','Hoạt động','Đặc điểm','Số lượng'], c:2 },
+    { grade:'3', subject:'Tin học', topic:'An toàn số', difficulty:'medium', q:'Mật khẩu tốt nên như thế nào?', a:['Chỉ có tên mình','Dễ đoán','Có chữ, số và ký tự phù hợp','Giống tên lớp'], c:2 },
+    { grade:'3', subject:'Toán', topic:'Hình học', difficulty:'hard', q:'Chu vi hình vuông cạnh 6 cm là bao nhiêu?', a:['12 cm','18 cm','24 cm','36 cm'], c:2 },
+    { grade:'3', subject:'Tin học', topic:'Tệp và thư mục', difficulty:'hard', q:'Thư mục trong máy tính dùng chủ yếu để làm gì?', a:['Tắt máy','Sắp xếp tệp','Tăng âm lượng','Kết nối điện'], c:1 },
+
+    // ===== KHỐI 4 =====
+    { grade:'4', subject:'Toán', topic:'Số học', difficulty:'easy', q:'1 000 × 6 bằng bao nhiêu?', a:['600','6 000','60 000','600 000'], c:1 },
+    { grade:'4', subject:'Toán', topic:'Phân số', difficulty:'easy', q:'Trong phân số 3/5, số 3 được gọi là gì?', a:['Mẫu số','Tử số','Thương','Số dư'], c:1 },
+    { grade:'4', subject:'Tiếng Việt', topic:'Từ và câu', difficulty:'easy', q:'Từ “dũng cảm” gần nghĩa nhất với từ nào?', a:['Nhút nhát','Can đảm','Lười biếng','Buồn bã'], c:1 },
+    { grade:'4', subject:'Khoa học', topic:'Vật chất', difficulty:'easy', q:'Nước có thể tồn tại ở những thể nào?', a:['Chỉ thể lỏng','Rắn, lỏng, khí','Chỉ rắn và lỏng','Chỉ khí'], c:1 },
+    { grade:'4', subject:'Tin học', topic:'Soạn thảo', difficulty:'medium', q:'Phím nào thường dùng để xuống dòng khi soạn thảo?', a:['Shift','Enter','Tab','Ctrl'], c:1 },
+    { grade:'4', subject:'Toán', topic:'Hình học', difficulty:'medium', q:'Diện tích hình chữ nhật dài 8 cm, rộng 5 cm là bao nhiêu?', a:['13 cm²','26 cm²','40 cm²','80 cm²'], c:2 },
+    { grade:'4', subject:'Lịch sử và Địa lý', topic:'Địa lý', difficulty:'medium', q:'Việt Nam nằm ở khu vực nào của châu Á?', a:['Đông Nam Á','Nam Á','Tây Á','Bắc Á'], c:0 },
+    { grade:'4', subject:'Tin học', topic:'Internet', difficulty:'medium', q:'Khi gặp nội dung xấu trên Internet, em nên làm gì?', a:['Chia sẻ ngay','Báo người lớn/thầy cô','Bình luận gây gổ','Tải về'], c:1 },
+    { grade:'4', subject:'Khoa học', topic:'Năng lượng', difficulty:'hard', q:'Nguồn năng lượng nào sau đây là năng lượng tái tạo?', a:['Than đá','Dầu mỏ','Gió','Khí tự nhiên'], c:2 },
+    { grade:'4', subject:'Toán', topic:'Số học', difficulty:'hard', q:'25 × 16 bằng bao nhiêu?', a:['350','375','400','425'], c:2 },
+
+    // ===== KHỐI 5 =====
+    { grade:'5', subject:'Toán', topic:'Số thập phân', difficulty:'easy', q:'0,5 bằng phân số nào?', a:['1/2','1/5','5/100','2/5'], c:0 },
+    { grade:'5', subject:'Tiếng Việt', topic:'Từ và câu', difficulty:'easy', q:'Từ nào là quan hệ từ?', a:['và','đẹp','chạy','sách'], c:0 },
+    { grade:'5', subject:'Khoa học', topic:'Cơ thể', difficulty:'easy', q:'Cơ quan nào điều khiển hoạt động của cơ thể?', a:['Tim','Não','Phổi','Dạ dày'], c:1 },
+    { grade:'5', subject:'Tin học', topic:'Máy tính', difficulty:'easy', q:'CPU thường được ví như bộ phận nào của máy tính?', a:['Tai','Bộ não','Mắt','Bàn tay'], c:1 },
+    { grade:'5', subject:'Lịch sử và Địa lý', topic:'Lịch sử', difficulty:'medium', q:'Ngày Quốc khánh Việt Nam là ngày nào?', a:['30/4','1/5','2/9','20/11'], c:2 },
+    { grade:'5', subject:'Toán', topic:'Tỉ số phần trăm', difficulty:'medium', q:'25% của 200 bằng bao nhiêu?', a:['25','40','50','75'], c:2 },
+    { grade:'5', subject:'Tiếng Việt', topic:'Từ và câu', difficulty:'medium', q:'Trong câu “Vì trời mưa nên đường trơn”, cặp từ quan hệ là gì?', a:['trời - đường','mưa - trơn','vì - nên','trời - mưa'], c:2 },
+    { grade:'5', subject:'Tin học', topic:'Lập trình', difficulty:'medium', q:'Trong lập trình, lệnh lặp dùng để làm gì?', a:['Lặp lại một nhóm lệnh','Tắt máy','Đổi tên tệp','Xóa màn hình'], c:0 },
+    { grade:'5', subject:'Khoa học', topic:'Năng lượng', difficulty:'hard', q:'Thiết bị nào biến điện năng thành cơ năng rõ nhất?', a:['Bóng đèn','Quạt điện','Bàn là','Nồi cơm'], c:1 },
+    { grade:'5', subject:'Toán', topic:'Hình học', difficulty:'hard', q:'Thể tích hình hộp chữ nhật dài 5 cm, rộng 4 cm, cao 3 cm là bao nhiêu?', a:['12 cm³','20 cm³','60 cm³','120 cm³'], c:2 },
+
+    // ===== TỔNG HỢP / DÙNG BỔ SUNG =====
+    { grade:'all', subject:'Kiến thức chung', topic:'Kiến thức chung', difficulty:'easy', q:'Một tuần có bao nhiêu ngày?', a:['5','6','7','8'], c:2 },
+    { grade:'all', subject:'Kiến thức chung', topic:'Kiến thức chung', difficulty:'easy', q:'Màu của lá cây khỏe mạnh thường là màu gì?', a:['Xanh','Đen','Tím','Cam'], c:0 },
+    { grade:'all', subject:'Kiến thức chung', topic:'Kiến thức chung', difficulty:'easy', q:'Thiết bị nào hiển thị hình ảnh của máy tính?', a:['Chuột','Màn hình','Bàn phím','Loa'], c:1 },
+    { grade:'all', subject:'Kiến thức chung', topic:'Kiến thức chung', difficulty:'medium', q:'Nước sôi ở khoảng bao nhiêu độ C trong điều kiện thông thường?', a:['0°C','50°C','100°C','150°C'], c:2 },
+    { grade:'all', subject:'Kiến thức chung', topic:'Kiến thức chung', difficulty:'medium', q:'Hành tinh nào gần Mặt Trời nhất?', a:['Sao Kim','Sao Thủy','Trái Đất','Sao Hỏa'], c:1 },
+    { grade:'all', subject:'Kiến thức chung', topic:'Kiến thức chung', difficulty:'medium', q:'Đại dương lớn nhất trên Trái Đất là gì?', a:['Đại Tây Dương','Ấn Độ Dương','Thái Bình Dương','Bắc Băng Dương'], c:2 },
+    { grade:'all', subject:'Kiến thức chung', topic:'Kiến thức chung', difficulty:'hard', q:'Châu lục có diện tích lớn nhất thế giới là châu nào?', a:['Châu Á','Châu Âu','Châu Phi','Châu Đại Dương'], c:0 },
+    { grade:'all', subject:'Kiến thức chung', topic:'Kiến thức chung', difficulty:'hard', q:'Trong hệ nhị phân, hai chữ số được dùng là gì?', a:['0 và 1','1 và 2','0 và 9','2 và 8'], c:0 },
+    { grade:'all', subject:'Kiến thức chung', topic:'Kiến thức chung', difficulty:'hard', q:'Quá trình cây xanh dùng ánh sáng để tạo chất dinh dưỡng gọi là gì?', a:['Hô hấp','Quang hợp','Nảy mầm','Thoát hơi nước'], c:1 }
+];
+
+
+const MILLIONAIRE_CUSTOM_STORAGE_KEY = 'qlhs_millionaire_custom_questions_v1';
+
+function loadMillionaireCustomQuestions() {
+    try {
+        const raw = localStorage.getItem(MILLIONAIRE_CUSTOM_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch (err) {
+        console.warn('Không đọc được ngân hàng câu hỏi local:', err);
+        return [];
+    }
+}
+
+function saveMillionaireCustomQuestions(items) {
+    localStorage.setItem(MILLIONAIRE_CUSTOM_STORAGE_KEY, JSON.stringify(items || []));
+}
+
+function getAllMillionaireQuestions() {
+    return [...MILLIONAIRE_QUESTION_BANK, ...loadMillionaireCustomQuestions()];
+}
+
+function makeMillionaireQuestionId() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return `mq_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function normalizeMillionaireQuestionInput(item) {
+    const answers = Array.isArray(item?.a) ? item.a.map(v => String(v ?? '').trim()).slice(0, 4) : [];
+    while (answers.length < 4) answers.push('');
+
+    return {
+        id: item?.id || makeMillionaireQuestionId(),
+        grade: String(item?.grade || 'all'),
+        subject: String(item?.subject || '').trim(),
+        topic: String(item?.topic || '').trim(),
+        difficulty: ['easy','medium','hard'].includes(item?.difficulty) ? item.difficulty : 'easy',
+        q: String(item?.q || '').trim(),
+        a: answers,
+        c: Number.isInteger(Number(item?.c)) ? Number(item.c) : 0,
+        custom: true
+    };
+}
+
+function validateMillionaireQuestion(item) {
+    if (!item.q) return 'Vui lòng nhập nội dung câu hỏi.';
+    if (!item.subject) return 'Vui lòng nhập môn học.';
+    if (!item.topic) return 'Vui lòng nhập chủ đề.';
+    if (!Array.isArray(item.a) || item.a.length !== 4 || item.a.some(v => !String(v).trim())) {
+        return 'Vui lòng nhập đủ 4 đáp án.';
+    }
+    if (![0,1,2,3].includes(Number(item.c))) return 'Vui lòng chọn đáp án đúng.';
+    return '';
+}
+
+const MILLIONAIRE_QUESTIONS = MILLIONAIRE_QUESTION_BANK
+    .filter(q => q.grade === 'all' || q.grade === '5')
+    .slice(0, 15)
+    .map(q => ({ q:q.q, a:[...q.a], c:q.c }));
+
+const MILLIONAIRE_SWITCH_QUESTIONS = [
+    { q: 'Loài vật nào là biểu tượng của hòa bình?', a: ['Đại bàng', 'Bồ câu', 'Chim sẻ', 'Công'], c: 1 },
+    { q: '10 dm bằng bao nhiêu mét?', a: ['0,1 m', '1 m', '10 m', '100 m'], c: 1 },
+    { q: 'Phím nào thường dùng để xuống dòng khi soạn thảo văn bản?', a: ['Shift', 'Ctrl', 'Enter', 'Alt'], c: 2 },
+    { q: 'Đại dương lớn nhất trên Trái Đất là đại dương nào?', a: ['Ấn Độ Dương', 'Đại Tây Dương', 'Bắc Băng Dương', 'Thái Bình Dương'], c: 3 },
+    { q: 'Số La Mã X có giá trị bằng bao nhiêu?', a: ['5', '10', '50', '100'], c: 1 }
+];
+
+const MILLIONAIRE_STATE = {
+    started: false,
+    ended: false,
+    level: 0,
+    locked: false,
+    questions: [],
+    usedSwitchIndexes: [],
+    lifelines: { fifty: true, audience: true, switch: true },
+    hiddenAnswers: [],
+    selectedIndex: null,
+    audienceResult: null,
+    phase: 'idle',
+    soundEnabled: true,
+    selectedGrade: 'all',
+    selectedSubject: 'all',
+    selectedTopic: 'all',
+    bankInfo: null,
+    playMode: 'stop_on_wrong',
+    wrongAttempts: [],
+    timerEnabled: false,
+    timerSoundEnabled: true,
+    timerSeconds: 30,
+    timerRemaining: 30,
+    timerIntervalId: null,
+    selectedQuestionIds: [],
+    managerOpen: false,
+    editingQuestionId: null,
+    managerFilter: '',
+    message: 'Chọn bộ câu hỏi rồi nhấn “Bắt đầu”.'
+};
+
+function resetMillionaireState() {
+    MILLIONAIRE_STATE.started = false;
+    MILLIONAIRE_STATE.ended = false;
+    MILLIONAIRE_STATE.level = 0;
+    MILLIONAIRE_STATE.locked = false;
+    MILLIONAIRE_STATE.questions = MILLIONAIRE_QUESTIONS.map(item => ({
+        ...item,
+        a: [...item.a]
+    }));
+    MILLIONAIRE_STATE.usedSwitchIndexes = [];
+    MILLIONAIRE_STATE.lifelines = { fifty: true, audience: true, switch: true };
+    MILLIONAIRE_STATE.hiddenAnswers = [];
+    MILLIONAIRE_STATE.selectedIndex = null;
+    MILLIONAIRE_STATE.audienceResult = null;
+    MILLIONAIRE_STATE.phase = 'idle';
+    MILLIONAIRE_STATE.soundEnabled = true;
+    MILLIONAIRE_STATE.selectedGrade = MILLIONAIRE_STATE.selectedGrade || 'all';
+    MILLIONAIRE_STATE.selectedSubject = MILLIONAIRE_STATE.selectedSubject || 'all';
+    MILLIONAIRE_STATE.selectedTopic = MILLIONAIRE_STATE.selectedTopic || 'all';
+    MILLIONAIRE_STATE.bankInfo = null;
+    MILLIONAIRE_STATE.playMode = MILLIONAIRE_STATE.playMode || 'stop_on_wrong';
+    MILLIONAIRE_STATE.wrongAttempts = [];
+    MILLIONAIRE_STATE.selectedQuestionIds = [];
+    MILLIONAIRE_STATE.managerOpen = false;
+    MILLIONAIRE_STATE.editingQuestionId = null;
+    MILLIONAIRE_STATE.managerFilter = '';
+    MILLIONAIRE_STATE.message = 'Chọn bộ câu hỏi rồi nhấn “Bắt đầu”.';
+}
+
+
+function shuffleMillionaireArray(arr) {
+    const copy = [...arr];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+}
+
+function getMillionaireSubjectsForGrade(grade) {
+    // BƯỚC 151.40: luôn hiển thị đúng 13 môn của hệ thống,
+    // không suy ra danh sách môn từ số câu hỏi đang có.
+    return [...MILLIONAIRE_SYSTEM_SUBJECTS];
+}
+
+function getMillionaireTopicsForSelection(grade, subject) {
+    const values = new Set();
+
+    getAllMillionaireQuestions().forEach(item => {
+        // Lọc tuyệt đối theo khối/môn đã chọn. Không kéo "Tổng hợp" vào môn cụ thể.
+        const gradeOk = grade === 'all' || item.grade === grade;
+        const subjectOk = subject === 'all' || item.subject === subject;
+        if (gradeOk && subjectOk && item.topic) values.add(item.topic);
+    });
+
+    return [...values].sort((a,b) => a.localeCompare(b, 'vi'));
+}
+
+function millionaireSetGrade(value) {
+    MILLIONAIRE_STATE.selectedGrade = value || 'all';
+    MILLIONAIRE_STATE.selectedSubject = 'all';
+    MILLIONAIRE_STATE.selectedTopic = 'all';
+    refreshMillionaire();
+}
+
+function millionaireSetSubject(value) {
+    MILLIONAIRE_STATE.selectedSubject = value || 'all';
+    MILLIONAIRE_STATE.selectedTopic = 'all';
+    refreshMillionaire();
+}
+
+function millionaireSetTopic(value) {
+    MILLIONAIRE_STATE.selectedTopic = value || 'all';
+    refreshMillionaire();
+}
+
+function createMillionaireQuestionSet() {
+    const state = MILLIONAIRE_STATE;
+    const grade = state.selectedGrade || 'all';
+    const subject = state.selectedSubject || 'all';
+    const topic = state.selectedTopic || 'all';
+
+    const allQuestions = getAllMillionaireQuestions();
+
+    // BƯỚC 151.40: lọc tuyệt đối.
+    // Đã chọn khối/môn/chủ đề thì tuyệt đối không lấy câu ngoài bộ lọc.
+    const exact = allQuestions.filter(item => {
+        const gradeOk = grade === 'all' || item.grade === grade;
+        const subjectOk = subject === 'all' || item.subject === subject;
+        const topicOk = topic === 'all' || item.topic === topic;
+        return gradeOk && subjectOk && topicOk;
+    });
+
+    const byDifficulty = {
+        easy: shuffleMillionaireArray(exact.filter(x => x.difficulty === 'easy')),
+        medium: shuffleMillionaireArray(exact.filter(x => x.difficulty === 'medium')),
+        hard: shuffleMillionaireArray(exact.filter(x => x.difficulty === 'hard'))
+    };
+
+    const selected = [
+        ...byDifficulty.easy.slice(0, 5),
+        ...byDifficulty.medium.slice(0, 5),
+        ...byDifficulty.hard.slice(0, 5)
+    ];
+
+    // Nếu một mức chưa đủ 5 nhưng tổng bộ lọc có >=15,
+    // chỉ bổ sung bằng câu CÙNG BỘ LỌC, không đổi môn/khối/chủ đề.
+    if (selected.length < 15 && exact.length >= 15) {
+        const used = new Set(selected.map(x => `${x.q}|${x.grade}|${x.subject}|${x.topic}`));
+        const extras = shuffleMillionaireArray(exact).filter(x => {
+            const key = `${x.q}|${x.grade}|${x.subject}|${x.topic}`;
+            return !used.has(key);
+        });
+        while (selected.length < 15 && extras.length) {
+            selected.push(extras.shift());
+        }
+    }
+
+    state.bankInfo = {
+        exactCount: exact.length,
+        selectedCount: Math.min(selected.length, 15),
+        grade,
+        subject,
+        topic,
+        strictFilter: true,
+        counts: {
+            easy: byDifficulty.easy.length,
+            medium: byDifficulty.medium.length,
+            hard: byDifficulty.hard.length
+        }
+    };
+
+    return selected.slice(0, 15).map(item => ({
+        q: item.q,
+        a: [...item.a],
+        c: item.c,
+        difficulty: item.difficulty,
+        grade: item.grade,
+        subject: item.subject,
+        topic: item.topic
+    }));
+}
+
+
+function millionaireOpenQuestionManager() {
+    MILLIONAIRE_STATE.managerOpen = true;
+    MILLIONAIRE_STATE.editingQuestionId = null;
+    refreshMillionaire();
+}
+
+function millionaireCloseQuestionManager() {
+    MILLIONAIRE_STATE.managerOpen = false;
+    MILLIONAIRE_STATE.editingQuestionId = null;
+    refreshMillionaire();
+}
+
+function millionaireEditQuestion(id) {
+    MILLIONAIRE_STATE.managerOpen = true;
+    MILLIONAIRE_STATE.editingQuestionId = id;
+    refreshMillionaire();
+}
+
+function millionaireDeleteQuestion(id) {
+    const items = loadMillionaireCustomQuestions();
+    const target = items.find(q => q.id === id);
+    if (!target) return;
+
+    if (!confirm(`Xóa câu hỏi:\n${target.q}\n\nThao tác này chỉ xóa câu hỏi tự thêm trên trình duyệt này.`)) return;
+
+    saveMillionaireCustomQuestions(items.filter(q => q.id !== id));
+    MILLIONAIRE_STATE.selectedQuestionIds = (MILLIONAIRE_STATE.selectedQuestionIds || []).filter(qid => qid !== id);
+    if (MILLIONAIRE_STATE.editingQuestionId === id) {
+        MILLIONAIRE_STATE.editingQuestionId = null;
+    }
+    MILLIONAIRE_STATE.message = 'Đã xóa câu hỏi tự thêm.';
+    refreshMillionaire();
+}
+
+function millionaireSaveQuestion() {
+    const get = id => document.getElementById(id);
+    const existingId = MILLIONAIRE_STATE.editingQuestionId;
+
+    const item = normalizeMillionaireQuestionInput({
+        id: existingId || undefined,
+        grade: get('mqGrade')?.value || 'all',
+        subject: get('mqSubject')?.value || '',
+        topic: get('mqTopic')?.value || '',
+        difficulty: get('mqDifficulty')?.value || 'easy',
+        q: get('mqQuestion')?.value || '',
+        a: [
+            get('mqA0')?.value || '',
+            get('mqA1')?.value || '',
+            get('mqA2')?.value || '',
+            get('mqA3')?.value || ''
+        ],
+        c: Number(get('mqCorrect')?.value ?? 0)
+    });
+
+    const error = validateMillionaireQuestion(item);
+    if (error) {
+        alert(error);
+        return;
+    }
+
+    const items = loadMillionaireCustomQuestions();
+    if (existingId) {
+        const idx = items.findIndex(q => q.id === existingId);
+        if (idx >= 0) items[idx] = item;
+        else items.push(item);
+    } else {
+        items.push(item);
+    }
+
+    saveMillionaireCustomQuestions(items);
+    MILLIONAIRE_STATE.editingQuestionId = null;
+    MILLIONAIRE_STATE.message = existingId ? 'Đã cập nhật câu hỏi.' : 'Đã thêm câu hỏi mới.';
+    refreshMillionaire();
+}
+
+function millionaireResetQuestionForm() {
+    MILLIONAIRE_STATE.editingQuestionId = null;
+    refreshMillionaire();
+}
+
+
+function normalizeMillionaireExcelHeader(value) {
+    return String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/\s+/g, ' ');
+}
+
+function normalizeMillionaireDifficulty(value) {
+    const v = normalizeMillionaireExcelHeader(value);
+    if (['de', 'easy', '1'].includes(v)) return 'easy';
+    if (['trung binh', 'medium', 'tb', '2'].includes(v)) return 'medium';
+    if (['kho', 'hard', '3'].includes(v)) return 'hard';
+    return '';
+}
+
+function normalizeMillionaireCorrectAnswer(value) {
+    const v = String(value ?? '').trim().toUpperCase();
+    if (['A','1','0'].includes(v)) return 0;
+    if (['B','2'].includes(v)) return 1;
+    if (['C','3'].includes(v)) return 2;
+    if (['D','4'].includes(v)) return 3;
+    return -1;
+}
+
+function normalizeMillionaireGrade(value) {
+    const raw = String(value ?? '').trim();
+    const normalized = normalizeMillionaireExcelHeader(raw);
+    if (!raw || ['tat ca', 'all', '*'].includes(normalized)) return 'all';
+    const m = raw.match(/[1-5]/);
+    return m ? m[0] : '';
+}
+
+function makeMillionaireDuplicateKey(item) {
+    return [
+        String(item.grade || '').trim().toLowerCase(),
+        String(item.subject || '').trim().toLowerCase(),
+        String(item.q || '').trim().toLowerCase().replace(/\s+/g, ' ')
+    ].join('|');
+}
+
+function millionaireDownloadExcelTemplate() {
+    if (typeof XLSX === 'undefined') {
+        alert('Thư viện Excel chưa sẵn sàng.');
+        return;
+    }
+
+    const rows = [
+        ['Khối', 'Môn', 'Chủ đề', 'Mức độ', 'Câu hỏi', 'A', 'B', 'C', 'D', 'Đáp án đúng'],
+        ['5', 'Tin học', 'Internet', 'Dễ', 'Thiết bị nào dùng để nhập dữ liệu vào máy tính?', 'Màn hình', 'Bàn phím', 'Loa', 'Máy in', 'B'],
+        ['4', 'Toán', 'Hình học', 'Trung bình', 'Hình vuông có mấy cạnh bằng nhau?', '2', '3', '4', '5', 'C'],
+        ['all', 'Tổng hợp', 'Kiến thức chung', 'Khó', 'Ví dụ câu hỏi tổng hợp?', 'Đáp án A', 'Đáp án B', 'Đáp án C', 'Đáp án D', 'A']
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [
+        { wch: 10 }, { wch: 18 }, { wch: 22 }, { wch: 14 }, { wch: 55 },
+        { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 14 }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Cau hoi');
+    XLSX.writeFile(wb, 'MAU_NGAN_HANG_CAU_HOI_AI_LA_TRIEU_PHU.xlsx');
+}
+
+function millionairePickExcelFile() {
+    let input = document.getElementById('millionaireExcelImportInput');
+    if (!input) {
+        input = document.createElement('input');
+        input.type = 'file';
+        input.id = 'millionaireExcelImportInput';
+        input.accept = '.xlsx,.xls';
+        input.style.display = 'none';
+        input.addEventListener('change', millionaireImportExcelQuestions);
+        document.body.appendChild(input);
+    }
+    input.value = '';
+    input.click();
+}
+
+async function millionaireImportExcelQuestions(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+
+    try {
+        if (typeof XLSX === 'undefined') {
+            throw new Error('Thư viện Excel chưa sẵn sàng.');
+        }
+
+        const data = new Uint8Array(await file.arrayBuffer());
+        const wb = XLSX.read(data, { type: 'array', cellDates: false });
+        const sheetName = wb.SheetNames[0];
+        if (!sheetName) throw new Error('File Excel không có sheet dữ liệu.');
+
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+            header: 1,
+            defval: '',
+            raw: false
+        });
+
+        if (!rows.length) throw new Error('File Excel không có dữ liệu.');
+
+        const headerIndex = rows.findIndex(row => {
+            const normalized = row.map(normalizeMillionaireExcelHeader);
+            return normalized.includes('cau hoi') &&
+                   normalized.includes('a') &&
+                   normalized.includes('b') &&
+                   normalized.includes('c') &&
+                   normalized.includes('d');
+        });
+
+        if (headerIndex < 0) {
+            throw new Error('Không tìm thấy hàng tiêu đề đúng mẫu.');
+        }
+
+        const header = rows[headerIndex].map(normalizeMillionaireExcelHeader);
+        const findCol = (...names) => {
+            const candidates = names.map(normalizeMillionaireExcelHeader);
+            return header.findIndex(h => candidates.includes(h));
+        };
+
+        const cols = {
+            grade: findCol('Khối', 'Khoi'),
+            subject: findCol('Môn', 'Mon', 'Môn học', 'Mon hoc'),
+            topic: findCol('Chủ đề', 'Chu de'),
+            difficulty: findCol('Mức độ', 'Muc do'),
+            q: findCol('Câu hỏi', 'Cau hoi'),
+            a0: findCol('A'),
+            a1: findCol('B'),
+            a2: findCol('C'),
+            a3: findCol('D'),
+            correct: findCol('Đáp án đúng', 'Dap an dung', 'Đáp án', 'Dap an')
+        };
+
+        const required = Object.entries(cols).filter(([,idx]) => idx < 0);
+        if (required.length) {
+            throw new Error('Thiếu cột bắt buộc trong file Excel.');
+        }
+
+        const custom = loadMillionaireCustomQuestions();
+        const defaultQuestions = MILLIONAIRE_QUESTION_BANK;
+        const duplicateKeys = new Set(
+            [...defaultQuestions, ...custom].map(makeMillionaireDuplicateKey)
+        );
+
+        const imported = [];
+        const errors = [];
+        let duplicates = 0;
+
+        for (let r = headerIndex + 1; r < rows.length; r++) {
+            const row = rows[r] || [];
+            if (row.every(v => String(v ?? '').trim() === '')) continue;
+
+            const item = normalizeMillionaireQuestionInput({
+                grade: normalizeMillionaireGrade(row[cols.grade]),
+                subject: String(row[cols.subject] ?? '').trim(),
+                topic: String(row[cols.topic] ?? '').trim(),
+                difficulty: normalizeMillionaireDifficulty(row[cols.difficulty]),
+                q: String(row[cols.q] ?? '').trim(),
+                a: [
+                    String(row[cols.a0] ?? '').trim(),
+                    String(row[cols.a1] ?? '').trim(),
+                    String(row[cols.a2] ?? '').trim(),
+                    String(row[cols.a3] ?? '').trim()
+                ],
+                c: normalizeMillionaireCorrectAnswer(row[cols.correct])
+            });
+
+            const problems = [];
+            if (!item.grade) problems.push('Khối không hợp lệ');
+            if (!item.subject) problems.push('Thiếu môn');
+            if (!item.topic) problems.push('Thiếu chủ đề');
+            if (!item.difficulty) problems.push('Mức độ không hợp lệ');
+            if (!item.q) problems.push('Thiếu câu hỏi');
+            if (item.a.some(v => !String(v).trim())) problems.push('Thiếu đáp án A/B/C/D');
+            if (![0,1,2,3].includes(Number(item.c))) problems.push('Đáp án đúng không hợp lệ');
+
+            if (problems.length) {
+                errors.push({ row: r + 1, q: item.q || '(trống)', message: problems.join(', ') });
+                continue;
+            }
+
+            const key = makeMillionaireDuplicateKey(item);
+            if (duplicateKeys.has(key)) {
+                duplicates++;
+                continue;
+            }
+
+            duplicateKeys.add(key);
+            imported.push(item);
+        }
+
+        if (imported.length) {
+            saveMillionaireCustomQuestions([...custom, ...imported]);
+        }
+
+        MILLIONAIRE_STATE.managerOpen = true;
+        MILLIONAIRE_STATE.editingQuestionId = null;
+        MILLIONAIRE_STATE.message = imported.length
+            ? `Đã nhập ${imported.length} câu hỏi từ Excel.`
+            : 'Không có câu hỏi mới được nhập.';
+        refreshMillionaire();
+
+        const errorText = errors.length
+            ? '\n\nDòng lỗi:\n' + errors.slice(0, 12).map(e => `- Dòng ${e.row}: ${e.message}`).join('\n') +
+              (errors.length > 12 ? `\n... và ${errors.length - 12} dòng lỗi khác.` : '')
+            : '';
+
+        alert(
+            `Kết quả nhập Excel:\n` +
+            `- Thêm mới: ${imported.length}\n` +
+            `- Trùng, bỏ qua: ${duplicates}\n` +
+            `- Lỗi, bỏ qua: ${errors.length}` +
+            errorText
+        );
+
+    } catch (err) {
+        console.error('Lỗi nhập câu hỏi Excel:', err);
+        alert('Không thể nhập Excel: ' + (err?.message || err));
+    } finally {
+        if (event?.target) event.target.value = '';
+    }
+}
+
+
+function millionaireDifficultyLabel(value) {
+    if (value === 'easy') return 'Dễ';
+    if (value === 'medium') return 'Trung bình';
+    if (value === 'hard') return 'Khó';
+    return value || '';
+}
+
+function millionaireCorrectLabel(index) {
+    return ['A','B','C','D'][Number(index)] || '';
+}
+
+function buildMillionaireExcelRows(items) {
+    const rows = [[
+        'Khối', 'Môn', 'Chủ đề', 'Mức độ',
+        'Câu hỏi', 'A', 'B', 'C', 'D', 'Đáp án đúng'
+    ]];
+
+    (items || []).forEach(item => {
+        rows.push([
+            item.grade === 'all' ? 'all' : String(item.grade || ''),
+            item.subject || '',
+            item.topic || '',
+            millionaireDifficultyLabel(item.difficulty),
+            item.q || '',
+            item.a?.[0] || '',
+            item.a?.[1] || '',
+            item.a?.[2] || '',
+            item.a?.[3] || '',
+            millionaireCorrectLabel(item.c)
+        ]);
+    });
+
+    return rows;
+}
+
+function exportMillionaireQuestionsToExcel(mode = 'custom') {
+    if (typeof XLSX === 'undefined') {
+        alert('Thư viện Excel chưa sẵn sàng.');
+        return;
+    }
+
+    let items = [];
+    let fileName = '';
+    let sheetName = '';
+
+    if (mode === 'all') {
+        items = getAllMillionaireQuestions();
+        fileName = 'NGAN_HANG_CAU_HOI_AI_LA_TRIEU_PHU_TOAN_BO.xlsx';
+        sheetName = 'Toan bo';
+    } else {
+        items = loadMillionaireCustomQuestions();
+        fileName = 'NGAN_HANG_CAU_HOI_AI_LA_TRIEU_PHU_TU_THEM.xlsx';
+        sheetName = 'Tu them';
+    }
+
+    if (!items.length) {
+        alert(mode === 'all'
+            ? 'Ngân hàng câu hỏi hiện chưa có dữ liệu.'
+            : 'Chưa có câu hỏi tự thêm để xuất.');
+        return;
+    }
+
+    const rows = buildMillionaireExcelRows(items);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    ws['!cols'] = [
+        { wch: 10 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 58 },
+        { wch: 24 },
+        { wch: 24 },
+        { wch: 24 },
+        { wch: 24 },
+        { wch: 14 }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, fileName);
+
+    showToast(
+        `Đã xuất ${items.length} câu hỏi ra Excel.`,
+        'success',
+        2200
+    );
+}
+
+function normalizeMillionairePasteLine(line) {
+    return String(line ?? '').replace(/\u00a0/g, ' ').trim();
+}
+
+function parseMillionaireMarkdownOrTabTable(rawText) {
+    const lines = String(rawText || '')
+        .split(/\r?\n/)
+        .map(normalizeMillionairePasteLine)
+        .filter(Boolean);
+
+    if (!lines.length) return [];
+
+    const isPipe = lines.some(line => line.includes('|'));
+    const delimiter = isPipe ? 'pipe' : 'tab';
+
+    const splitLine = (line) => {
+        if (delimiter === 'pipe') {
+            return line
+                .replace(/^\|/, '')
+                .replace(/\|$/, '')
+                .split('|')
+                .map(v => v.trim());
+        }
+        return line.split('\t').map(v => v.trim());
+    };
+
+    const rows = lines
+        .filter(line => !/^\s*\|?\s*:?-{3,}/.test(line))
+        .map(splitLine)
+        .filter(row => row.length >= 5);
+
+    if (!rows.length) return [];
+
+    const header = rows[0].map(normalizeMillionaireExcelHeader);
+    const hasHeader = header.some(v => ['khoi','môn','mon','chu de','cau hoi','dap an dung'].includes(v));
+
+    const findCol = (...names) => {
+        const candidates = names.map(normalizeMillionaireExcelHeader);
+        return header.findIndex(h => candidates.includes(h));
+    };
+
+    let cols;
+    let dataRows;
+
+    if (hasHeader) {
+        cols = {
+            grade: findCol('Khối', 'Khoi'),
+            subject: findCol('Môn', 'Mon', 'Môn học', 'Mon hoc'),
+            topic: findCol('Chủ đề', 'Chu de'),
+            difficulty: findCol('Mức độ', 'Muc do'),
+            q: findCol('Câu hỏi', 'Cau hoi'),
+            a0: findCol('A'),
+            a1: findCol('B'),
+            a2: findCol('C'),
+            a3: findCol('D'),
+            correct: findCol('Đáp án đúng', 'Dap an dung', 'Đáp án', 'Dap an')
+        };
+        dataRows = rows.slice(1);
+    } else if (rows[0].length >= 10) {
+        cols = { grade:0, subject:1, topic:2, difficulty:3, q:4, a0:5, a1:6, a2:7, a3:8, correct:9 };
+        dataRows = rows;
+    } else {
+        return [];
+    }
+
+    if (Object.values(cols).some(i => i < 0)) return [];
+
+    return dataRows.map((row, idx) => ({
+        sourceLine: idx + (hasHeader ? 2 : 1),
+        item: {
+            grade: normalizeMillionaireGrade(row[cols.grade]),
+            subject: String(row[cols.subject] ?? '').trim(),
+            topic: String(row[cols.topic] ?? '').trim(),
+            difficulty: normalizeMillionaireDifficulty(row[cols.difficulty]),
+            q: String(row[cols.q] ?? '').trim(),
+            a: [
+                String(row[cols.a0] ?? '').trim(),
+                String(row[cols.a1] ?? '').trim(),
+                String(row[cols.a2] ?? '').trim(),
+                String(row[cols.a3] ?? '').trim()
+            ],
+            c: normalizeMillionaireCorrectAnswer(row[cols.correct])
+        }
+    }));
+}
+
+function parseMillionaireLabeledBlocks(rawText) {
+    const raw = String(rawText || '').replace(/\r/g, '');
+    const blocks = raw
+        .split(/\n{2,}(?=\s*(?:Khối|Khoi)\s*:)/i)
+        .map(b => b.trim())
+        .filter(Boolean);
+
+    const parsed = [];
+
+    const read = (block, labels) => {
+        for (const label of labels) {
+            const re = new RegExp(`^\\s*${label}\\s*:\\s*(.+)$`, 'im');
+            const m = block.match(re);
+            if (m) return m[1].trim();
+        }
+        return '';
+    };
+
+    blocks.forEach((block, idx) => {
+        const q = read(block, ['Câu hỏi', 'Cau hoi']);
+        if (!q) return;
+
+        const answer = (letter) => {
+            const patterns = [
+                new RegExp(`^\\s*${letter}\\s*[\\.:\\)]\\s*(.+)$`, 'im'),
+                new RegExp(`^\\s*Đáp án ${letter}\\s*:\\s*(.+)$`, 'im'),
+                new RegExp(`^\\s*Dap an ${letter}\\s*:\\s*(.+)$`, 'im')
+            ];
+            for (const re of patterns) {
+                const m = block.match(re);
+                if (m) return m[1].trim();
+            }
+            return '';
+        };
+
+        parsed.push({
+            sourceLine: idx + 1,
+            item: {
+                grade: normalizeMillionaireGrade(read(block, ['Khối', 'Khoi'])),
+                subject: read(block, ['Môn', 'Mon', 'Môn học', 'Mon hoc']),
+                topic: read(block, ['Chủ đề', 'Chu de']),
+                difficulty: normalizeMillionaireDifficulty(read(block, ['Mức độ', 'Muc do'])),
+                q,
+                a: [answer('A'), answer('B'), answer('C'), answer('D')],
+                c: normalizeMillionaireCorrectAnswer(read(block, ['Đáp án đúng', 'Dap an dung', 'Đáp án', 'Dap an']))
+            }
+        });
+    });
+
+    return parsed;
+}
+
+function parseMillionaireAIText(rawText) {
+    const text = String(rawText || '').trim();
+    if (!text) return [];
+
+    let parsed = parseMillionaireMarkdownOrTabTable(text);
+    if (parsed.length) return parsed;
+
+    parsed = parseMillionaireLabeledBlocks(text);
+    if (parsed.length) return parsed;
+
+    return [];
+}
+
+function importMillionaireQuestionsFromPastedAI() {
+    const textarea = document.getElementById('millionaireAIPasteBox');
+    const rawText = textarea?.value || '';
+
+    if (!rawText.trim()) {
+        alert('Vui lòng dán nội dung câu hỏi từ AI vào vùng trống.');
+        return;
+    }
+
+    const parsed = parseMillionaireAIText(rawText);
+    if (!parsed.length) {
+        alert(
+            'Không nhận diện được cấu trúc câu hỏi.\n\n' +
+            'Hãy dùng một trong hai dạng:\n' +
+            '1) Bảng có 10 cột Khối | Môn | Chủ đề | Mức độ | Câu hỏi | A | B | C | D | Đáp án đúng\n' +
+            '2) Khối văn bản có nhãn Khối:, Môn:, Chủ đề:, Mức độ:, Câu hỏi:, A:, B:, C:, D:, Đáp án đúng:'
+        );
+        return;
+    }
+
+    const custom = loadMillionaireCustomQuestions();
+    const duplicateKeys = new Set(
+        [...MILLIONAIRE_QUESTION_BANK, ...custom].map(makeMillionaireDuplicateKey)
+    );
+
+    const imported = [];
+    const errors = [];
+    let duplicates = 0;
+
+    for (const record of parsed) {
+        const normalized = normalizeMillionaireQuestionInput(record.item);
+        const problems = [];
+
+        if (!normalized.grade) problems.push('Khối không hợp lệ');
+        if (!normalized.subject) problems.push('Thiếu môn');
+        if (!normalized.topic) problems.push('Thiếu chủ đề');
+        if (!normalized.difficulty) problems.push('Mức độ không hợp lệ');
+        if (!normalized.q) problems.push('Thiếu câu hỏi');
+        if (normalized.a.some(v => !String(v).trim())) problems.push('Thiếu đáp án A/B/C/D');
+        if (![0,1,2,3].includes(Number(normalized.c))) problems.push('Đáp án đúng không hợp lệ');
+
+        if (problems.length) {
+            errors.push({
+                sourceLine: record.sourceLine,
+                q: normalized.q || '(trống)',
+                message: problems.join(', ')
+            });
+            continue;
+        }
+
+        const key = makeMillionaireDuplicateKey(normalized);
+        if (duplicateKeys.has(key)) {
+            duplicates++;
+            continue;
+        }
+
+        duplicateKeys.add(key);
+        imported.push(normalized);
+    }
+
+    if (imported.length) {
+        saveMillionaireCustomQuestions([...custom, ...imported]);
+    }
+
+    MILLIONAIRE_STATE.managerOpen = true;
+    MILLIONAIRE_STATE.editingQuestionId = null;
+    MILLIONAIRE_STATE.message = imported.length
+        ? `Đã nhập ${imported.length} câu hỏi được dán từ AI.`
+        : 'Không có câu hỏi mới được nhập.';
+    refreshMillionaire();
+
+    const errorText = errors.length
+        ? '\n\nLỗi:\n' + errors.slice(0, 12).map(e => `- Mục ${e.sourceLine}: ${e.message}`).join('\n') +
+          (errors.length > 12 ? `\n... và ${errors.length - 12} lỗi khác.` : '')
+        : '';
+
+    alert(
+        `Kết quả dán từ AI:\n` +
+        `- Thêm mới: ${imported.length}\n` +
+        `- Trùng, bỏ qua: ${duplicates}\n` +
+        `- Lỗi, bỏ qua: ${errors.length}` +
+        errorText
+    );
+
+    const newBox = document.getElementById('millionaireAIPasteBox');
+    if (newBox && imported.length) newBox.value = '';
+}
+
+function millionaireFillAIPasteExample() {
+    const box = document.getElementById('millionaireAIPasteBox');
+    if (!box) return;
+
+    box.value =
+`Khối: 5
+Môn: Tin học
+Chủ đề: Internet
+Mức độ: Dễ
+Câu hỏi: Trình duyệt web dùng để làm gì?
+A: Soạn văn bản ngoại tuyến
+B: Truy cập và xem các trang web
+C: In giấy
+D: Tắt máy tính
+Đáp án đúng: B
+
+Khối: 5
+Môn: Toán
+Chủ đề: Số thập phân
+Mức độ: Trung bình
+Câu hỏi: 2,5 + 1,75 bằng bao nhiêu?
+A: 3,25
+B: 4,25
+C: 4,5
+D: 5,25
+Đáp án đúng: B`;
+}
+
+
+function millionaireToggleQuestionSelection(id, checked) {
+    const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
+    if (checked) selected.add(id);
+    else selected.delete(id);
+    MILLIONAIRE_STATE.selectedQuestionIds = [...selected];
+    refreshMillionaire();
+}
+
+function millionaireSelectAllCustomQuestions(checked = true) {
+    if (checked) {
+        MILLIONAIRE_STATE.selectedQuestionIds = loadMillionaireCustomQuestions().map(q => q.id);
+    } else {
+        MILLIONAIRE_STATE.selectedQuestionIds = [];
+    }
+    refreshMillionaire();
+}
+
+function millionaireDeleteSelectedQuestions() {
+    const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
+    if (!selected.size) {
+        alert('Bạn chưa chọn câu hỏi nào để xóa.');
+        return;
+    }
+
+    const items = loadMillionaireCustomQuestions();
+    const targets = items.filter(q => selected.has(q.id));
+
+    if (!targets.length) {
+        MILLIONAIRE_STATE.selectedQuestionIds = [];
+        refreshMillionaire();
+        return;
+    }
+
+    const ok = confirm(
+        `Bạn có chắc muốn xóa ${targets.length} câu hỏi đã chọn?\n\n` +
+        `Chỉ các câu hỏi tự thêm / nhập Excel / dán từ AI bị xóa.`
+    );
+    if (!ok) return;
+
+    const remaining = items.filter(q => !selected.has(q.id));
+    saveMillionaireCustomQuestions(remaining);
+
+    if (MILLIONAIRE_STATE.editingQuestionId && selected.has(MILLIONAIRE_STATE.editingQuestionId)) {
+        MILLIONAIRE_STATE.editingQuestionId = null;
+    }
+
+    MILLIONAIRE_STATE.selectedQuestionIds = [];
+    MILLIONAIRE_STATE.message = `Đã xóa ${targets.length} câu hỏi đã chọn.`;
+    refreshMillionaire();
+}
+
+function millionaireDeleteAllCustomQuestions() {
+    const items = loadMillionaireCustomQuestions();
+    if (!items.length) {
+        alert('Hiện không có câu hỏi tự thêm để xóa.');
+        return;
+    }
+
+    const ok = confirm(
+        `Xóa toàn bộ ${items.length} câu hỏi tự thêm?\n\n` +
+        `Các câu hỏi mặc định của hệ thống sẽ được giữ nguyên.`
+    );
+    if (!ok) return;
+
+    saveMillionaireCustomQuestions([]);
+    MILLIONAIRE_STATE.selectedQuestionIds = [];
+    MILLIONAIRE_STATE.editingQuestionId = null;
+    MILLIONAIRE_STATE.message = `Đã xóa toàn bộ ${items.length} câu hỏi tự thêm.`;
+    refreshMillionaire();
+}
+
+function renderMillionaireQuestionManager() {
+    if (!MILLIONAIRE_STATE.managerOpen) return '';
+
+    const custom = loadMillionaireCustomQuestions();
+    const editing = custom.find(q => q.id === MILLIONAIRE_STATE.editingQuestionId) || null;
+    const form = editing || {
+        grade: MILLIONAIRE_STATE.selectedGrade !== 'all' ? MILLIONAIRE_STATE.selectedGrade : 'all',
+        subject: MILLIONAIRE_STATE.selectedSubject !== 'all' ? MILLIONAIRE_STATE.selectedSubject : '',
+        topic: MILLIONAIRE_STATE.selectedTopic !== 'all' ? MILLIONAIRE_STATE.selectedTopic : '',
+        difficulty: 'easy',
+        q: '',
+        a: ['', '', '', ''],
+        c: 0
+    };
+
+    const selectedIds = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
+    const rows = custom.length
+        ? custom.map((item, index) => `
+            <tr>
+                <td class="millionaire-select-cell">
+                    <input type="checkbox"
+                        ${selectedIds.has(item.id) ? 'checked' : ''}
+                        onchange="millionaireToggleQuestionSelection('${item.id}', this.checked)">
+                </td>
+                <td>${index + 1}</td>
+                <td>${escapeHtml(item.grade === 'all' ? 'Tất cả' : 'Khối ' + item.grade)}</td>
+                <td>${escapeHtml(item.subject)}</td>
+                <td>${escapeHtml(item.topic)}</td>
+                <td>${item.difficulty === 'easy' ? 'Dễ' : item.difficulty === 'medium' ? 'Trung bình' : 'Khó'}</td>
+                <td class="millionaire-manager-question-cell">${escapeHtml(item.q)}</td>
+                <td>
+                    <div class="millionaire-manager-actions">
+                        <button onclick="millionaireEditQuestion('${item.id}')" title="Sửa"><i class="fas fa-pen"></i></button>
+                        <button class="danger" onclick="millionaireDeleteQuestion('${item.id}')" title="Xóa"><i class="fas fa-trash"></i></button>
+                    </div>
+                </td>
+            </tr>
+        `).join('')
+        : '<tr><td colspan="8" class="millionaire-manager-empty">Chưa có câu hỏi tự thêm.</td></tr>';
+
+    return `
+        <div class="millionaire-manager-panel">
+            <div class="millionaire-manager-head">
+                <div>
+                    <strong><i class="fas fa-list-check"></i> Quản lý câu hỏi</strong>
+                    <span>Câu hỏi tự thêm được lưu trên trình duyệt này.</span>
+                </div>
+                <div class="millionaire-manager-head-actions">
+                    <button onclick="millionaireDownloadExcelTemplate()" title="Tải file mẫu Excel">
+                        <i class="fas fa-file-arrow-down"></i>
+                    </button>
+                    <button onclick="millionairePickExcelFile()" title="Nhập câu hỏi từ Excel">
+                        <i class="fas fa-file-import"></i>
+                    </button>
+                    <button onclick="exportMillionaireQuestionsToExcel('custom')" title="Xuất câu hỏi tự thêm">
+                        <i class="fas fa-file-export"></i>
+                    </button>
+                    <button onclick="exportMillionaireQuestionsToExcel('all')" title="Xuất toàn bộ ngân hàng">
+                        <i class="fas fa-table-list"></i>
+                    </button>
+                    <button onclick="millionaireCloseQuestionManager()" title="Đóng">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="millionaire-manager-form">
+                <div class="millionaire-manager-grid">
+                    <label>
+                        <span>Khối</span>
+                        <select id="mqGrade">
+                            <option value="all" ${form.grade === 'all' ? 'selected' : ''}>Tất cả khối</option>
+                            ${['1','2','3','4','5'].map(g => `<option value="${g}" ${String(form.grade) === g ? 'selected' : ''}>Khối ${g}</option>`).join('')}
+                        </select>
+                    </label>
+                    <label>
+                        <span>Môn học</span>
+                        <input id="mqSubject" value="${escapeHtml(form.subject || '')}" placeholder="Ví dụ: Tin học">
+                    </label>
+                    <label>
+                        <span>Chủ đề</span>
+                        <input id="mqTopic" value="${escapeHtml(form.topic || '')}" placeholder="Ví dụ: Internet">
+                    </label>
+                    <label>
+                        <span>Mức độ</span>
+                        <select id="mqDifficulty">
+                            <option value="easy" ${form.difficulty === 'easy' ? 'selected' : ''}>Dễ</option>
+                            <option value="medium" ${form.difficulty === 'medium' ? 'selected' : ''}>Trung bình</option>
+                            <option value="hard" ${form.difficulty === 'hard' ? 'selected' : ''}>Khó</option>
+                        </select>
+                    </label>
+                </div>
+
+                <label class="millionaire-manager-wide">
+                    <span>Câu hỏi</span>
+                    <textarea id="mqQuestion" rows="2" placeholder="Nhập nội dung câu hỏi">${escapeHtml(form.q || '')}</textarea>
+                </label>
+
+                <div class="millionaire-manager-answer-grid">
+                    ${['A','B','C','D'].map((label, idx) => `
+                        <label>
+                            <span>Đáp án ${label}</span>
+                            <input id="mqA${idx}" value="${escapeHtml(form.a?.[idx] || '')}" placeholder="Nhập đáp án ${label}">
+                        </label>
+                    `).join('')}
+                </div>
+
+                <label class="millionaire-manager-correct">
+                    <span>Đáp án đúng</span>
+                    <select id="mqCorrect">
+                        ${['A','B','C','D'].map((label, idx) => `<option value="${idx}" ${Number(form.c) === idx ? 'selected' : ''}>${label}</option>`).join('')}
+                    </select>
+                </label>
+
+                <div class="millionaire-manager-form-actions">
+                    <button class="btn millionaire-manager-save" onclick="millionaireSaveQuestion()">
+                        <i class="fas fa-floppy-disk"></i> ${editing ? 'Lưu thay đổi' : 'Thêm câu hỏi'}
+                    </button>
+                    ${editing ? `
+                        <button class="btn millionaire-manager-cancel" onclick="millionaireResetQuestionForm()">
+                            <i class="fas fa-ban"></i> Hủy sửa
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+
+            <div class="millionaire-ai-paste-panel">
+                <div class="millionaire-ai-paste-title">
+                    <div>
+                        <strong><i class="fas fa-wand-magic-sparkles"></i> Dán câu hỏi trực tiếp từ AI</strong>
+                        <span>Copy bảng hoặc danh sách câu hỏi do AI tạo rồi dán vào đây.</span>
+                    </div>
+                    <button type="button" onclick="millionaireFillAIPasteExample()" title="Điền ví dụ">
+                        <i class="fas fa-lightbulb"></i> Ví dụ
+                    </button>
+                </div>
+                <textarea id="millionaireAIPasteBox" rows="10"
+                    placeholder="Dán nội dung từ ChatGPT/AI vào đây...
+
+Hỗ trợ:
+• Bảng Markdown 10 cột
+• Dữ liệu tab
+• Dạng Khối: ... / Môn: ... / Chủ đề: ... / Mức độ: ... / Câu hỏi: ... / A: ... / B: ... / C: ... / D: ... / Đáp án đúng: ..."></textarea>
+                <div class="millionaire-ai-paste-actions">
+                    <button class="btn" onclick="importMillionaireQuestionsFromPastedAI()">
+                        <i class="fas fa-wand-magic-sparkles"></i> Phân tích & nhập
+                    </button>
+                    <span>Hệ thống tự bỏ qua câu trùng và báo các mục sai định dạng.</span>
+                </div>
+            </div>
+
+            <div class="millionaire-manager-import-toolbar">
+                <button class="btn" onclick="millionaireDownloadExcelTemplate()">
+                    <i class="fas fa-download"></i> Tải mẫu Excel
+                </button>
+                <button class="btn" onclick="millionairePickExcelFile()">
+                    <i class="fas fa-file-import"></i> Nhập Excel
+                </button>
+                <button class="btn" onclick="exportMillionaireQuestionsToExcel('custom')">
+                    <i class="fas fa-file-export"></i> Xuất câu tự thêm
+                </button>
+                <button class="btn" onclick="exportMillionaireQuestionsToExcel('all')">
+                    <i class="fas fa-table-list"></i> Xuất toàn bộ
+                </button>
+            </div>
+
+            <div class="millionaire-bulk-toolbar">
+                <div class="millionaire-bulk-left">
+                    <button class="btn" onclick="millionaireSelectAllCustomQuestions(true)">
+                        <i class="fas fa-square-check"></i> Chọn tất cả
+                    </button>
+                    <button class="btn" onclick="millionaireSelectAllCustomQuestions(false)">
+                        <i class="fas fa-square-minus"></i> Bỏ chọn
+                    </button>
+                </div>
+                <div class="millionaire-bulk-right">
+                    <span>Đã chọn: <strong>${selectedIds.size}</strong></span>
+                    <button class="btn danger" onclick="millionaireDeleteSelectedQuestions()">
+                        <i class="fas fa-trash"></i> Xóa câu đã chọn
+                    </button>
+                    <button class="btn danger-outline" onclick="millionaireDeleteAllCustomQuestions()">
+                        <i class="fas fa-trash-can"></i> Xóa toàn bộ câu tự thêm
+                    </button>
+                </div>
+            </div>
+
+            <div class="millionaire-manager-table-wrap">
+                <div class="millionaire-manager-count">
+                    Câu hỏi mặc định: <strong>${MILLIONAIRE_QUESTION_BANK.length}</strong> ·
+                    Tự thêm: <strong>${custom.length}</strong> ·
+                    Tổng: <strong>${MILLIONAIRE_QUESTION_BANK.length + custom.length}</strong>
+                </div>
+                <table class="millionaire-manager-table">
+                    <thead>
+                        <tr>
+                            <th class="millionaire-select-cell">
+                                <input type="checkbox"
+                                    ${custom.length > 0 && selectedIds.size === custom.length ? 'checked' : ''}
+                                    onchange="millionaireSelectAllCustomQuestions(this.checked)"
+                                    title="Chọn tất cả">
+                            </th>
+                            <th>STT</th><th>Khối</th><th>Môn</th><th>Chủ đề</th><th>Mức</th><th>Câu hỏi</th><th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+function renderMillionaireBankSelector() {
+    const state = MILLIONAIRE_STATE;
+    const subjects = getMillionaireSubjectsForGrade(state.selectedGrade);
+    const topics = getMillionaireTopicsForSelection(state.selectedGrade, state.selectedSubject);
+
+    const subjectOptions = ['all', ...subjects]
+        .map(value => `<option value="${escapeHtml(value)}" ${state.selectedSubject === value ? 'selected' : ''}>${value === 'all' ? 'Tất cả 13 môn' : escapeHtml(value)}</option>`)
+        .join('');
+
+    const topicOptions = ['all', ...topics]
+        .map(value => `<option value="${escapeHtml(value)}" ${state.selectedTopic === value ? 'selected' : ''}>${value === 'all' ? 'Tất cả chủ đề' : escapeHtml(value)}</option>`)
+        .join('');
+
+    return `
+        <div class="millionaire-bank-selector">
+            <div class="millionaire-bank-title"><i class="fas fa-layer-group"></i> Chọn bộ câu hỏi</div>
+            <div class="millionaire-bank-grid">
+                <label>
+                    <span>Khối lớp</span>
+                    <select onchange="millionaireSetGrade(this.value)">
+                        <option value="all" ${state.selectedGrade === 'all' ? 'selected' : ''}>Tất cả khối</option>
+                        ${['1','2','3','4','5'].map(g => `<option value="${g}" ${state.selectedGrade === g ? 'selected' : ''}>Khối ${g}</option>`).join('')}
+                    </select>
+                </label>
+                <label>
+                    <span>Môn học</span>
+                    <select onchange="millionaireSetSubject(this.value)">
+                        ${subjectOptions}
+                    </select>
+                </label>
+                <label>
+                    <span>Chủ đề</span>
+                    <select onchange="millionaireSetTopic(this.value)">
+                        ${topicOptions}
+                    </select>
+                </label>
+            </div>
+            <div class="millionaire-bank-note">
+                Mỗi lượt tối đa 15 câu, ưu tiên <strong>5 dễ · 5 trung bình · 5 khó</strong>.
+                <strong>Đã chọn Khối/Môn/Chủ đề thì hệ thống chỉ dùng đúng bộ lọc đó, không lấy câu môn khác.</strong>
+            </div>
+        </div>
+    `;
+}
+
+function getMillionaireCurrentQuestion() {
+
+    return MILLIONAIRE_STATE.questions[MILLIONAIRE_STATE.level] || null;
+}
+
+
+const MILLIONAIRE_MASTER_VOLUME = 4.8;
+const MILLIONAIRE_MAX_AUDIO_VOLUME = 1.0;
+
+function millionaireBoostVolume(baseVolume) {
+    const boosted = Number(baseVolume || 0) * MILLIONAIRE_MASTER_VOLUME;
+    return Math.max(0, Math.min(MILLIONAIRE_MAX_AUDIO_VOLUME, boosted));
+}
+
+let millionaireAudioCtx = null;
+
+function getMillionaireAudioContext() {
+    if (!MILLIONAIRE_STATE.soundEnabled) return null;
+    try {
+        if (!millionaireAudioCtx) {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return null;
+            millionaireAudioCtx = new Ctx();
+        }
+        if (millionaireAudioCtx.state === 'suspended') millionaireAudioCtx.resume();
+        return millionaireAudioCtx;
+    } catch (err) {
+        return null;
+    }
+}
+
+function millionaireTone(freq = 440, duration = .12, type = 'sine', volume = .035, delay = 0) {
+    const ctx = getMillionaireAudioContext();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const start = ctx.currentTime + delay;
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    const boostedVolume = millionaireBoostVolume(volume);
+    gain.gain.setValueAtTime(.0001, start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(.0002, boostedVolume), start + .015);
+    gain.gain.exponentialRampToValueAtTime(.0001, start + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + duration + .02);
+}
+
+const MILLIONAIRE_AUDIO_FILES = {
+    start: 'assets/sounds/millionaire/start.mp3',
+    thinking: 'assets/sounds/millionaire/thinking.mp3',
+    lock: 'assets/sounds/millionaire/lock.mp3',
+    correct: 'assets/sounds/millionaire/correct.mp3',
+    wrong: 'assets/sounds/millionaire/wrong.mp3',
+    fifty: 'assets/sounds/millionaire/fifty.mp3',
+    audience: 'assets/sounds/millionaire/audience.mp3',
+    switch: 'assets/sounds/millionaire/switch.mp3',
+    milestone: 'assets/sounds/millionaire/milestone.mp3',
+    winner: 'assets/sounds/millionaire/winner.mp3'
+};
+
+let millionaireThinkingAudio = null;
+const millionaireActiveAudio = new Set();
+
+function preloadMillionaireAudio() {
+    Object.entries(MILLIONAIRE_AUDIO_FILES).forEach(([name, src]) => {
+        if (name === 'thinking') return;
+        try {
+            const audio = new Audio(src);
+            audio.preload = 'auto';
+        } catch (err) {}
+    });
+}
+
+function stopMillionaireThinking() {
+    if (!millionaireThinkingAudio) return;
+    try {
+        millionaireThinkingAudio.pause();
+        millionaireThinkingAudio.currentTime = 0;
+    } catch (err) {}
+    millionaireThinkingAudio = null;
+}
+
+function stopMillionaireAllAudio() {
+    stopMillionaireThinking();
+    millionaireActiveAudio.forEach(audio => {
+        try {
+            audio.pause();
+            audio.currentTime = 0;
+        } catch (err) {}
+    });
+    millionaireActiveAudio.clear();
+}
+
+function playMillionaireAudioFile(name, options = {}) {
+    if (!MILLIONAIRE_STATE.soundEnabled) return false;
+    const src = MILLIONAIRE_AUDIO_FILES[name];
+    if (!src) return false;
+
+    try {
+        if (name === 'thinking') {
+            stopMillionaireThinking();
+            const audio = new Audio(src);
+            audio.loop = true;
+            audio.volume = millionaireBoostVolume(options.volume ?? 0.36);
+            millionaireThinkingAudio = audio;
+            const promise = audio.play();
+            if (promise?.catch) {
+                promise.catch(() => {
+                    if (millionaireThinkingAudio === audio) millionaireThinkingAudio = null;
+                });
+            }
+            return true;
+        }
+
+        const audio = new Audio(src);
+        audio.volume = millionaireBoostVolume(options.volume ?? 0.72);
+        millionaireActiveAudio.add(audio);
+        audio.addEventListener('ended', () => millionaireActiveAudio.delete(audio), { once: true });
+        audio.addEventListener('error', () => millionaireActiveAudio.delete(audio), { once: true });
+        const promise = audio.play();
+        if (promise?.catch) {
+            promise.catch(() => {
+                millionaireActiveAudio.delete(audio);
+                millionaireFallbackSound(name);
+            });
+        }
+        return true;
+    } catch (err) {
+        return false;
+    }
+}
+
+function millionaireFallbackSound(name) {
+    if (!MILLIONAIRE_STATE.soundEnabled) return;
+    switch (name) {
+        case 'start':
+            [392, 523.25, 659.25, 783.99].forEach((f, i) => millionaireTone(f, .16, 'triangle', .04, i * .09));
+            break;
+        case 'lock':
+            millionaireTone(220, .12, 'square', .025);
+            millionaireTone(330, .12, 'square', .025, .13);
+            break;
+        case 'correct':
+        case 'milestone':
+            [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => millionaireTone(f, .18, 'triangle', .045, i * .08));
+            break;
+        case 'wrong':
+            [220, 185, 147].forEach((f, i) => millionaireTone(f, .24, 'sawtooth', .03, i * .11));
+            break;
+        case 'fifty':
+        case 'audience':
+        case 'switch':
+        case 'lifeline':
+            [660, 880].forEach((f, i) => millionaireTone(f, .14, 'sine', .03, i * .08));
+            break;
+        case 'question':
+            millionaireTone(440, .08, 'sine', .02);
+            millionaireTone(554.37, .10, 'sine', .02, .06);
+            break;
+        case 'winner':
+            [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => millionaireTone(f, .25, 'triangle', .045, i * .10));
+            break;
+    }
+}
+
+function millionaireSound(name) {
+    const mappedName = name === 'lifeline' ? 'audience' : name;
+    if (!playMillionaireAudioFile(mappedName)) {
+        millionaireFallbackSound(name);
+    }
+}
+
+function millionaireStartThinking(delay = 0) {
+    if (!MILLIONAIRE_STATE.soundEnabled || MILLIONAIRE_STATE.ended) return;
+    setTimeout(() => {
+        if (
+            MILLIONAIRE_STATE.soundEnabled &&
+            MILLIONAIRE_STATE.started &&
+            !MILLIONAIRE_STATE.ended &&
+            !MILLIONAIRE_STATE.locked
+        ) {
+            playMillionaireAudioFile('thinking', { volume: 0.34 });
+        }
+    }, delay);
+}
+
+function millionaireToggleSound() {
+    MILLIONAIRE_STATE.soundEnabled = !MILLIONAIRE_STATE.soundEnabled;
+    if (!MILLIONAIRE_STATE.soundEnabled) {
+        stopMillionaireAllAudio();
+    } else {
+        millionaireSound('question');
+        if (MILLIONAIRE_STATE.started && !MILLIONAIRE_STATE.ended && !MILLIONAIRE_STATE.locked) {
+            millionaireStartThinking(180);
+        }
+    }
+    refreshMillionaire();
+}
+
+function millionaireStageClass() {
+    const p = MILLIONAIRE_STATE.phase;
+    return p ? `millionaire-phase-${p}` : '';
+}
+
+function renderMillionaireLadder() {
+    return MILLIONAIRE_PRIZES.map((prize, idx) => {
+        const level = idx + 1;
+        const current = MILLIONAIRE_STATE.started && !MILLIONAIRE_STATE.ended && MILLIONAIRE_STATE.level === idx;
+        const passed = MILLIONAIRE_STATE.started && idx < MILLIONAIRE_STATE.level;
+        const milestone = [5, 10, 15].includes(level);
+        return `
+            <div class="millionaire-ladder-row ${current ? 'current' : ''} ${passed ? 'passed' : ''} ${milestone ? 'milestone' : ''}">
+                <span>${level}</span>
+                <strong>${prize}</strong>
+            </div>
+        `;
+    }).reverse().join('');
+}
+
+function renderMillionaireAudience() {
+    const result = MILLIONAIRE_STATE.audienceResult;
+    if (!result) return '';
+    const labels = ['A', 'B', 'C', 'D'];
+    return `
+        <div class="millionaire-audience-panel">
+            <div class="millionaire-audience-title"><i class="fas fa-users"></i> Ý kiến khán giả</div>
+            <div class="millionaire-audience-bars">
+                ${result.map((percent, idx) => `
+                    <div class="millionaire-audience-item">
+                        <div class="millionaire-audience-bar-wrap">
+                            <div class="millionaire-audience-bar" style="height:${Math.max(4, percent)}%"></div>
+                        </div>
+                        <strong>${percent}%</strong>
+                        <span>${labels[idx]}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderMillionaire() {
+    restoreMillionaireStateFromStorage();
+    const state = MILLIONAIRE_STATE;
+    const question = getMillionaireCurrentQuestion();
+    const labels = ['A', 'B', 'C', 'D'];
+
+    let mainContent = '';
+    if (!state.started) {
+        mainContent = `
+            <div class="millionaire-welcome">
+                <div class="millionaire-logo-orb"><i class="fas fa-coins"></i></div>
+                <h2>AI LÀ TRIỆU PHÚ</h2>
+                <p>15 câu hỏi · 4 phương án · 3 quyền trợ giúp</p>
+                ${renderMillionaireBankSelector()}
+                <div class="millionaire-welcome-actions">
+                    <button class="btn millionaire-manager-open-btn" onclick="millionaireOpenQuestionManager()">
+                        <i class="fas fa-list-check"></i> Quản lý câu hỏi
+                    </button>
+                </div>
+                ${renderMillionaireQuestionManager()}
+                <div class="millionaire-timer-settings">
+                    <div class="millionaire-timer-settings-title"><i class="fas fa-stopwatch"></i> Bộ đếm thời gian</div>
+                    <label class="millionaire-timer-switch"><input type="checkbox" ${state.timerEnabled ? 'checked' : ''} onchange="millionaireSetTimerEnabled(this.checked)"><span><strong>Bật bộ đếm</strong><small>Tự đếm lại ở mỗi câu.</small></span></label>
+                    <label class="millionaire-timer-switch"><input type="checkbox" ${state.timerSoundEnabled ? 'checked' : ''} onchange="millionaireSetTimerSoundEnabled(this.checked)"><span><strong>Âm báo thời gian</strong><small>Tít 10 giây cuối, dồn ở 5 giây cuối và âm riêng khi hết giờ.</small></span></label>
+                    <div class="millionaire-timer-controls">
+                        <select onchange="if(this.value)millionaireSetTimerPreset(this.value)"><option value="">Chọn nhanh...</option>${[15,30,45,60,90,120].map(v=>`<option value="${v}" ${state.timerSeconds===v?'selected':''}>${v<60?v+' giây':v===60?'1 phút':v===90?'1 phút 30 giây':'2 phút'}</option>`).join('')}</select>
+                        <input id="millionaireTimerMinutes" type="number" min="0" max="59" value="${Math.floor((state.timerSeconds||30)/60)}"><span>phút</span>
+                        <input id="millionaireTimerSeconds" type="number" min="0" max="59" value="${(state.timerSeconds||30)%60}"><span>giây</span>
+                        <button class="btn" onclick="millionaireSetCustomTimer()"><i class="fas fa-check"></i> Áp dụng</button>
+                    </div>
+                </div>
+                <div class="millionaire-play-mode-box">
+                    <div class="millionaire-play-mode-title"><i class="fas fa-gamepad"></i> Luật chơi</div>
+                    <label><input type="radio" name="millionairePlayMode" value="stop_on_wrong" ${state.playMode === 'stop_on_wrong' ? 'checked' : ''} onchange="millionaireSetPlayMode(this.value)"><span><strong>1. Sai là dừng</strong><small>Chọn sai → kết thúc lượt chơi.</small></span></label>
+                    <label><input type="radio" name="millionairePlayMode" value="continue_on_wrong" ${state.playMode === 'continue_on_wrong' ? 'checked' : ''} onchange="millionaireSetPlayMode(this.value)"><span><strong>2. Sai vẫn tiếp tục</strong><small>Chọn sai → báo sai → chuyển sang câu tiếp theo.</small></span></label>
+                    <label><input type="radio" name="millionairePlayMode" value="retry_until_correct" ${state.playMode === 'retry_until_correct' ? 'checked' : ''} onchange="millionaireSetPlayMode(this.value)"><span><strong>3. Phải chọn đúng mới qua câu</strong><small>Chọn sai → ở nguyên câu và chọn lại đến khi đúng.</small></span></label>
+                </div>
+                <button class="btn millionaire-start-btn" onclick="millionaireStart()">
+                    <i class="fas fa-play"></i> Bắt đầu
+                </button>
+            </div>
+        `;
+    } else if (state.ended) {
+        const wonLevel = Math.max(0, state.level);
+        const wonPrize = wonLevel > 0 ? MILLIONAIRE_PRIZES[Math.min(wonLevel - 1, 14)] : '0';
+        const isWinner = state.level >= 15;
+        mainContent = `
+            <div class="millionaire-welcome millionaire-end">
+                <div class="millionaire-logo-orb ${isWinner ? 'winner' : ''}">
+                    <i class="fas ${isWinner ? 'fa-trophy' : 'fa-flag-checkered'}"></i>
+                </div>
+                <h2>${isWinner ? 'XUẤT SẮC!' : 'KẾT THÚC LƯỢT CHƠI'}</h2>
+                <p>${escapeHtml(state.message)}</p>
+                <div class="millionaire-final-prize">${wonPrize} điểm thưởng</div>
+                <button class="btn millionaire-start-btn" onclick="millionaireRestart()">
+                    <i class="fas fa-rotate-right"></i> Chơi lại
+                </button>
+            </div>
+        `;
+    } else if (question) {
+        mainContent = `
+            <div class="millionaire-stage">
+                <div class="millionaire-status-line">
+                    <span>Câu ${state.level + 1}/15 · ${question?.difficulty === 'easy' ? 'Dễ' : question?.difficulty === 'medium' ? 'Trung bình' : 'Khó'}</span>
+                    ${state.timerEnabled ? `<span id="millionaireTimerDisplay" class="millionaire-timer-display ${state.timerRemaining<=10?'urgent':''} ${state.timerRemaining<=5?'critical':''}">${millionaireFormatTimer(state.timerRemaining)}</span>` : ''}
+                    <strong>${MILLIONAIRE_PRIZES[state.level]} điểm</strong>
+                </div>
+                <div class="millionaire-question-meta">
+                    ${escapeHtml(question?.subject || 'Tổng hợp')} · ${escapeHtml(question?.topic || 'Kiến thức chung')}
+                </div>
+
+                <div class="millionaire-question millionaire-question-animate">
+                    ${escapeHtml(question.q)}
+                </div>
+
+                <div class="millionaire-answers">
+                    ${question.a.map((answer, idx) => {
+                        const hidden = state.hiddenAnswers.includes(idx);
+                        const triedWrong = state.playMode === 'retry_until_correct' && state.wrongAttempts.includes(idx);
+                        const selected = state.selectedIndex === idx;
+                        const isCorrectReveal = state.locked && idx === question.c;
+                        const isWrongReveal = state.locked && selected && idx !== question.c;
+                        return `
+                            <button class="millionaire-answer
+                                ${hidden ? 'hidden-answer' : ''}
+                                ${triedWrong ? 'wrong-attempt' : ''}
+                                ${selected ? 'selected' : ''}
+                                ${isCorrectReveal ? 'correct' : ''}
+                                ${isWrongReveal ? 'wrong' : ''}"
+                                ${hidden || triedWrong || state.locked ? 'disabled' : ''}
+                                onclick="millionaireChooseAnswer(${idx})">
+                                <span class="millionaire-answer-label">${labels[idx]}:</span>
+                                <span>${escapeHtml(answer)}</span>
+                            </button>
+                        `;
+                    }).join('')}
+                </div>
+
+                <div class="millionaire-message">${escapeHtml(state.message)}</div>
+                ${renderMillionaireAudience()}
+            </div>
+        `;
+    }
+
+    return `
+        <div class="millionaire-page ${millionaireStageClass()}">
+            <div class="millionaire-shell">
+                <section class="millionaire-main">
+                    <div class="millionaire-brand">
+                        <div class="millionaire-brand-top">
+                            <span><i class="fas fa-star"></i> Trò chơi kiến thức</span>
+                            <button class="millionaire-sound-toggle" onclick="millionaireToggleSound()" title="${state.soundEnabled ? 'Tắt âm thanh' : 'Bật âm thanh'}">
+                                <i class="fas ${state.soundEnabled ? 'fa-volume-high' : 'fa-volume-xmark'}"></i>
+                            </button>
+                        </div>
+                        <h3>AI LÀ TRIỆU PHÚ</h3>
+                    </div>
+
+                    ${mainContent}
+
+                    <div class="millionaire-lifelines">
+                        <button class="millionaire-lifeline ${state.lifelines.fifty ? '' : 'used'}"
+                                onclick="millionaireUseFifty()"
+                                ${!state.started || state.ended || !state.lifelines.fifty || state.locked ? 'disabled' : ''}>
+                            <i class="fas fa-divide"></i><span>50:50</span>
+                        </button>
+                        <button class="millionaire-lifeline ${state.lifelines.audience ? '' : 'used'}"
+                                onclick="millionaireUseAudience()"
+                                ${!state.started || state.ended || !state.lifelines.audience || state.locked ? 'disabled' : ''}>
+                            <i class="fas fa-users"></i><span>Khán giả</span>
+                        </button>
+                        <button class="millionaire-lifeline ${state.lifelines.switch ? '' : 'used'}"
+                                onclick="millionaireUseSwitch()"
+                                ${!state.started || state.ended || !state.lifelines.switch || state.locked ? 'disabled' : ''}>
+                            <i class="fas fa-shuffle"></i><span>Đổi câu</span>
+                        </button>
+                        <button class="millionaire-lifeline quit" onclick="millionaireQuit()"
+                                ${!state.started || state.ended || state.locked ? 'disabled' : ''}>
+                            <i class="fas fa-door-open"></i><span>Dừng chơi</span>
+                        </button>
+                        <button class="millionaire-lifeline end-session" onclick="millionaireEndSession()"
+                                ${!state.started && !state.ended ? 'disabled' : ''}>
+                            <i class="fas fa-stop"></i><span>Kết thúc</span>
+                        </button>
+                    </div>
+                </section>
+
+                <aside class="millionaire-ladder">
+                    <div class="millionaire-ladder-title"><i class="fas fa-trophy"></i> Mốc điểm</div>
+                    ${renderMillionaireLadder()}
+                </aside>
+            </div>
+        </div>
+    `;
+}
+
+function refreshMillionaire() {
+    saveMillionaireStateToStorage();
+    if (APP_STATE.currentPage !== 'millionaire') return;
+    const container = document.getElementById('pageContainer');
+    if (container) container.innerHTML = renderMillionaire();
+}
+
+function initMillionaire() {
+    // Không reset khi quay lại module. Chỉ khởi tạo nếu chưa từng có state.
+    if (!Array.isArray(MILLIONAIRE_STATE.questions)) {
+        resetMillionaireState();
+    }
+
+    preloadMillionaireAudio();
+
+    // Nếu đang giữa một câu và chỉ vừa chuyển module rồi quay lại,
+    // tiếp tục nhạc suy nghĩ sau khi giao diện đã được render lại.
+    if (
+        MILLIONAIRE_STATE.started &&
+        !MILLIONAIRE_STATE.ended &&
+        !MILLIONAIRE_STATE.locked &&
+        MILLIONAIRE_STATE.soundEnabled
+    ) {
+        millionaireStartThinking(220);
+    }
+}
+
+
+function millionaireTimerTotalSeconds(){const v=Number(MILLIONAIRE_STATE.timerSeconds);return Number.isFinite(v)?Math.max(1,Math.min(3599,Math.round(v))):30}
+function millionaireSetTimerEnabled(v){MILLIONAIRE_STATE.timerEnabled=!!v;if(!v)millionaireStopTimer();saveMillionaireStateToStorage();refreshMillionaire()}
+function millionaireSetTimerSoundEnabled(v){MILLIONAIRE_STATE.timerSoundEnabled=!!v;saveMillionaireStateToStorage();refreshMillionaire()}
+function millionaireSetTimerPreset(v){v=Number(v);if(v>0){MILLIONAIRE_STATE.timerSeconds=Math.min(3599,Math.round(v));MILLIONAIRE_STATE.timerRemaining=MILLIONAIRE_STATE.timerSeconds;saveMillionaireStateToStorage();refreshMillionaire()}}
+function millionaireSetCustomTimer(){const m=Math.max(0,Number(document.getElementById('millionaireTimerMinutes')?.value||0));const s=Math.max(0,Number(document.getElementById('millionaireTimerSeconds')?.value||0));const total=Math.min(3599,Math.round(m*60+s));if(total<1){alert('Thời gian phải lớn hơn 0 giây.');return}MILLIONAIRE_STATE.timerSeconds=total;MILLIONAIRE_STATE.timerRemaining=total;saveMillionaireStateToStorage();refreshMillionaire()}
+function millionaireFormatTimer(v){v=Math.max(0,Number(v)||0);return `${String(Math.floor(v/60)).padStart(2,'0')}:${String(v%60).padStart(2,'0')}`}
+function millionaireTimerBeep(kind='tick'){if(!MILLIONAIRE_STATE.timerEnabled||!MILLIONAIRE_STATE.timerSoundEnabled)return;try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=millionaireTimerBeep._ctx||(millionaireTimerBeep._ctx=new C());if(c.state==='suspended')c.resume();const o=c.createOscillator(),g=c.createGain(),n=c.currentTime;o.connect(g);g.connect(c.destination);if(kind==='timeout'){o.frequency.setValueAtTime(330,n);o.frequency.exponentialRampToValueAtTime(180,n+.55);g.gain.setValueAtTime(millionaireBoostVolume(.14),n);g.gain.exponentialRampToValueAtTime(.001,n+.65);o.start(n);o.stop(n+.68)}else{o.frequency.value=kind==='urgent'?980:720;g.gain.setValueAtTime(millionaireBoostVolume(kind==='urgent'?.10:.055),n);g.gain.exponentialRampToValueAtTime(.001,n+.10);o.start(n);o.stop(n+.11)}}catch(e){}}
+function millionaireStopTimer(){if(MILLIONAIRE_STATE.timerIntervalId){clearInterval(MILLIONAIRE_STATE.timerIntervalId);MILLIONAIRE_STATE.timerIntervalId=null}}
+function millionaireStartTimer(reset=true){millionaireStopTimer();const s=MILLIONAIRE_STATE;if(!s.timerEnabled||!s.started||s.ended)return;if(reset)s.timerRemaining=millionaireTimerTotalSeconds();s.timerIntervalId=setInterval(()=>{if(s.locked||s.ended||!s.started)return;s.timerRemaining=Math.max(0,s.timerRemaining-1);const r=s.timerRemaining;if(r>0&&r<=10)millionaireTimerBeep(r<=5?'urgent':'tick');const el=document.getElementById('millionaireTimerDisplay');if(el){el.textContent=millionaireFormatTimer(r);el.classList.toggle('urgent',r<=10);el.classList.toggle('critical',r<=5)}if(r<=0){millionaireStopTimer();millionaireTimerBeep('timeout');millionaireHandleTimeout()}},1000)}
+function millionaireHandleTimeout(){const s=MILLIONAIRE_STATE;if(!s.started||s.ended)return;stopMillionaireThinking();s.locked=true;s.phase='timeout';s.message='Hết thời gian!';refreshMillionaire();if(s.playMode==='continue_on_wrong'){setTimeout(()=>{if(s.level>=14){s.level=15;s.ended=true;s.phase='finished';s.message='Hết thời gian. Đã hoàn thành bộ câu hỏi.';refreshMillionaire();return}s.level++;s.locked=false;s.selectedIndex=null;s.hiddenAnswers=[];s.audienceResult=null;s.wrongAttempts=[];s.phase='question';s.message=`Hết thời gian. Tiếp tục câu ${s.level+1}.`;millionaireSound('question');millionaireStartThinking(350);refreshMillionaire();millionaireStartTimer(true)},1000);return}if(s.playMode==='retry_until_correct'){setTimeout(()=>{s.locked=false;s.selectedIndex=null;s.phase='question';s.message='Hết thời gian. Hãy tiếp tục chọn đến khi đúng.';refreshMillionaire()},900);return}setTimeout(()=>{const safe=s.level>=10?10:(s.level>=5?5:0);s.level=safe;s.ended=true;s.phase='ended';s.message=safe?`Hết thời gian. Bạn bảo toàn mốc câu ${safe}.`:'Hết thời gian. Lượt chơi kết thúc.';refreshMillionaire()},900)}
+
+function millionaireSetPlayMode(mode) {
+    if (!['stop_on_wrong','continue_on_wrong','retry_until_correct'].includes(mode)) return;
+    MILLIONAIRE_STATE.playMode = mode;
+    saveMillionaireStateToStorage();
+    refreshMillionaire();
+}
+
+function millionaireStart() {
+    stopMillionaireAllAudio();
+    const playMode = MILLIONAIRE_STATE.playMode || 'stop_on_wrong';
+    const timerEnabled=MILLIONAIRE_STATE.timerEnabled, timerSoundEnabled=MILLIONAIRE_STATE.timerSoundEnabled, timerSeconds=millionaireTimerTotalSeconds();
+    const grade = MILLIONAIRE_STATE.selectedGrade || 'all';
+    const subject = MILLIONAIRE_STATE.selectedSubject || 'all';
+    const topic = MILLIONAIRE_STATE.selectedTopic || 'all';
+
+    resetMillionaireState();
+    MILLIONAIRE_STATE.playMode = playMode;
+    MILLIONAIRE_STATE.timerEnabled=timerEnabled; MILLIONAIRE_STATE.timerSoundEnabled=timerSoundEnabled; MILLIONAIRE_STATE.timerSeconds=timerSeconds; MILLIONAIRE_STATE.timerRemaining=timerSeconds;
+    MILLIONAIRE_STATE.wrongAttempts = [];
+    MILLIONAIRE_STATE.selectedGrade = grade;
+    MILLIONAIRE_STATE.selectedSubject = subject;
+    MILLIONAIRE_STATE.selectedTopic = topic;
+    MILLIONAIRE_STATE.questions = createMillionaireQuestionSet();
+
+    if (MILLIONAIRE_STATE.questions.length < 15) {
+        const info = MILLIONAIRE_STATE.bankInfo || {};
+        MILLIONAIRE_STATE.started = false;
+        MILLIONAIRE_STATE.message =
+            `Bộ lọc hiện chỉ có ${info.exactCount || 0} câu phù hợp. ` +
+            `Cần ít nhất 15 câu đúng Khối/Môn/Chủ đề; hệ thống không tự lấy câu môn khác.`;
+        refreshMillionaire();
+        alert(MILLIONAIRE_STATE.message);
+        return;
+    }
+
+    MILLIONAIRE_STATE.started = true;
+    MILLIONAIRE_STATE.phase = 'question';
+    MILLIONAIRE_STATE.message = 'Chọn đáp án đúng.';
+    millionaireSound('start');
+    millionaireStartThinking(1250);
+    refreshMillionaire();
+    millionaireStartTimer(true);
+}
+
+function millionaireRestart() {
+    millionaireStart();
+}
+
+function millionaireChooseAnswer(index) {
+    const state = MILLIONAIRE_STATE;
+    const question = getMillionaireCurrentQuestion();
+    if (!state.started || state.ended || state.locked || !question) return;
+    if (state.hiddenAnswers.includes(index)) return;
+    if (state.playMode === 'retry_until_correct' && state.wrongAttempts.includes(index)) return;
+
+    state.selectedIndex = index;
+    millionaireStopTimer();
+    stopMillionaireThinking();
+    state.locked = true;
+    state.phase = 'locked';
+    state.message = 'Đã khóa đáp án...';
+    millionaireSound('lock');
+    refreshMillionaire();
+
+    setTimeout(() => {
+        if (index === question.c) {
+            state.phase = 'correct';
+            state.message = 'Chính xác!';
+            state.wrongAttempts = [];
+            millionaireSound('correct');
+            refreshMillionaire();
+
+            setTimeout(() => {
+                const answeredLevel = state.level + 1;
+                if (answeredLevel >= 15) {
+                    state.level = 15;
+                    state.ended = true;
+                    stopMillionaireThinking();
+                    state.phase = 'winner';
+                    state.message = 'Bạn đã hoàn thành 15 câu hỏi!';
+                    millionaireSound('winner');
+                    refreshMillionaire();
+                    return;
+                }
+                state.level++;
+                state.locked = false;
+                state.selectedIndex = null;
+                state.hiddenAnswers = [];
+                state.audienceResult = null;
+                state.wrongAttempts = [];
+                state.phase = 'question';
+                state.message = `Chính xác! Tiếp tục câu ${state.level + 1}.`;
+                if ([5,10].includes(answeredLevel)) millionaireSound('milestone');
+                else millionaireSound('question');
+                millionaireStartThinking(350);
+                refreshMillionaire();
+                millionaireStartTimer(true);
+            }, 850);
+            return;
+        }
+
+        stopMillionaireThinking();
+        state.phase = 'wrong';
+        millionaireSound('wrong');
+
+        if (state.playMode === 'continue_on_wrong') {
+            state.message = `Chưa đúng. Đáp án đúng là ${['A','B','C','D'][question.c]}.`;
+            refreshMillionaire();
+            setTimeout(() => {
+                if (state.level >= 14) {
+                    state.level = 15;
+                    state.ended = true;
+                    state.phase = 'finished';
+                    state.message = 'Đã hoàn thành 15 câu hỏi.';
+                    refreshMillionaire();
+                    return;
+                }
+                state.level++;
+                state.locked = false;
+                state.selectedIndex = null;
+                state.hiddenAnswers = [];
+                state.audienceResult = null;
+                state.wrongAttempts = [];
+                state.phase = 'question';
+                state.message = `Tiếp tục câu ${state.level + 1}.`;
+                millionaireSound('question');
+                millionaireStartThinking(350);
+                refreshMillionaire();
+                millionaireStartTimer(true);
+            }, 1200);
+            return;
+        }
+
+        if (state.playMode === 'retry_until_correct') {
+            if (!state.wrongAttempts.includes(index)) state.wrongAttempts.push(index);
+            state.message = 'Chưa đúng. Hãy chọn lại đáp án khác.';
+            refreshMillionaire();
+            setTimeout(() => {
+                state.locked = false;
+                state.selectedIndex = null;
+                state.phase = 'question';
+                state.message = 'Hãy chọn lại. Chỉ khi đúng mới chuyển sang câu tiếp theo.';
+                millionaireStartThinking(250);
+                refreshMillionaire();
+                millionaireStartTimer(true);
+            }, 900);
+            return;
+        }
+
+        state.message = 'Rất tiếc, đáp án chưa đúng.';
+        refreshMillionaire();
+        setTimeout(() => {
+            const safeLevel = state.level >= 10 ? 10 : (state.level >= 5 ? 5 : 0);
+            state.level = safeLevel;
+            state.ended = true;
+            state.phase = 'ended';
+            state.message = safeLevel
+                ? `Rất tiếc, đáp án chưa đúng. Bạn bảo toàn mốc câu ${safeLevel}.`
+                : 'Rất tiếc, đáp án chưa đúng. Hẹn bạn ở lượt chơi tiếp theo.';
+            refreshMillionaire();
+        }, 1000);
+    }, 800);
+}
+
+function millionaireUseFifty() {
+    const state = MILLIONAIRE_STATE;
+    const q = getMillionaireCurrentQuestion();
+    if (!q || !state.lifelines.fifty || state.locked) return;
+
+    const wrong = [0,1,2,3].filter(i => i !== q.c);
+    // Chọn 2 đáp án sai để loại.
+    const shuffled = wrong.sort(() => Math.random() - 0.5);
+    state.hiddenAnswers = shuffled.slice(0, 2);
+    state.lifelines.fifty = false;
+    state.phase = 'lifeline';
+    millionaireSound('fifty');
+    state.message = '50:50 đã loại 2 phương án sai.';
+    refreshMillionaire();
+}
+
+function millionaireUseAudience() {
+    const state = MILLIONAIRE_STATE;
+    const q = getMillionaireCurrentQuestion();
+    if (!q || !state.lifelines.audience || state.locked) return;
+
+    const hidden = new Set(state.hiddenAnswers);
+    const active = [0,1,2,3].filter(i => !hidden.has(i));
+    const result = [0,0,0,0];
+
+    // Khán giả có xu hướng nghiêng về đáp án đúng, nhưng không tuyệt đối.
+    let correctPercent = active.length === 2
+        ? 62 + Math.floor(Math.random() * 22)
+        : 45 + Math.floor(Math.random() * 25);
+
+    result[q.c] = correctPercent;
+    let remaining = 100 - correctPercent;
+    const others = active.filter(i => i !== q.c);
+
+    others.forEach((idx, pos) => {
+        if (pos === others.length - 1) {
+            result[idx] = remaining;
+        } else {
+            const max = Math.max(1, remaining - (others.length - pos - 1));
+            const val = Math.floor(Math.random() * max);
+            result[idx] = val;
+            remaining -= val;
+        }
+    });
+
+    state.audienceResult = result;
+    state.lifelines.audience = false;
+    state.phase = 'lifeline';
+    millionaireSound('audience');
+    state.message = 'Khán giả đã đưa ra lựa chọn tham khảo.';
+    refreshMillionaire();
+}
+
+function millionaireUseSwitch() {
+    const state = MILLIONAIRE_STATE;
+    if (!state.lifelines.switch || state.locked) return;
+
+    const available = MILLIONAIRE_SWITCH_QUESTIONS
+        .map((q, idx) => ({ q, idx }))
+        .filter(item => !state.usedSwitchIndexes.includes(item.idx));
+
+    if (!available.length) {
+        state.message = 'Không còn câu hỏi dự phòng.';
+        refreshMillionaire();
+        return;
+    }
+
+    const pick = available[Math.floor(Math.random() * available.length)];
+    state.usedSwitchIndexes.push(pick.idx);
+    state.questions[state.level] = { ...pick.q, a: [...pick.q.a] };
+    state.hiddenAnswers = [];
+    state.audienceResult = null;
+    state.selectedIndex = null;
+    state.lifelines.switch = false;
+    state.phase = 'question';
+    millionaireSound('switch');
+    state.message = 'Đã đổi sang câu hỏi mới.';
+    refreshMillionaire();
+}
+
+function millionaireEndSession() {
+    const state = MILLIONAIRE_STATE;
+    const hasSession = state.started || state.ended;
+
+    if (hasSession && !confirm('Kết thúc phiên Ai là triệu phú hiện tại và trở về màn hình ban đầu?')) {
+        return;
+    }
+
+    const keepGrade = state.selectedGrade || 'all';
+    const keepSubject = state.selectedSubject || 'all';
+    const keepTopic = state.selectedTopic || 'all';
+    const keepSound = state.soundEnabled;
+    const keepPlayMode = state.playMode || 'stop_on_wrong';
+
+    stopMillionaireAllAudio();
+    resetMillionaireState();
+
+    // Trở về màn hình ban đầu nhưng giữ bộ lọc người dùng đã chọn.
+    state.selectedGrade = keepGrade;
+    state.selectedSubject = keepSubject;
+    state.selectedTopic = keepTopic;
+    state.soundEnabled = keepSound;
+    state.playMode = keepPlayMode;
+    state.wrongAttempts = [];
+    state.started = false;
+    state.ended = false;
+    state.locked = false;
+    state.level = 0;
+    state.phase = 'idle';
+    state.message = 'Chọn bộ câu hỏi rồi nhấn “Bắt đầu”.';
+
+    clearMillionaireStateStorage();
+    refreshMillionaire();
+}
+
+function millionaireQuit() {
+    const state = MILLIONAIRE_STATE;
+    if (!state.started || state.ended || state.locked) return;
+
+    stopMillionaireThinking();
+    state.ended = true;
+    state.phase = 'ended';
+    state.message = state.level > 0
+        ? `Bạn chủ động dừng cuộc chơi sau ${state.level} câu đúng.`
+        : 'Bạn đã dừng cuộc chơi.';
+    refreshMillionaire();
+}
+
+window.addEventListener('pagehide', () => {
+    saveWheelStateToStorage();
+    saveMillionaireStateToStorage();
+});
+
+window.endWheelSession = endWheelSession;
+window.millionaireSetTimerEnabled=millionaireSetTimerEnabled;
+window.millionaireSetTimerSoundEnabled=millionaireSetTimerSoundEnabled;
+window.millionaireSetTimerPreset=millionaireSetTimerPreset;
+window.millionaireSetCustomTimer=millionaireSetCustomTimer;
+window.millionaireSetPlayMode = millionaireSetPlayMode;
+window.millionaireStart = millionaireStart;
+window.millionaireRestart = millionaireRestart;
+window.millionaireChooseAnswer = millionaireChooseAnswer;
+window.millionaireUseFifty = millionaireUseFifty;
+window.millionaireUseAudience = millionaireUseAudience;
+window.millionaireUseSwitch = millionaireUseSwitch;
+window.millionaireQuit = millionaireQuit;
+window.millionaireEndSession = millionaireEndSession;
+window.millionaireToggleSound = millionaireToggleSound;
+window.millionaireSetGrade = millionaireSetGrade;
+window.millionaireSetSubject = millionaireSetSubject;
+window.millionaireSetTopic = millionaireSetTopic;
+window.millionaireOpenQuestionManager = millionaireOpenQuestionManager;
+window.millionaireCloseQuestionManager = millionaireCloseQuestionManager;
+window.millionaireSaveQuestion = millionaireSaveQuestion;
+window.millionaireEditQuestion = millionaireEditQuestion;
+window.millionaireDeleteQuestion = millionaireDeleteQuestion;
+window.millionaireResetQuestionForm = millionaireResetQuestionForm;
+window.millionaireToggleQuestionSelection = millionaireToggleQuestionSelection;
+window.millionaireSelectAllCustomQuestions = millionaireSelectAllCustomQuestions;
+window.millionaireDeleteSelectedQuestions = millionaireDeleteSelectedQuestions;
+window.millionaireDeleteAllCustomQuestions = millionaireDeleteAllCustomQuestions;
+window.millionaireDownloadExcelTemplate = millionaireDownloadExcelTemplate;
+window.millionairePickExcelFile = millionairePickExcelFile;
+window.exportMillionaireQuestionsToExcel = exportMillionaireQuestionsToExcel;
+window.importMillionaireQuestionsFromPastedAI = importMillionaireQuestionsFromPastedAI;
+window.millionaireFillAIPasteExample = millionaireFillAIPasteExample;
+
+
 // ============================================================
 // 4. RENDER PAGES
 // ============================================================
 
 function renderPage(page) {
+    const previousPage = APP_STATE.currentPage;
+
+    // BƯỚC 151.33:
+    // - Không reset Vòng quay / Ai là triệu phú khi đổi menu.
+    // - Chỉ tạm dừng nhạc suy nghĩ khi rời màn hình Triệu phú.
+    // - Nếu Vòng quay đang quay, không cho rời trang giữa animation để tránh mất kết quả.
+    if (previousPage === 'wheel' && page !== 'wheel' && WHEEL_STATE.isSpinning) {
+        showToast('Vòng quay đang chạy. Vui lòng chờ kết quả trước khi chuyển module.', 'warning', 2200);
+        return;
+    }
+
+    if (previousPage === 'millionaire' && page !== 'millionaire') {
+        stopMillionaireThinking();
+        saveMillionaireStateToStorage();
+    }
+
+    if (previousPage === 'wheel' && page !== 'wheel') {
+        saveWheelStateToStorage();
+    }
+
     APP_STATE.currentPage = page;
     document.body.classList.toggle('page-wheel-active', page === 'wheel');
     document.getElementById('pageTitle').textContent = getPageTitle(page);
@@ -2393,6 +4823,7 @@ function renderPage(page) {
         case 'settings': container.innerHTML = renderSettings(); break;
         case 'public-content': container.innerHTML = renderPublicContentManager(); break;
         case 'wheel': container.innerHTML = renderWheel(); break;
+        case 'millionaire': container.innerHTML = renderMillionaire(); break;
         default: container.innerHTML = '<p>Trang không tồn tại.</p>';
     }
     setTimeout(() => {
@@ -2406,6 +4837,7 @@ function renderPage(page) {
         if (page === 'search') initSearch();
         if (page === 'statistics') initStatCharts();
         if (page === 'wheel') initWheel();
+        if (page === 'millionaire') initMillionaire();
         applyViewerReadOnlyUI();
         if (isViewer() && page === 'attendance') {
             setTimeout(applyViewerReadOnlyUI, 120);
@@ -2427,7 +4859,8 @@ function getPageTitle(page) {
         search: 'Tìm kiếm',
         settings: 'Cài đặt',
         'public-content': 'Nội dung website công khai',
-        wheel: 'Vòng quay may mắn'
+        wheel: 'Vòng quay may mắn',
+        millionaire: 'Ai là triệu phú'
     };
     return titles[page] || page;
 }
@@ -2671,6 +5104,7 @@ function renderStudents() {
           <div class="student-top-actions">
             <button class="btn btn-primary" onclick="openAddStudent()"><i class="fas fa-plus"></i> Thêm học sinh</button>
             <button class="btn btn-secondary" onclick="document.getElementById('importFileInput').click()"><i class="fas fa-file-import"></i> Nhập Excel</button>
+            <button class="btn btn-info" onclick="document.getElementById('vneduStudentImportInput').click()"><i class="fas fa-school"></i> Cập nhật VNEDU</button>
             <button class="btn btn-secondary" onclick="exportExcel()"><i class="fas fa-download"></i> Xuất danh sách</button>
             <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event)">
           </div>
@@ -2698,7 +5132,7 @@ function renderStudents() {
               <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th><th>STT</th><th>Ảnh</th><th data-sort="id">Mã HS</th><th data-sort="fullName">Họ tên</th><th data-sort="dob">Ngày sinh</th><th data-sort="gender">Giới tính</th><th data-sort="class">Lớp</th><th data-sort="competence">Năng lực</th><th data-sort="quality">Phẩm chất</th><th data-sort="status">Trạng thái</th><th>Thao tác</th>
             </tr></thead><tbody id="studentTableBody"></tbody></table></div>
             <div class="student-list-footer"><div class="student-export-hint"><i class="fas fa-circle-info"></i> Nút <strong>Xuất danh sách</strong> sẽ xuất đúng danh sách đang lọc phía trên.</div><div class="pagination" id="studentPagination"></div></div>
-            <input type="file" id="vneduStudentImportInput" accept=".xlsx,.xls" style="display:none" onchange="importVnEduStudentWorkbook(event)">
+            <input type="file" id="vneduStudentImportInput" accept=".xlsx,.xls" multiple style="display:none" onchange="importVnEduStudentWorkbook(event)">
           </section>
           ${editorHtml}
         </div>
@@ -7920,48 +10354,823 @@ function getVnEduPeriodMeta(p){ return {
  ck2:{semester:'2',token:'ck2',title:'HỌC KỲ 2 - CUỐI KỲ 2',score:'KT CK2',rating:'XL CK2',retestScore:'KT CK2 (Sau thi lại)',retestRating:'XL CK2 (Sau thi lại)'}
 }[p]; }
 
-async function importVnEduStudentWorkbook(event){
- if(!requireEditPermission('nhập danh sách học sinh theo mẫu VNEDU')){ if(event?.target)event.target.value=''; return; }
- const file=event?.target?.files?.[0]; if(!file)return;
- try{
-  const wb=XLSX.read(new Uint8Array(await file.arrayBuffer()),{type:'array',cellDates:false}), parsed=[];
-  for(const sn of wb.SheetNames){
-   if(/bia/i.test(sn))continue;
-   const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',raw:true});
-   let cls=''; for(const row of rows.slice(0,8)){ const m=row.map(normalizeVnEduText).join(' ').match(/Lớp\s*:\s*([1-5][A-Za-z0-9]+)/i); if(m){cls=m[1].toUpperCase();break;} }
-   if(!cls&&/^[1-5][A-Za-z0-9]+$/i.test(sn))cls=sn.toUpperCase(); if(!cls)continue;
-   const h=rows.findIndex(row=>row.some(v=>/Mã học sinh/i.test(normalizeVnEduText(v)))); if(h<0)continue;
-   const header=(rows[h]||[]).map(v=>normalizeVnEduText(v).toLowerCase());
-   const col=(patterns,fallback=-1)=>{
-       const i=header.findIndex(x=>patterns.some(p=>p.test(x)));
-       return i>=0?i:fallback;
-   };
-   const codeCol=col([/^mã học sinh$/i],1);
-   const nameCol=col([/^họ và tên$/i,/^họ tên$/i],2);
-   const dobCol=col([/^ngày sinh$/i],4);
-   const genderCol=col([/^giới tính$/i],5);
-   for(let r=h+1;r<rows.length;r++){
-    const row=rows[r],code=normalizeVnEduText(row[codeCol]),name=normalizeVnEduText(row[nameCol]);
-    if(!/^\d+$/.test(code)||!name)continue;
-    const genderRaw=normalizeVnEduText(row[genderCol]).toLowerCase();
-    const gender=genderRaw==='x'||genderRaw==='nữ'||genderRaw==='nu'?'Nữ':'Nam';
-    parsed.push({student_code:code,full_name:name,dob:parseVnEduDate(row[dobCol])||null,gender,class_name:cls,grade:cls[0]});
-   }
-  }
-  if(!parsed.length)throw new Error('Không tìm thấy học sinh đúng cấu trúc file mẫu.');
-  for(const cls of [...new Set(parsed.map(x=>x.class_name))]){
-   if(!APP_STATE.classes.some(c=>c.name===cls)){ const {data,error}=await supabase.from('app3_classes').insert([{name:cls,grade:cls[0],class_code:'L'+cls,teacher:APP_STATE.currentUserDisplayName||'Giáo viên'}]).select().single(); if(error)throw error; APP_STATE.classes.push(data); APP_STATE.classMap[cls]=data.id; }
-  }
-  let ok=0; for(const st of parsed){ const classId=APP_STATE.classes.find(c=>c.name===st.class_name)?.id;
-   const payload={student_code:st.student_code,full_name:st.full_name,dob:st.dob,gender:st.gender,class_id:classId,grade:st.grade,status:'Đang học'};
-   const existing=APP_STATE.students.find(s=>s.id===st.student_code);
-   const q=existing?supabase.from('app3_students').update(payload).eq('student_code',st.student_code):supabase.from('app3_students').insert([{...payload,avatar_url:DEFAULT_AVATAR}]);
-   const {error}=await q;if(error)throw error;ok++;
-  }
-  await loadAllData();
-  renderPage('students');
-  showToast(`Đã đồng bộ ${ok} học sinh từ file mẫu VNEDU và tải lại dữ liệu thành công.`,'success');
- }catch(err){console.error(err);showToast('Lỗi nhập danh sách VNEDU: '+err.message,'error');}finally{if(event?.target)event.target.value='';}
+
+// ============================================================
+// BƯỚC 151.24 - PREVIEW CẬP NHẬT HỌC SINH TỪ VNEDU
+// Chỉ đọc + đối chiếu. KHÔNG ghi Supabase ở bước này.
+// ============================================================
+
+function normalizeVnEduStudentKeyText(value) {
+    return normalizeVnEduText(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+function normalizeVnEduCompareDate(value) {
+    const parsed = parseVnEduDate(value);
+    return parsed || normalizeVnEduText(value);
+}
+
+function getVnEduRowValue(row, index) {
+    return index >= 0 ? row?.[index] : '';
+}
+
+function combineVnEduAddress(row) {
+    return [10, 11, 12, 13]
+        .map(i => normalizeVnEduText(row?.[i]))
+        .filter(Boolean)
+        .join(', ');
+}
+
+function parseVnEduStudentSheet(rows, sheetName, sourceFileName) {
+    let cls = '';
+    for (const row of rows.slice(0, 8)) {
+        const m = row.map(normalizeVnEduText).join(' ').match(/Lớp\s*:\s*([1-5][A-Za-z0-9]+)/i);
+        if (m) {
+            cls = m[1].toUpperCase();
+            break;
+        }
+    }
+    if (!cls && /^[1-5][A-Za-z0-9]+$/i.test(sheetName)) cls = sheetName.toUpperCase();
+
+    const headerRowIndex = rows.findIndex(row =>
+        row.some(v => /^Mã học sinh$/i.test(normalizeVnEduText(v)))
+        && row.some(v => /^Họ và tên$/i.test(normalizeVnEduText(v)))
+    );
+    if (headerRowIndex < 0) return [];
+
+    const header = (rows[headerRowIndex] || []).map(v => normalizeVnEduText(v).toLowerCase());
+    const findCol = (patterns, fallback = -1) => {
+        const idx = header.findIndex(x => patterns.some(p => p.test(x)));
+        return idx >= 0 ? idx : fallback;
+    };
+
+    const codeCol = findCol([/^mã học sinh$/i], 1);
+    const nameCol = findCol([/^họ và tên$/i, /^họ tên$/i], 5);
+    const dobCol = findCol([/^ngày sinh$/i], 6);
+    const enrollmentCol = findCol([/^ngày vào trường$/i], 7);
+    const genderCol = findCol([/^giới tính$/i], 8);
+    const fatherCol = findCol([/^tên cha$/i], 35);
+    const motherCol = findCol([/^tên mẹ$/i], 38);
+    const parentPhoneCol = findCol([/^điện thoại sll$/i], 41);
+    const studentPhoneCol = findCol([/^điện thoại hs$/i], 45);
+    const emailCol = findCol([/^email sll$/i], 42);
+    const noteCol = findCol([/^ghi chú$/i], 48);
+
+    const result = [];
+    for (let r = headerRowIndex + 1; r < rows.length; r++) {
+        const row = rows[r] || [];
+        const code = normalizeVnEduText(getVnEduRowValue(row, codeCol));
+        const fullName = normalizeVnEduText(getVnEduRowValue(row, nameCol));
+
+        // Bỏ các dòng trống / tiêu đề phụ / dòng tổng.
+        if (!code && !fullName) continue;
+        if (!/^\d+$/.test(code) || !fullName) {
+            result.push({
+                source_file: sourceFileName,
+                source_sheet: sheetName,
+                source_row: r + 1,
+                student_code: code,
+                full_name: fullName,
+                class_name: cls,
+                _invalid: true,
+                _invalid_reason: !code ? 'Thiếu mã học sinh' : (!/^\d+$/.test(code) ? 'Mã học sinh không hợp lệ' : 'Thiếu họ tên')
+            });
+            continue;
+        }
+
+        const genderRaw = normalizeVnEduText(getVnEduRowValue(row, genderCol)).toLowerCase();
+        const gender =
+            genderRaw === 'x' || genderRaw === 'nữ' || genderRaw === 'nu' || genderRaw === 'female'
+                ? 'Nữ'
+                : (genderRaw === 'nam' || genderRaw === 'male' ? 'Nam' : normalizeVnEduText(getVnEduRowValue(row, genderCol)));
+
+        result.push({
+            source_file: sourceFileName,
+            source_sheet: sheetName,
+            source_row: r + 1,
+            student_code: code,
+            full_name: fullName,
+            dob: parseVnEduDate(getVnEduRowValue(row, dobCol)) || null,
+            gender,
+            class_name: cls,
+            grade: cls ? cls.charAt(0) : '',
+            // Các trường dưới đây đã được đọc sẵn để dùng cho bước nhập thật sau này.
+            enrollment_date: parseVnEduDate(getVnEduRowValue(row, enrollmentCol)) || null,
+            address: combineVnEduAddress(row),
+            father_name: normalizeVnEduText(getVnEduRowValue(row, fatherCol)),
+            mother_name: normalizeVnEduText(getVnEduRowValue(row, motherCol)),
+            parent_phone: normalizeVnEduText(getVnEduRowValue(row, parentPhoneCol)),
+            phone: normalizeVnEduText(getVnEduRowValue(row, studentPhoneCol)),
+            email: normalizeVnEduText(getVnEduRowValue(row, emailCol)),
+            note: normalizeVnEduText(getVnEduRowValue(row, noteCol)),
+            // Giữ toàn bộ 49 cột gốc để phục vụ thiết kế import/export chuẩn ở bước sau.
+            _raw49: row.slice(0, 49)
+        });
+    }
+
+    return result;
+}
+
+async function parseVnEduStudentFiles(files) {
+    const parsed = [];
+    for (const file of files) {
+        const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), {
+            type: 'array',
+            cellDates: false
+        });
+        for (const sheetName of wb.SheetNames) {
+            if (/bia/i.test(sheetName)) continue;
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+                header: 1,
+                defval: '',
+                raw: true
+            });
+            parsed.push(...parseVnEduStudentSheet(rows, sheetName, file.name));
+        }
+    }
+    return parsed;
+}
+
+function compareVnEduStudentCore(existing, incoming) {
+    const changes = [];
+
+    const checks = [
+        ['Họ tên', normalizeVnEduText(existing.fullName), normalizeVnEduText(incoming.full_name)],
+        ['Ngày sinh', normalizeVnEduCompareDate(existing.dob), normalizeVnEduCompareDate(incoming.dob)],
+        ['Giới tính', normalizeVnEduText(existing.gender), normalizeVnEduText(incoming.gender)],
+        ['Lớp', normalizeVnEduText(existing.class).toUpperCase(), normalizeVnEduText(incoming.class_name).toUpperCase()],
+        ['Khối', normalizeVnEduText(existing.grade), normalizeVnEduText(incoming.grade)]
+    ];
+
+    for (const [label, oldValue, newValue] of checks) {
+        if (String(oldValue || '') !== String(newValue || '')) {
+            changes.push({ field: label, oldValue: oldValue || '', newValue: newValue || '' });
+        }
+    }
+    return changes;
+}
+
+function formatVnEduPreviewChanges(changes) {
+    if (!changes?.length) return '<span class="vnedu-preview-muted">Không thay đổi dữ liệu chính</span>';
+    return changes.map(change =>
+        `<div class="vnedu-preview-change"><strong>${escapeHtml(change.field)}:</strong> ` +
+        `<span class="old">${escapeHtml(change.oldValue || '—')}</span>` +
+        `<i class="fas fa-arrow-right"></i>` +
+        `<span class="new">${escapeHtml(change.newValue || '—')}</span></div>`
+    ).join('');
+}
+
+async function getExistingAvatarFlags(studentCodes) {
+    const flags = new Map();
+    const codes = [...new Set(studentCodes.filter(Boolean))];
+    if (!codes.length) return flags;
+
+    // Chia nhỏ để tránh tải một response base64 quá lớn.
+    const chunkSize = 25;
+    for (let i = 0; i < codes.length; i += chunkSize) {
+        const chunk = codes.slice(i, i + chunkSize);
+        const { data, error } = await supabase
+            .from('app3_students')
+            .select('student_code, avatar_url')
+            .in('student_code', chunk);
+
+        if (error) {
+            console.warn('Không kiểm tra được ảnh học sinh trong preview VNEDU:', error);
+            continue;
+        }
+        for (const row of (data || [])) {
+            const avatar = normalizeVnEduText(row.avatar_url);
+            const hasRealAvatar = !!avatar && avatar !== normalizeVnEduText(DEFAULT_AVATAR);
+            flags.set(String(row.student_code), hasRealAvatar);
+        }
+    }
+    return flags;
+}
+
+async function buildVnEduStudentPreview(parsedRows) {
+    const currentStudents = APP_STATE.students || [];
+    const byCode = new Map(currentStudents.map(s => [String(s.id || ''), s]));
+
+    const byNameDob = new Map();
+    currentStudents.forEach(student => {
+        const key = `${normalizeVnEduStudentKeyText(student.fullName)}|${normalizeVnEduCompareDate(student.dob)}`;
+        if (!byNameDob.has(key)) byNameDob.set(key, []);
+        byNameDob.get(key).push(student);
+    });
+
+    const duplicateCodes = new Set();
+    const seenCodes = new Set();
+    for (const row of parsedRows) {
+        const code = String(row.student_code || '');
+        if (!code) continue;
+        if (seenCodes.has(code)) duplicateCodes.add(code);
+        else seenCodes.add(code);
+    }
+
+    // Cần biết trạng thái ảnh của cả học sinh trong VNEDU lẫn học sinh chỉ có ở App.
+    const incomingCodes = parsedRows
+        .map(row => String(row.student_code || ''))
+        .filter(Boolean);
+    const currentCodes = currentStudents
+        .map(student => String(student.id || ''))
+        .filter(Boolean);
+    const avatarFlags = await getExistingAvatarFlags([...incomingCodes, ...currentCodes]);
+
+    const items = parsedRows.map(row => {
+        if (row._invalid) {
+            return {
+                ...row,
+                status: 'check',
+                statusLabel: 'Cần kiểm tra',
+                reason: row._invalid_reason,
+                hasAvatar: false,
+                changes: []
+            };
+        }
+
+        const code = String(row.student_code);
+        if (duplicateCodes.has(code)) {
+            return {
+                ...row,
+                status: 'check',
+                statusLabel: 'Cần kiểm tra',
+                reason: 'Mã học sinh xuất hiện nhiều lần trong các file đã chọn',
+                hasAvatar: avatarFlags.get(code) === true,
+                changes: []
+            };
+        }
+
+        const existing = byCode.get(code);
+        if (existing) {
+            const changes = compareVnEduStudentCore(existing, row);
+            return {
+                ...row,
+                status: changes.length ? 'update' : 'same',
+                statusLabel: changes.length ? 'Cần cập nhật' : 'Không đổi',
+                reason: '',
+                existingStudent: existing,
+                hasAvatar: avatarFlags.get(code) === true,
+                changes
+            };
+        }
+
+        const fallbackKey = `${normalizeVnEduStudentKeyText(row.full_name)}|${normalizeVnEduCompareDate(row.dob)}`;
+        const fallbackMatches = byNameDob.get(fallbackKey) || [];
+        if (fallbackMatches.length) {
+            return {
+                ...row,
+                status: 'check',
+                statusLabel: 'Cần kiểm tra',
+                reason: `Không khớp mã HS nhưng trùng Họ tên + Ngày sinh với ${fallbackMatches.map(s => s.id).join(', ')}`,
+                hasAvatar: fallbackMatches.some(s => avatarFlags.get(String(s.id)) === true),
+                changes: []
+            };
+        }
+
+        return {
+            ...row,
+            status: 'new',
+            statusLabel: 'Học sinh mới',
+            reason: '',
+            hasAvatar: false,
+            changes: []
+        };
+    });
+
+    // Học sinh đang có trong App nhưng không xuất hiện trong bộ VNEDU đã chọn.
+    // Chỉ hiển thị để rà soát, tuyệt đối không tự xóa.
+    const validIncomingCodeSet = new Set(
+        parsedRows
+            .filter(row => !row._invalid && row.student_code)
+            .map(row => String(row.student_code))
+    );
+
+    const appOnly = currentStudents
+        .filter(student => {
+            const code = String(student.id || '');
+            return code && !validIncomingCodeSet.has(code);
+        })
+        .map(student => ({
+            student_code: String(student.id || ''),
+            full_name: student.fullName || '',
+            dob: student.dob || '',
+            gender: student.gender || '',
+            class_name: student.class || '',
+            grade: student.grade || '',
+            hasAvatar: avatarFlags.get(String(student.id || '')) === true,
+            existingStudent: student
+        }))
+        .sort((a, b) =>
+            String(a.class_name).localeCompare(String(b.class_name), 'vi')
+            || String(a.full_name).localeCompare(String(b.full_name), 'vi')
+        );
+
+    return { items, appOnly };
+}
+function getVnEduPreviewSummary(items) {
+    const count = status => items.filter(item => item.status === status).length;
+    return {
+        total: items.length,
+        newCount: count('new'),
+        updateCount: count('update'),
+        sameCount: count('same'),
+        checkCount: count('check'),
+        keepAvatarCount: items.filter(item => item.hasAvatar).length
+    };
+}
+
+function renderVnEduUpdateDetails(items) {
+    const updates = items.filter(item => item.status === 'update');
+    if (!updates.length) {
+        return `
+            <div class="vnedu-detail-empty">
+                <i class="fas fa-circle-check"></i>
+                Không có học sinh nào cần cập nhật thông tin chính.
+            </div>`;
+    }
+
+    return updates.map(item => `
+        <div class="vnedu-update-card">
+            <div class="vnedu-update-card-head">
+                <div>
+                    <strong>${escapeHtml(item.full_name || '—')}</strong>
+                    <span>Mã HS: ${escapeHtml(item.student_code || '—')} · Lớp ${escapeHtml(item.class_name || '—')}</span>
+                </div>
+                ${item.hasAvatar
+                    ? '<span class="vnedu-avatar-keep"><i class="fas fa-image"></i> Giữ ảnh hiện có</span>'
+                    : '<span class="vnedu-preview-muted">Không phát hiện ảnh hiện có</span>'}
+            </div>
+            <div class="vnedu-update-card-body">
+                ${formatVnEduPreviewChanges(item.changes)}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderVnEduAppOnlyDetails(appOnly) {
+    if (!appOnly.length) {
+        return `
+            <div class="vnedu-detail-empty">
+                <i class="fas fa-circle-check"></i>
+                Không có học sinh nào chỉ tồn tại trong App.
+            </div>`;
+    }
+
+    const rows = appOnly.map((item, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td><strong>${escapeHtml(item.student_code || '—')}</strong></td>
+            <td>${escapeHtml(item.full_name || '—')}</td>
+            <td>${escapeHtml(item.dob || '—')}</td>
+            <td>${escapeHtml(item.gender || '—')}</td>
+            <td><strong>${escapeHtml(item.class_name || '—')}</strong></td>
+            <td>${item.hasAvatar
+                ? '<span class="vnedu-avatar-keep"><i class="fas fa-image"></i> Giữ ảnh hiện có</span>'
+                : '<span class="vnedu-preview-muted">Không phát hiện ảnh hiện có</span>'}</td>
+            <td><span class="vnedu-app-only-safe"><i class="fas fa-shield-halved"></i> Không tự xóa</span></td>
+        </tr>
+    `).join('');
+
+    return `
+        <div class="vnedu-app-only-note">
+            <i class="fas fa-triangle-exclamation"></i>
+            <div>
+                <strong>${appOnly.length} học sinh đang có trong App nhưng không xuất hiện trong bộ VNEDU đã chọn.</strong>
+                <span>BƯỚC 151.25 chỉ liệt kê để kiểm tra. Hệ thống không xóa, không chuyển trạng thái và không thay đổi ảnh của các học sinh này.</span>
+            </div>
+        </div>
+        <div class="vnedu-preview-table-wrap vnedu-app-only-table-wrap">
+            <table class="vnedu-preview-table">
+                <thead>
+                    <tr>
+                        <th>STT</th>
+                        <th>Mã HS</th>
+                        <th>Họ và tên</th>
+                        <th>Ngày sinh</th>
+                        <th>Giới tính</th>
+                        <th>Lớp App</th>
+                        <th>Ảnh</th>
+                        <th>Xử lý</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+}
+
+function renderVnEduStudentPreview(previewData, sourceFileCount) {
+    const items = previewData?.items || [];
+    const appOnly = previewData?.appOnly || [];
+    const summary = getVnEduPreviewSummary(items);
+    const order = { check: 0, new: 1, update: 2, same: 3 };
+    const sorted = [...items].sort((a, b) =>
+        (order[a.status] ?? 9) - (order[b.status] ?? 9)
+        || String(a.class_name || '').localeCompare(String(b.class_name || ''), 'vi')
+        || String(a.full_name || '').localeCompare(String(b.full_name || ''), 'vi')
+    );
+
+    const rows = sorted.map((item, index) => {
+        const statusClass = `vnedu-status-${item.status}`;
+        const avatarText = item.hasAvatar
+            ? '<span class="vnedu-avatar-keep"><i class="fas fa-image"></i> Giữ ảnh hiện có</span>'
+            : (item.status === 'new'
+                ? '<span class="vnedu-preview-muted">Học sinh mới - chưa có ảnh</span>'
+                : '<span class="vnedu-preview-muted">Không phát hiện ảnh hiện có</span>');
+
+        let detail = '';
+        if (item.status === 'update') detail = formatVnEduPreviewChanges(item.changes);
+        else if (item.status === 'check') detail = `<span class="vnedu-check-reason">${escapeHtml(item.reason || 'Cần kiểm tra thủ công')}</span>`;
+        else if (item.status === 'new') detail = '<span class="vnedu-preview-muted">Sẽ tạo mới ở bước nhập thật sau khi bạn xác nhận.</span>';
+        else detail = '<span class="vnedu-preview-muted">Thông tin chính đang khớp với hệ thống.</span>';
+
+        return `
+            <tr>
+                <td>${index + 1}</td>
+                <td><strong>${escapeHtml(item.student_code || '—')}</strong></td>
+                <td>${escapeHtml(item.full_name || '—')}</td>
+                <td>${escapeHtml(item.dob || '—')}</td>
+                <td>${escapeHtml(item.gender || '—')}</td>
+                <td><strong>${escapeHtml(item.class_name || '—')}</strong></td>
+                <td><span class="vnedu-preview-status ${statusClass}">${escapeHtml(item.statusLabel)}</span></td>
+                <td>${avatarText}</td>
+                <td>${detail}</td>
+            </tr>`;
+    }).join('');
+
+    return `
+        <div class="vnedu-preview-wrap">
+            <div class="vnedu-preview-note">
+                <i class="fas fa-shield-halved"></i>
+                <div>
+                    <strong>BƯỚC 151.26 - xem trước trước khi cập nhật thật.</strong>
+                    <span>Đã đọc ${sourceFileCount} file VNEDU. Chỉ khi bạn bấm “Cập nhật dữ liệu” ở bước xác nhận tiếp theo thì Supabase mới được ghi. Ảnh học sinh cũ vẫn được bảo vệ.</span>
+                </div>
+            </div>
+
+            <div class="vnedu-preview-summary">
+                <div class="vnedu-summary-card"><small>Tổng VNEDU</small><strong>${summary.total}</strong></div>
+                <div class="vnedu-summary-card is-new"><small>Học sinh mới</small><strong>${summary.newCount}</strong></div>
+                <div class="vnedu-summary-card is-update"><small>Cần cập nhật</small><strong>${summary.updateCount}</strong></div>
+                <div class="vnedu-summary-card is-same"><small>Không đổi</small><strong>${summary.sameCount}</strong></div>
+                <div class="vnedu-summary-card is-check"><small>Cần kiểm tra</small><strong>${summary.checkCount}</strong></div>
+                <div class="vnedu-summary-card is-avatar"><small>Giữ ảnh hiện có</small><strong>${summary.keepAvatarCount}</strong></div>
+                <div class="vnedu-summary-card is-app-only"><small>Chỉ có trong App</small><strong>${appOnly.length}</strong></div>
+            </div>
+
+            <section class="vnedu-detail-section">
+                <div class="vnedu-detail-title">
+                    <i class="fas fa-pen-to-square"></i>
+                    <div>
+                        <strong>Chi tiết học sinh cần cập nhật (${summary.updateCount})</strong>
+                        <span>Hiển thị chính xác từng trường App hiện tại → VNEDU.</span>
+                    </div>
+                </div>
+                <div class="vnedu-update-list">
+                    ${renderVnEduUpdateDetails(items)}
+                </div>
+            </section>
+
+            <section class="vnedu-detail-section">
+                <div class="vnedu-detail-title">
+                    <i class="fas fa-user-shield"></i>
+                    <div>
+                        <strong>Học sinh chỉ có trong App (${appOnly.length})</strong>
+                        <span>Dùng để rà soát học sinh cũ/chuyển trường/nghỉ học. Bước này không tự xóa bất kỳ em nào.</span>
+                    </div>
+                </div>
+                ${renderVnEduAppOnlyDetails(appOnly)}
+            </section>
+
+            <section class="vnedu-detail-section">
+                <div class="vnedu-detail-title">
+                    <i class="fas fa-table-list"></i>
+                    <div>
+                        <strong>Toàn bộ kết quả đối chiếu VNEDU (${summary.total})</strong>
+                        <span>Danh sách đầy đủ để kiểm tra tổng thể trước khi cho phép cập nhật thật.</span>
+                    </div>
+                </div>
+                <div class="vnedu-preview-table-wrap">
+                    <table class="vnedu-preview-table">
+                        <thead>
+                            <tr>
+                                <th>STT</th>
+                                <th>Mã HS</th>
+                                <th>Họ và tên</th>
+                                <th>Ngày sinh</th>
+                                <th>Giới tính</th>
+                                <th>Lớp VNEDU</th>
+                                <th>Phân loại</th>
+                                <th>Ảnh</th>
+                                <th>Chi tiết đối chiếu</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="9">Không có dữ liệu.</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </section>
+
+            <div class="vnedu-preview-footer">
+                <i class="fas fa-circle-info"></i>
+                BƯỚC 151.26 cho phép cập nhật thật sau khi bạn kiểm tra Preview. Hệ thống chỉ thêm mới/cập nhật các dòng an toàn; không xóa học sinh cũ và không ghi đè ảnh.
+            </div>
+        </div>`;
+}
+
+// ============================================================
+// BƯỚC 151.26 - GHI CẬP NHẬT HỌC SINH VNEDU VÀO SUPABASE
+// Chỉ xử lý các dòng an toàn: new/update. Không xóa dữ liệu cũ.
+// ============================================================
+
+function getVnEduClassForWrite(className) {
+    const name = normalizeVnEduText(className).toUpperCase();
+    return (APP_STATE.allClasses || APP_STATE.classes || []).find(
+        c => normalizeVnEduText(c.name).toUpperCase() === name
+    ) || null;
+}
+
+function buildVnEduStudentInsertPayload(item) {
+    const classObj = getVnEduClassForWrite(item.class_name);
+    if (!classObj) {
+        throw new Error(`Không tìm thấy lớp ${item.class_name || 'trống'} trong hệ thống`);
+    }
+
+    return {
+        student_code: String(item.student_code),
+        full_name: item.full_name || '',
+        dob: item.dob || null,
+        gender: item.gender || '',
+        class_id: classObj.id,
+        grade: item.grade || String(item.class_name || '').charAt(0) || '',
+        address: item.address || '',
+        phone: item.phone || '',
+        email: item.email || '',
+        father_name: item.father_name || '',
+        mother_name: item.mother_name || '',
+        parent_phone: item.parent_phone || '',
+        enrollment_date: item.enrollment_date || null,
+        status: 'Đang học',
+        note: item.note || ''
+    };
+}
+
+function chooseVnEduUpdateValue(incoming, existingValue) {
+    const normalized = normalizeVnEduText(incoming);
+    return normalized !== '' ? incoming : (existingValue ?? '');
+}
+
+function buildVnEduStudentUpdatePayload(item) {
+    const existing = item.existingStudent;
+    if (!existing) throw new Error(`Không tìm thấy học sinh hiện có: ${item.student_code}`);
+
+    const classObj = getVnEduClassForWrite(item.class_name);
+    if (!classObj) {
+        throw new Error(`Không tìm thấy lớp ${item.class_name || 'trống'} trong hệ thống`);
+    }
+
+    // QUAN TRỌNG: payload UPDATE này cố ý không có trường ảnh và không có khóa UUID.
+    return {
+        full_name: chooseVnEduUpdateValue(item.full_name, existing.fullName),
+        dob: item.dob || existing.dob || null,
+        gender: chooseVnEduUpdateValue(item.gender, existing.gender),
+        class_id: classObj.id,
+        grade: chooseVnEduUpdateValue(item.grade, existing.grade),
+        address: chooseVnEduUpdateValue(item.address, existing.address),
+        phone: chooseVnEduUpdateValue(item.phone, existing.phone),
+        email: chooseVnEduUpdateValue(item.email, existing.email),
+        father_name: chooseVnEduUpdateValue(item.father_name, existing.fatherName),
+        mother_name: chooseVnEduUpdateValue(item.mother_name, existing.motherName),
+        parent_phone: chooseVnEduUpdateValue(item.parent_phone, existing.parentPhone),
+        enrollment_date: item.enrollment_date || existing.enrollmentDate || null,
+        status: existing.status || 'Đang học',
+        note: chooseVnEduUpdateValue(item.note, existing.note)
+    };
+}
+
+async function applyVnEduStudentUpdates(previewData, progressEl = null) {
+    if (!isAdmin()) {
+        throw new Error('Chỉ Admin được phép cập nhật học sinh hàng loạt từ VNEDU.');
+    }
+
+    const items = previewData?.items || [];
+    const newItems = items.filter(item => item.status === 'new');
+    const updateItems = items.filter(item => item.status === 'update');
+    const checkItems = items.filter(item => item.status === 'check');
+
+    const result = {
+        inserted: 0,
+        updated: 0,
+        skippedSame: items.filter(item => item.status === 'same').length,
+        skippedCheck: checkItems.length,
+        errors: []
+    };
+
+    const tasks = [
+        ...newItems.map(item => ({ type: 'insert', item })),
+        ...updateItems.map(item => ({ type: 'update', item }))
+    ];
+
+    for (let i = 0; i < tasks.length; i++) {
+        const task = tasks[i];
+        const item = task.item;
+
+        if (progressEl) {
+            progressEl.textContent =
+                `Đang cập nhật ${i + 1}/${tasks.length}: ${item.full_name || item.student_code}`;
+        }
+
+        try {
+            if (task.type === 'insert') {
+                const payload = buildVnEduStudentInsertPayload(item);
+
+                const { error } = await supabase
+                    .from('app3_students')
+                    .insert([payload]);
+
+                if (error) throw error;
+                result.inserted++;
+            } else {
+                const payload = buildVnEduStudentUpdatePayload(item);
+
+                const { error } = await supabase
+                    .from('app3_students')
+                    .update(payload)
+                    .eq('student_code', String(item.student_code));
+
+                if (error) throw error;
+                result.updated++;
+            }
+        } catch (err) {
+            console.error(`VNEDU ${task.type} lỗi`, item.student_code, item.full_name, err);
+            result.errors.push({
+                student_code: item.student_code,
+                full_name: item.full_name,
+                type: task.type,
+                message: err?.message || String(err)
+            });
+        }
+    }
+
+    return result;
+}
+
+function renderVnEduImportResult(result, appOnlyCount = 0) {
+    const errors = result.errors || [];
+    const errorRows = errors.map((e, i) => `
+        <tr>
+            <td>${i + 1}</td>
+            <td>${escapeHtml(e.student_code || '—')}</td>
+            <td>${escapeHtml(e.full_name || '—')}</td>
+            <td>${e.type === 'insert' ? 'Thêm mới' : 'Cập nhật'}</td>
+            <td>${escapeHtml(e.message || 'Lỗi không xác định')}</td>
+        </tr>
+    `).join('');
+
+    return `
+        <div class="vnedu-import-result">
+            <div class="vnedu-preview-note">
+                <i class="fas fa-circle-check"></i>
+                <div>
+                    <strong>Đã hoàn tất cập nhật học sinh từ VNEDU.</strong>
+                    <span>Ảnh và UUID của học sinh cũ được giữ nguyên. Học sinh chỉ có trong App không bị xóa.</span>
+                </div>
+            </div>
+
+            <div class="vnedu-preview-summary">
+                <div class="vnedu-summary-card is-new"><small>Đã thêm mới</small><strong>${result.inserted}</strong></div>
+                <div class="vnedu-summary-card is-update"><small>Đã cập nhật</small><strong>${result.updated}</strong></div>
+                <div class="vnedu-summary-card is-same"><small>Không đổi</small><strong>${result.skippedSame}</strong></div>
+                <div class="vnedu-summary-card is-check"><small>Bỏ qua cần kiểm tra</small><strong>${result.skippedCheck}</strong></div>
+                <div class="vnedu-summary-card is-app-only"><small>Chỉ có trong App</small><strong>${appOnlyCount}</strong></div>
+                <div class="vnedu-summary-card ${errors.length ? 'is-check' : 'is-avatar'}"><small>Lỗi</small><strong>${errors.length}</strong></div>
+            </div>
+
+            ${errors.length ? `
+                <div class="vnedu-detail-section">
+                    <div class="vnedu-detail-title">
+                        <i class="fas fa-triangle-exclamation"></i>
+                        <div>
+                            <strong>Các dòng chưa cập nhật được (${errors.length})</strong>
+                            <span>Các học sinh này không bị xóa; có thể kiểm tra và nhập lại sau.</span>
+                        </div>
+                    </div>
+                    <div class="vnedu-preview-table-wrap">
+                        <table class="vnedu-preview-table">
+                            <thead><tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Thao tác</th><th>Lỗi</th></tr></thead>
+                            <tbody>${errorRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            ` : `
+                <div class="vnedu-detail-empty">
+                    <i class="fas fa-shield-check"></i>
+                    Không có lỗi ghi dữ liệu.
+                </div>
+            `}
+        </div>
+    `;
+}
+
+async function confirmAndApplyVnEduStudents(previewData) {
+    const summary = getVnEduPreviewSummary(previewData?.items || []);
+    const appOnlyCount = previewData?.appOnly?.length || 0;
+
+    if (summary.newCount === 0 && summary.updateCount === 0) {
+        showToast('Không có học sinh mới hoặc dữ liệu cần cập nhật.', 'info', 3000);
+        return;
+    }
+
+    const body = `
+        <div class="vnedu-write-confirm">
+            <div class="vnedu-preview-note">
+                <i class="fas fa-database"></i>
+                <div>
+                    <strong>Xác nhận ghi dữ liệu VNEDU vào Supabase</strong>
+                    <span>Thao tác này sẽ thêm ${summary.newCount} học sinh mới và cập nhật ${summary.updateCount} học sinh đã khớp mã.</span>
+                </div>
+            </div>
+            <ul>
+                <li><strong>Giữ nguyên UUID</strong> của học sinh cũ.</li>
+                <li><strong>Không ghi đè ảnh</strong> của học sinh cũ.</li>
+                <li>${summary.checkCount} dòng “Cần kiểm tra” sẽ được bỏ qua.</li>
+                <li>${appOnlyCount} học sinh chỉ có trong App sẽ được giữ nguyên, không xóa.</li>
+            </ul>
+            <div id="vneduWriteProgress" class="vnedu-write-progress">Chưa bắt đầu ghi dữ liệu.</div>
+        </div>
+    `;
+
+    const confirmed = await showModal(
+        'Xác nhận cập nhật học sinh từ VNEDU',
+        body,
+        'Cập nhật dữ liệu',
+        'Hủy'
+    );
+
+    if (!confirmed) return;
+
+    showLoading();
+    try {
+        const progressEl = document.getElementById('vneduWriteProgress');
+        const result = await applyVnEduStudentUpdates(previewData, progressEl);
+
+        await loadAllData();
+        hideLoading();
+
+        await showModal(
+            'Kết quả cập nhật VNEDU',
+            renderVnEduImportResult(result, appOnlyCount),
+            'Đóng',
+            ''
+        );
+
+        renderPage('students');
+    } catch (err) {
+        hideLoading();
+        console.error('Lỗi cập nhật học sinh VNEDU:', err);
+        showToast('Lỗi cập nhật VNEDU: ' + (err?.message || err), 'error', 5000);
+    }
+}
+
+async function importVnEduStudentWorkbook(event) {
+    if (!requireEditPermission('xem trước cập nhật học sinh theo mẫu VNEDU')) {
+        if (event?.target) event.target.value = '';
+        return;
+    }
+
+    const files = [...(event?.target?.files || [])];
+    if (!files.length) return;
+
+    try {
+        showLoading();
+
+        const parsed = await parseVnEduStudentFiles(files);
+        if (!parsed.length) throw new Error('Không tìm thấy học sinh đúng cấu trúc danh sách VNEDU.');
+
+        const previewData = await buildVnEduStudentPreview(parsed);
+        hideLoading();
+
+        const confirmed = await showModal(
+            'Xem trước cập nhật học sinh từ VNEDU',
+            renderVnEduStudentPreview(previewData, files.length),
+            'Tiếp tục',
+            'Đóng'
+        );
+
+        if (confirmed) {
+            await confirmAndApplyVnEduStudents(previewData);
+        }
+    } catch (err) {
+        hideLoading();
+        console.error(err);
+        showToast('Lỗi xem trước danh sách VNEDU: ' + err.message, 'error', 5000);
+    } finally {
+        if (event?.target) event.target.value = '';
+    }
 }
 
 // Danh sách 20 sheet đúng theo file gốc "Xuất các môn tôi dạy" mà người dùng cung cấp.
