@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản - Hệ thống quản lý học sinh</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=15114">
+    <link rel="stylesheet" href="style.css?v=151503">
     <!-- Thêm thư viện XLSX để xuất file Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- ExcelJS: xuất file VNEDU có định dạng, đường viền, căn lề -->
@@ -22,15 +22,40 @@
         <header class="site-header">
             <div class="site-container site-nav-wrap">
                 <a class="site-brand" href="#trang-chu" aria-label="Trang chủ">
-                    <div class="site-brand-mark site-brand-logo"><img src="assets/logo-phan-hieu-tran-quoc-toan.png" alt="Logo Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản" decoding="async"></div>
-                    <div>
-                        <strong id="publicSchoolName" class="public-school-name"><span>TRƯỜNG TIỂU HỌC - TRUNG HỌC CƠ SỞ & TRUNG HỌC PHỔ THÔNG LẠI SƠN</span><em>PHÂN HIỆU TRƯỜNG TIỂU HỌC TRẦN QUỐC TOẢN</em></strong>
-                        <span>Kỷ cương · Tình thương · Trách nhiệm</span>
+                    <div class="site-brand-mark site-brand-logo">
+                        <img src="assets/logo-phan-hieu-tran-quoc-toan.png"
+                             alt="Logo Phân hiệu Trường Tiểu học Trần Quốc Toản"
+                             decoding="async">
+                    </div>
+                    <div class="site-brand-copy">
+                        <strong id="publicSchoolName" class="public-school-name">
+                            <span class="site-brand-parent">TRƯỜNG TH-THCS-THPT LẠI SƠN</span>
+                            <em class="site-brand-branch">PHÂN HIỆU TRƯỜNG TIỂU HỌC TRẦN QUỐC TOẢN</em>
+                        </strong>
+                        <span class="site-brand-slogan">Kỷ cương · Tình thương · Trách nhiệm</span>
                     </div>
                 </a>
-                <div class="site-top-motto"><i class="fas fa-school-flag"></i><span>Cổng thông tin điện tử nhà trường</span></div>
+                <div class="site-top-motto">
+                    <i class="fas fa-school-flag"></i>
+                    <div><small>CỔNG THÔNG TIN</small><span>Điện tử nhà trường</span></div>
+                </div>
                 <button type="button" id="publicMobileMenuBtn" class="public-mobile-menu-btn" aria-label="Mở menu website" aria-expanded="false" aria-controls="publicMobileMenu"><i class="fas fa-bars"></i></button>
-                <button class="site-login-btn" data-open-login onclick="openLoginFallback()"><i class="fas fa-lock"></i> Đăng nhập</button>
+                <button class="site-login-btn" data-open-login onclick="openLoginFallback()" title="Đăng nhập hệ thống quản lý">
+                    <i class="fas fa-right-to-bracket"></i><span>Đăng nhập</span>
+                </button>
+            </div>
+            <div class="public-desktop-nav-wrap">
+                <div class="site-container">
+                    <nav class="public-desktop-nav" aria-label="Điều hướng website">
+                        <a href="#trang-chu" class="active"><i class="fas fa-house"></i><span>Trang chủ</span></a>
+                        <a href="#gioi-thieu"><i class="fas fa-school"></i><span>Giới thiệu</span></a>
+                        <a href="#tin-tuc"><i class="fas fa-newspaper"></i><span>Tin tức - Sự kiện</span></a>
+                        <a href="#hinh-anh"><i class="fas fa-images"></i><span>Thư viện ảnh</span></a>
+                        <a href="#video"><i class="fas fa-circle-play"></i><span>Video hoạt động</span></a>
+                        <a href="#tai-lieu"><i class="fas fa-folder-open"></i><span>Tài liệu công khai</span></a>
+                        <a href="#lien-he"><i class="fas fa-phone"></i><span>Liên hệ</span></a>
+                    </nav>
+                </div>
             </div>
         </header>
         <div id="publicMobileMenu" class="public-mobile-menu" aria-hidden="true">
@@ -53,22 +78,11 @@
             <section id="trang-chu" class="site-hero public-u-hero">
                 <div class="hero-pattern"></div>
                 <div class="site-container public-u-shell">
-                    <aside class="public-u-side public-u-left" aria-label="Menu nội dung">
-                        <div class="u-side-title"><i class="fas fa-bars"></i><span>Danh mục</span></div>
-                        <nav class="u-side-nav">
-                            <a href="#trang-chu" class="active"><i class="fas fa-house"></i><span>Trang chủ</span></a>
-                            <a href="#gioi-thieu"><i class="fas fa-school"></i><span>Giới thiệu</span></a>
-                            <a href="#tin-tuc"><i class="fas fa-newspaper"></i><span>Tin tức - Sự kiện</span></a>
-                            <a href="#hinh-anh"><i class="fas fa-images"></i><span>Thư viện ảnh</span></a>
-                            <a href="#video"><i class="fas fa-circle-play"></i><span>Video hoạt động</span></a>
-                            <a href="#tai-lieu"><i class="fas fa-folder-open"></i><span>Tài liệu công khai</span></a>
-                        </nav>
-                    </aside>
                     <div class="public-u-center">
                         <div class="hero-banner-frame" id="publicHeroBanner" aria-label="Banner hoạt động nhà trường">
                             <div id="publicHeroSlides" class="public-hero-slides">
                                 <figure class="public-hero-slide active" data-hero-index="0">
-                                    <img src="assets/banner-lai-son.png" alt="Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản" class="hero-banner-image" decoding="async" fetchpriority="high">
+                                    <img src="assets/banner-lai-son.webp" alt="Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản" class="hero-banner-image" decoding="async" fetchpriority="high">
                                 </figure>
                             </div>
                             <button type="button" class="public-hero-arrow public-hero-prev" id="publicHeroPrev" aria-label="Ảnh banner trước"><i class="fas fa-chevron-left"></i></button>
@@ -88,7 +102,13 @@
                     </div>
                     <aside class="public-u-side public-u-right" aria-label="Tiện ích">
                         <div class="u-side-title"><i class="fas fa-bolt"></i><span>Tiện ích</span></div>
-                        <div class="u-school-year"><i class="far fa-calendar-alt"></i><span>Năm học</span><b id="publicSchoolYear">2026-2027</b><small id="publicTodayLabel"></small></div>
+                        <div class="u-school-year">
+                            <i class="far fa-calendar-alt"></i>
+                            <span>Năm học</span>
+                            <b id="publicSchoolYear">2026-2027</b>
+                            <small id="publicTodayLabel"></small>
+                            <small id="publicLiveClock" class="u-live-clock"><i class="far fa-clock"></i> --:--:--</small>
+                        </div>
                         <div class="u-utility-block">
                             <div class="u-utility-heading"><i class="fas fa-bullhorn"></i><span>Thông báo mới</span><a href="#tin-tuc" aria-label="Xem khu vực tin tức">Xem</a></div>
                             <div id="publicAnnouncementList" class="u-announcement-list"><span class="u-utility-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải...</span></div>
@@ -139,7 +159,11 @@
 
             <section id="tin-tuc" class="site-section public-news-section">
                 <div class="site-container">
-                    <div class="section-heading"><span>TIN TỨC & SỰ KIỆN</span><h2>Thông tin nổi bật</h2><p>Cập nhật hoạt động, sự kiện và những thông tin mới nhất của nhà trường.</p></div>
+                    <div class="section-heading public-news-heading">
+                        <span>TIN TỨC & SỰ KIỆN</span>
+                        <h2>Thông tin nổi bật</h2>
+                        <p>Cập nhật nhanh các hoạt động, thông báo và sự kiện mới nhất của nhà trường.</p>
+                    </div>
                     <div id="publicNewsToolbar" class="public-news-toolbar" aria-label="Bộ lọc tin tức"></div>
                     <div id="publicNewsGrid" class="news-grid public-news-grid-pro"><div class="public-content-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải tin tức...</div></div>
                 </div>
@@ -147,7 +171,7 @@
 
             <section id="hinh-anh" class="site-section public-gallery-section">
                 <div class="site-container">
-                    <div class="section-heading"><span>HÌNH ẢNH HOẠT ĐỘNG</span><h2>Khoảnh khắc Lại Sơn</h2><p>Ảnh hoạt động được Ban quản trị cập nhật trực tiếp từ máy tính hoặc điện thoại.</p></div>
+                    <div class="section-heading public-gallery-heading"><span>HÌNH ẢNH HOẠT ĐỘNG</span><h2>KHOẢNH KHẮC</h2><p>Những hoạt động, sự kiện và kỷ niệm đáng nhớ trong nhà trường.</p></div>
                     <div id="publicGalleryToolbar" class="public-gallery-toolbar" aria-label="Bộ lọc thư viện ảnh"></div>
                     <div id="publicGalleryGrid" class="public-gallery-grid"><div class="public-content-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải hình ảnh...</div></div>
                 </div>
@@ -372,7 +396,7 @@
             setTimeout(() => document.getElementById('loginUsername')?.focus(), 50);
         };
     </script>
-    <script type="module" src="script.js?v=151420"></script>
+    <script type="module" src="script.js?v=151503"></script>
     <div id="sidebarOverlay" class="sidebar-overlay"></div>
 </body>
 </html>

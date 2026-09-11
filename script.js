@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=151420';
+import { supabase } from './supabase.js?v=151503';
 
 
 // ============================================================
@@ -916,8 +916,6 @@ function showWinner(winner) {
         return;
     }
     
-    console.log('🎉 WINNER:', winner.fullName);
-    console.log('📸 Avatar URL:', winner.avatar || winner.avatar_url || 'Không có');
     
     if (WHEEL_STATE.preventDuplicates) {
         const participant = WHEEL_STATE.participants.find(s => s.id === winner.id);
@@ -979,7 +977,6 @@ function showWinner(winner) {
         avatarImg.style.height = '100%';
         avatarImg.style.objectFit = 'cover';
         avatarImg.style.borderRadius = '50%';
-        console.log('✅ Đã set avatar src:', avatarImg.src);
     }
     
     if (WHEEL_STATE.audioEnabled) {
@@ -1593,14 +1590,6 @@ async function loadCurrentUserAccess(force = false) {
             APP_STATE.userAccessLoaded = true;
             updateCurrentUserHeader();
 
-            console.log('USER ACCESS:', {
-                email: APP_STATE.currentUserEmail,
-                displayName: APP_STATE.currentUserDisplayName,
-                role: APP_STATE.currentUserRole,
-                active: APP_STATE.currentUserActive,
-                accessScope: APP_STATE.currentUserAccessScope,
-                assignments: APP_STATE.currentUserAssignments.length
-            });
 
             if (!active) {
                 await supabase.auth.signOut();
@@ -1831,7 +1820,6 @@ async function refreshCurrentUserAssignments() {
         .eq('active', true);
     if (error) throw error;
     APP_STATE.currentUserAssignments = data || [];
-    console.log('ASSIGNMENTS REFRESH:', APP_STATE.currentUserAssignments);
 }
 
 function applyCurrentUserDisplayScope() {
@@ -1848,11 +1836,6 @@ function applyCurrentUserDisplayScope() {
     APP_STATE.classMap = {};
     APP_STATE.classes.forEach(c => { APP_STATE.classMap[c.name] = c.id; });
 
-    console.log('DISPLAY SCOPE:', {
-        subjects: APP_STATE.subjectCatalog.map(s => s.name),
-        classes: APP_STATE.classes.map(c => c.name),
-        assignments: APP_STATE.currentUserAssignments
-    });
 
     const visibleSubjects = APP_STATE.subjectCatalog.map(s => s.name);
     ['currentSubject', 'studentSubject', 'statSubject', 'searchSubject'].forEach(key => {
@@ -1948,7 +1931,6 @@ async function loadAllData() {
         }
 
         APP_STATE.subjectCatalog = APP_STATE.allSubjectCatalog.filter(subject => subject.active !== false);
-        console.log('DANH MỤC MÔN HỌC:', APP_STATE.subjectCatalog.length);
 
         if (classesResult.error) throw classesResult.error;
         APP_STATE.allClasses = classesResult.data || [];
@@ -2006,7 +1988,6 @@ async function loadAllData() {
             APP_STATE.students = APP_STATE.students.filter(student => allowedClassIds.has(student.class_id));
         }
 
-        console.log('KIỂM TRA STUDENTS:', APP_STATE.students.length);
 
         // Lập map UUID -> học sinh một lần để tránh find() lặp khi xử lý điểm/điểm danh.
         const studentByUuid = new Map(APP_STATE.students.map(student => [student.db_uuid, student]));
@@ -2127,7 +2108,6 @@ async function loadAllData() {
         }
 
         updateClassCounts();
-        console.log('Đã tải dữ liệu từ Supabase thành công!');
     } catch (err) {
         console.error('Lỗi tải dữ liệu:', err);
         showToast('Không thể tải dữ liệu từ Supabase. Vui lòng kiểm tra kết nối.', 'error');
@@ -4775,6 +4755,7 @@ window.millionairePickExcelFile = millionairePickExcelFile;
 window.exportMillionaireQuestionsToExcel = exportMillionaireQuestionsToExcel;
 window.importMillionaireQuestionsFromPastedAI = importMillionaireQuestionsFromPastedAI;
 window.millionaireFillAIPasteExample = millionaireFillAIPasteExample;
+window.runAdminHealthCheck = runAdminHealthCheck;
 
 
 // ============================================================
@@ -7297,6 +7278,63 @@ function calculateTotalSize() {
     return mb + ' MB';
 }
 
+
+async function ensureValidSupabaseSessionForUpload() {
+    try {
+        // 1. Đọc session cục bộ trước.
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+
+        const currentSession = sessionData?.session || null;
+        if (!currentSession?.user) {
+            return {
+                ok: false,
+                reason: 'NO_SESSION',
+                message: 'Phiên đăng nhập không còn tồn tại. Vui lòng đăng nhập lại.'
+            };
+        }
+
+        // 2. Refresh chủ động trước khi upload.
+        // Cách này tránh dùng token cũ/hết hạn để INSERT vào bảng có RLS.
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) {
+            return {
+                ok: false,
+                reason: 'REFRESH_FAILED',
+                message: 'Phiên đăng nhập đã hết hạn hoặc không còn hợp lệ. Vui lòng đăng nhập lại.'
+            };
+        }
+
+        const refreshedSession = refreshData?.session || null;
+        const user = refreshedSession?.user || currentSession.user;
+
+        if (!user?.id) {
+            return {
+                ok: false,
+                reason: 'NO_USER',
+                message: 'Không xác định được tài khoản đang đăng nhập. Vui lòng đăng nhập lại.'
+            };
+        }
+
+        // Đồng bộ lại vài biến trạng thái đang dùng trong app.
+        APP_STATE.currentUserId = user.id;
+        APP_STATE.currentUserEmail = user.email || APP_STATE.currentUserEmail || '';
+
+        return {
+            ok: true,
+            session: refreshedSession || currentSession,
+            user
+        };
+    } catch (err) {
+        console.error('Không thể kiểm tra phiên đăng nhập trước khi upload:', err);
+        return {
+            ok: false,
+            reason: 'AUTH_CHECK_ERROR',
+            message: 'Không thể kiểm tra phiên đăng nhập. Vui lòng đăng nhập lại.'
+        };
+    }
+}
+
 async function openUploadFile() {
     if (!requireEditPermission('tải file lên')) return;
     const totalMB = parseFloat(calculateTotalSize());
@@ -7327,6 +7365,14 @@ async function openUploadFile() {
             }
 
             try {
+                // BƯỚC 151.44.2: xác thực/refresh session trước khi upload.
+                const authCheck = await ensureValidSupabaseSessionForUpload();
+                if (!authCheck.ok) {
+                    showToast(authCheck.message, 'error', 3500);
+                    return;
+                }
+                const uploadUserId = authCheck.user.id;
+
                 // BƯỚC 151.19: Storage key chỉ dùng ký tự an toàn.
                 // Giữ nguyên tên gốc có dấu trong app3_files.file_name để hiển thị/tải xuống.
                 const rawExt = file.name.includes('.') ? file.name.split('.').pop() : '';
@@ -7353,11 +7399,19 @@ async function openUploadFile() {
                         file_type: file.type.split('/')[0] || 'unknown',
                         file_size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
                         description: document.getElementById('fileDesc').value.trim() || '',
-                        uploaded_by: (await supabase.auth.getUser()).data.user?.id || null
+                        uploaded_by: uploadUserId
                     })
                     .select()
                     .single();
-                if (metaErr) throw metaErr;
+                if (metaErr) {
+                    // Metadata không ghi được => xóa file Storage vừa upload để tránh file mồ côi.
+                    try {
+                        await supabase.storage.from('app3-files').remove([filePath]);
+                    } catch (cleanupErr) {
+                        console.warn('Không thể dọn file Storage sau khi metadata lỗi:', cleanupErr);
+                    }
+                    throw metaErr;
+                }
 
                 APP_STATE.files.unshift({
                     id: fileMeta.id,
@@ -7372,10 +7426,133 @@ async function openUploadFile() {
                 showToast('Tải file thành công!');
                 renderPage('files');
             } catch (err) {
-                showToast('Lỗi tải file: ' + err.message, 'error');
+                const message = String(err?.message || err || '');
+                if (/row-level security|403|jwt|token|not authenticated|permission/i.test(message)) {
+                    showToast(
+                        'Phiên đăng nhập hoặc quyền Supabase không còn hợp lệ. Vui lòng đăng nhập lại rồi thử tải file.',
+                        'error',
+                        4500
+                    );
+                } else {
+                    showToast('Lỗi tải file: ' + message, 'error');
+                }
             }
         }
     });
+}
+
+
+let pdfJsLoadPromise = null;
+
+async function ensurePdfJsLoaded() {
+    if (window.pdfjsLib) return window.pdfjsLib;
+    if (pdfJsLoadPromise) return pdfJsLoadPromise;
+
+    pdfJsLoadPromise = new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[data-pdfjs-loader="true"]');
+        if (existing) {
+            existing.addEventListener('load', () => resolve(window.pdfjsLib));
+            existing.addEventListener('error', reject);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        script.async = true;
+        script.dataset.pdfjsLoader = 'true';
+
+        script.onload = () => {
+            try {
+                if (!window.pdfjsLib) throw new Error('PDF.js chưa khởi tạo.');
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                resolve(window.pdfjsLib);
+            } catch (err) {
+                reject(err);
+            }
+        };
+        script.onerror = () => reject(new Error('Không tải được thư viện PDF.js.'));
+        document.head.appendChild(script);
+    });
+
+    try {
+        return await pdfJsLoadPromise;
+    } catch (err) {
+        pdfJsLoadPromise = null;
+        throw err;
+    }
+}
+
+async function renderPdfIntoContainer(fileUrl, fileName) {
+    const container = document.getElementById('pdfPreviewContainer');
+    if (!container) return;
+
+    try {
+        const pdfjsLib = await ensurePdfJsLoaded();
+
+        container.innerHTML = `
+            <div class="text-center" style="padding:2rem 1rem;">
+                <i class="fas fa-spinner fa-spin" style="font-size:2rem; color:var(--primary);"></i>
+                <p style="margin-top:1rem;">Đang đọc PDF...</p>
+            </div>`;
+
+        const response = await fetch(fileUrl, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+
+        container.innerHTML = `
+            <div id="pdfPagesWrap"
+                 style="display:flex; flex-direction:column; gap:14px; align-items:center; width:100%;">
+            </div>`;
+
+        const pagesWrap = document.getElementById('pdfPagesWrap');
+        if (!pagesWrap) return;
+
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+            const page = await pdf.getPage(pageNumber);
+
+            const baseViewport = page.getViewport({ scale: 1 });
+            const maxWidth = Math.max(320, (container.clientWidth || 760) - 24);
+            const scale = Math.min(1.6, maxWidth / baseViewport.width);
+            const viewport = page.getViewport({ scale });
+
+            const pageBox = document.createElement('div');
+            pageBox.style.cssText =
+                'width:100%; display:flex; flex-direction:column; align-items:center; gap:6px;';
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d', { alpha: false });
+
+            canvas.width = Math.floor(viewport.width);
+            canvas.height = Math.floor(viewport.height);
+            canvas.style.cssText =
+                'max-width:100%; height:auto; background:#fff; box-shadow:0 1px 5px rgba(0,0,0,.28); border-radius:4px;';
+
+            const label = document.createElement('div');
+            label.textContent = `Trang ${pageNumber} / ${pdf.numPages}`;
+            label.style.cssText =
+                'font-size:.78rem; color:var(--text-muted); margin-top:2px;';
+
+            pageBox.appendChild(canvas);
+            pageBox.appendChild(label);
+            pagesWrap.appendChild(pageBox);
+
+            await page.render({
+                canvasContext: ctx,
+                viewport
+            }).promise;
+        }
+    } catch (err) {
+        console.error('Không thể render PDF bằng PDF.js:', err);
+        container.innerHTML = `
+            <div class="text-center" style="padding:2.5rem 1rem;">
+                <i class="fas fa-file-pdf" style="font-size:3rem; color:#ef4444;"></i>
+                <p style="margin-top:1rem;"><strong>Không thể hiển thị PDF trực tiếp.</strong></p>
+                <p class="text-muted">Bạn vẫn có thể tải file xuống để mở.</p>
+            </div>`;
+    }
 }
 
 function viewFile(id) {
@@ -7406,10 +7583,20 @@ function viewFile(id) {
             </div>`;
     } else if (isPDF) {
         contentHTML = `
-            <iframe src="${file.url}" style="width:100%; height:65vh; min-height:480px; border:none; border-radius:8px;"></iframe>
+            <div id="pdfPreviewContainer"
+                 style="width:100%; max-height:68vh; min-height:520px; overflow:auto; padding:10px; background:rgba(15,23,42,.18); border-radius:8px;">
+                <div class="text-center" style="padding:3rem 1rem;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:2rem; color:var(--primary);"></i>
+                    <p style="margin-top:1rem;">Đang tải PDF để xem trực tiếp...</p>
+                </div>
+            </div>
             <div class="text-center" style="margin-top:0.75rem;">
                 <button class="btn btn-primary" onclick="downloadFile('${file.id}')"><i class="fas fa-download"></i> Tải xuống</button>
             </div>`;
+
+        showModal('Xem trước file', contentHTML, 'Đóng', '').then(() => {});
+        renderPdfIntoContainer(file.url, file.name);
+        return;
     } else if (isOffice) {
         // BƯỚC 151.20: Word/Excel/PowerPoint xem trực tiếp bằng Microsoft Office Online Viewer.
         // file.url là public URL của Supabase Storage nên Office Viewer có thể truy cập để hiển thị.
@@ -7669,7 +7856,6 @@ function switchStatSubject(subject) {
 
     APP_STATE.statSubject = subject;
 
-    console.log('MÔN THỐNG KÊ:', subject);
 
     // Cập nhật lại biểu đồ theo môn vừa chọn
     renderPage('statistics');
@@ -7864,7 +8050,6 @@ function switchSearchSubject(subject) {
 
     APP_STATE.searchSubject = subject;
 
-    console.log('MÔN TÌM KIẾM:', subject);
     globalSearch();
 }
 function globalSearch() {
@@ -8023,6 +8208,189 @@ function setPublicManagerActiveTab(type) {
     });
 }
 
+
+function healthStatusBadge(status) {
+    const map = {
+        ok: { icon: 'fa-circle-check', text: 'Đạt', color: '#16a34a', bg: 'rgba(22,163,74,.12)' },
+        warn: { icon: 'fa-triangle-exclamation', text: 'Cảnh báo', color: '#d97706', bg: 'rgba(217,119,6,.12)' },
+        error: { icon: 'fa-circle-xmark', text: 'Lỗi', color: '#dc2626', bg: 'rgba(220,38,38,.12)' }
+    };
+    const item = map[status] || map.warn;
+    return `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;background:${item.bg};color:${item.color};font-weight:700;font-size:.78rem;">
+        <i class="fas ${item.icon}"></i> ${item.text}
+    </span>`;
+}
+
+function renderHealthCheckRows(results) {
+    if (!Array.isArray(results) || results.length === 0) {
+        return '<p class="text-muted">Chưa có kết quả kiểm tra.</p>';
+    }
+
+    return `
+        <div style="overflow:auto;">
+            <table style="width:100%;min-width:680px;">
+                <thead>
+                    <tr>
+                        <th style="width:190px;">Hạng mục</th>
+                        <th style="width:110px;">Trạng thái</th>
+                        <th>Chi tiết</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${results.map(item => `
+                        <tr>
+                            <td><strong>${escapeHtml(item.name)}</strong></td>
+                            <td>${healthStatusBadge(item.status)}</td>
+                            <td>${escapeHtml(item.detail || '')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+async function runAdminHealthCheck() {
+    if (!requireAdminPermission('kiểm tra sức khỏe hệ thống')) return;
+
+    const panel = document.getElementById('adminHealthCheckResult');
+    const summary = document.getElementById('adminHealthCheckSummary');
+    const button = document.getElementById('btnRunHealthCheck');
+    if (!panel || !summary) return;
+
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang kiểm tra...';
+    }
+
+    panel.innerHTML = `
+        <div class="text-center" style="padding:1.4rem;">
+            <i class="fas fa-spinner fa-spin" style="font-size:1.8rem;color:var(--primary);"></i>
+            <p style="margin-top:.7rem;">Đang kiểm tra Auth, Supabase, Storage và thư viện...</p>
+        </div>`;
+    summary.innerHTML = '';
+
+    const results = [];
+    const push = (name, status, detail) => results.push({ name, status, detail });
+
+    try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        const session = data?.session;
+        if (session?.user?.id) {
+            const email = session.user.email || APP_STATE.currentUserEmail || '';
+            push('Auth / Session', 'ok', `Đã đăng nhập${email ? `: ${email}` : ''}`);
+        } else {
+            push('Auth / Session', 'error', 'Không tìm thấy phiên đăng nhập Supabase.');
+        }
+    } catch (err) {
+        push('Auth / Session', 'error', err?.message || 'Không thể kiểm tra session.');
+    }
+
+    if (APP_STATE.userAccessLoaded && APP_STATE.currentUserActive !== false) {
+        push(
+            'Phân quyền hiện tại',
+            'ok',
+            `Vai trò: ${APP_STATE.currentUserRole || 'không rõ'} · Phạm vi: ${APP_STATE.currentUserAccessScope || 'không rõ'}`
+        );
+    } else {
+        push('Phân quyền hiện tại', 'warn', 'Trạng thái phân quyền trong APP_STATE chưa được nạp đầy đủ.');
+    }
+
+    const tableChecks = [
+        ['app3_subjects', 'Danh mục môn'],
+        ['app3_classes', 'Lớp'],
+        ['app3_students', 'Học sinh'],
+        ['app3_scores', 'Điểm'],
+        ['app3_attendance', 'Điểm danh'],
+        ['app3_rewards', 'Khen thưởng'],
+        ['app3_disciplines', 'Kỷ luật'],
+        ['app3_learning_comments', 'Nhận xét học tập'],
+        ['app3_files', 'File'],
+        ['app3_settings', 'Cài đặt'],
+        ['app3_user_roles', 'Vai trò người dùng'],
+        ['app3_teacher_assignments', 'Phân công giáo viên']
+    ];
+
+    for (const [table, label] of tableChecks) {
+        try {
+            const { error } = await supabase
+                .from(table)
+                .select('*', { head: true, count: 'exact' });
+            if (error) throw error;
+            push(`Bảng ${label}`, 'ok', `${table}: truy cập đọc thành công.`);
+        } catch (err) {
+            push(`Bảng ${label}`, 'error', `${table}: ${err?.message || 'không truy cập được'}`);
+        }
+    }
+
+    try {
+        const { data, error } = await supabase.storage
+            .from('app3-files')
+            .list('documents', { limit: 1, offset: 0 });
+
+        if (error) throw error;
+        push(
+            'Storage app3-files',
+            'ok',
+            `Bucket truy cập được${Array.isArray(data) ? ` · tìm thấy ${data.length} mục trong phép thử` : ''}.`
+        );
+    } catch (err) {
+        push('Storage app3-files', 'error', err?.message || 'Không truy cập được bucket app3-files.');
+    }
+
+    const libraryChecks = [
+        ['Chart.js', typeof window.Chart !== 'undefined'],
+        ['SheetJS / XLSX', typeof window.XLSX !== 'undefined'],
+        ['ExcelJS', typeof window.ExcelJS !== 'undefined']
+    ];
+
+    libraryChecks.forEach(([name, loaded]) => {
+        push(
+            name,
+            loaded ? 'ok' : 'error',
+            loaded ? 'Thư viện đã được nạp.' : 'Không tìm thấy thư viện trong window.'
+        );
+    });
+
+    if (window.pdfjsLib) {
+        push('PDF.js', 'ok', 'PDF.js đã được nạp và sẵn sàng.');
+    } else {
+        push('PDF.js', 'warn', 'Chưa nạp ở thời điểm kiểm tra; thư viện sẽ tự tải khi mở PDF.');
+    }
+
+    const studentCount = Array.isArray(APP_STATE.students) ? APP_STATE.students.length : 0;
+    const classCount = Array.isArray(APP_STATE.classes) ? APP_STATE.classes.length : 0;
+    const subjectCount = Array.isArray(APP_STATE.subjectCatalog) ? APP_STATE.subjectCatalog.length : 0;
+
+    push(
+        'Dữ liệu đang nạp',
+        studentCount > 0 && classCount > 0 && subjectCount > 0 ? 'ok' : 'warn',
+        `${studentCount} học sinh · ${classCount} lớp · ${subjectCount} môn đang hiển thị.`
+    );
+
+    const okCount = results.filter(x => x.status === 'ok').length;
+    const warnCount = results.filter(x => x.status === 'warn').length;
+    const errorCount = results.filter(x => x.status === 'error').length;
+
+    let overall = 'ok';
+    if (errorCount > 0) overall = 'error';
+    else if (warnCount > 0) overall = 'warn';
+
+    summary.innerHTML = `
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:.8rem;">
+            ${healthStatusBadge(overall)}
+            <strong>${okCount} đạt · ${warnCount} cảnh báo · ${errorCount} lỗi</strong>
+            <span class="text-muted" style="font-size:.8rem;">Kiểm tra chỉ đọc, không thay đổi dữ liệu.</span>
+        </div>`;
+
+    panel.innerHTML = renderHealthCheckRows(results);
+
+    if (button) {
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-stethoscope"></i> Kiểm tra lại';
+    }
+}
+
 function renderSettings() {
     const settings = APP_STATE.settings;
     const subjects = APP_STATE.allSubjectCatalog?.length
@@ -8079,6 +8447,24 @@ function renderSettings() {
             <hr class="my-3">
             <h4><i class="fas fa-users-cog"></i> Người dùng & phân quyền</h4>
             <div id="userRolePanel"><p class="text-muted">Đang kiểm tra cấu hình phân quyền...</p></div>
+            ${isAdmin() ? `
+            <hr class="my-3">
+            <div style="border:1px solid var(--border);border-radius:12px;padding:1rem;background:rgba(37,99,235,.04);">
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+                    <div>
+                        <h4 style="margin:0;"><i class="fas fa-heart-pulse"></i> Health Check hệ thống</h4>
+                        <p class="text-muted" style="margin:.35rem 0 0;">
+                            Kiểm tra nhanh Auth, Supabase, các bảng chính, Storage và thư viện. Chỉ đọc, không tự sửa dữ liệu.
+                        </p>
+                    </div>
+                    <button id="btnRunHealthCheck" class="btn btn-primary" onclick="runAdminHealthCheck()">
+                        <i class="fas fa-stethoscope"></i> Kiểm tra hệ thống
+                    </button>
+                </div>
+                <div id="adminHealthCheckSummary" style="margin-top:1rem;"></div>
+                <div id="adminHealthCheckResult"></div>
+            </div>
+            ` : ''}
             <hr class="my-3">
             <h4>Đổi mật khẩu</h4>
             <div class="form-grid"><div class="form-group"><label>Mật khẩu mới</label><input type="password" id="newPassword" placeholder="••••••••"></div><div class="form-group"><label>Xác nhận</label><input type="password" id="confirmPassword" placeholder="••••••••"></div></div>
@@ -8663,6 +9049,7 @@ async function loadPublicWebsiteContent() {
     }
 
     await loadPublicUtilityContent();
+    startPublicLiveClock();
 }
 
 function publicYouTubeId(url='') {
@@ -8702,21 +9089,157 @@ function renderPublicGallery(items=[]) {
     const grid=document.getElementById('publicGalleryGrid');
     const toolbar=document.getElementById('publicGalleryToolbar');
     if(!grid) return;
-    const all=Array.isArray(items)?items:[];
-    const categories=['Tất cả',...new Set(all.map(x=>String(x.category||'Khác').trim()).filter(Boolean))];
-    if(PUBLIC_GALLERY_CATEGORY!=='Tất cả'&&!categories.includes(PUBLIC_GALLERY_CATEGORY)) PUBLIC_GALLERY_CATEGORY='Tất cả';
-    const filtered=PUBLIC_GALLERY_CATEGORY==='Tất cả'?all:all.filter(x=>String(x.category||'Khác').trim()===PUBLIC_GALLERY_CATEGORY);
+
+    const all=(Array.isArray(items)?items:[])
+        .filter(x=>x&&x.media_type==='image');
+
+    const categories=['Tất cả',...new Set(
+        all.map(x=>String(x.category||'Khác').trim()).filter(Boolean)
+    )];
+
+    if(PUBLIC_GALLERY_CATEGORY!=='Tất cả'&&!categories.includes(PUBLIC_GALLERY_CATEGORY)){
+        PUBLIC_GALLERY_CATEGORY='Tất cả';
+    }
+
+    const filtered=PUBLIC_GALLERY_CATEGORY==='Tất cả'
+        ? all
+        : all.filter(x=>String(x.category||'Khác').trim()===PUBLIC_GALLERY_CATEGORY);
+
     PUBLIC_GALLERY_VISIBLE=filtered.filter(x=>publicSafeMediaUrl(x.media_url));
-    if(toolbar) toolbar.innerHTML=`<div class="public-gallery-filter-label"><i class="fas fa-images"></i><span>Album / chuyên mục</span></div><div class="public-gallery-filter-chips">${categories.map(cat=>`<button type="button" class="${cat===PUBLIC_GALLERY_CATEGORY?'active':''}" onclick="setPublicGalleryCategory('${publicEscape(cat).replace(/'/g,'&#39;')}')">${publicEscape(cat)}</button>`).join('')}</div><span class="public-gallery-count">${filtered.length} ảnh</span>`;
+
+    if(toolbar){
+        toolbar.innerHTML=`
+            <div class="public-gallery-filter-label">
+                <i class="fas fa-images"></i>
+                <span>Album / chuyên mục</span>
+            </div>
+            <div class="public-gallery-filter-chips">
+                ${categories.map(cat=>`
+                    <button type="button"
+                            class="${cat===PUBLIC_GALLERY_CATEGORY?'active':''}"
+                            onclick="setPublicGalleryCategory('${publicEscape(cat).replace(/'/g,'&#39;')}')">
+                        ${publicEscape(cat)}
+                    </button>
+                `).join('')}
+            </div>
+            <span class="public-gallery-count">
+                <i class="far fa-images"></i> ${PUBLIC_GALLERY_VISIBLE.length} ảnh
+            </span>`;
+    }
+
+    // Xóa nút cũ nếu render lại theo chuyên mục
+    document.getElementById('publicGallerySeeAllWrap')?.remove();
+
     if(!PUBLIC_GALLERY_VISIBLE.length){
-        grid.innerHTML='<div class="public-empty-state"><i class="fas fa-camera-retro"></i><strong>Chưa có hình ảnh trong chuyên mục này</strong><span>Hãy chọn chuyên mục khác hoặc quay lại Tất cả.</span></div>';
+        grid.innerHTML=`
+            <div class="public-empty-state">
+                <i class="fas fa-camera-retro"></i>
+                <strong>Chưa có hình ảnh trong chuyên mục này</strong>
+                <span>Hãy chọn chuyên mục khác hoặc quay lại Tất cả.</span>
+            </div>`;
         return;
     }
-    grid.innerHTML=PUBLIC_GALLERY_VISIBLE.slice(0,24).map((item,idx)=>{
+
+    const previewItems=PUBLIC_GALLERY_VISIBLE.slice(0,4);
+
+    grid.innerHTML=previewItems.map(item=>{
         const url=publicSafeMediaUrl(item.media_url);
-        return `<figure class="public-gallery-card ${idx===0?'public-gallery-featured':''}" role="button" tabindex="0" onclick="openPublicMediaModal('${item.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPublicMediaModal('${item.id}')}" aria-label="Xem ảnh ${publicEscape(item.title||'Hoạt động nhà trường')}"><img src="${url}" alt="${publicEscape(item.title||'Hình ảnh hoạt động')}" loading="lazy"><figcaption><b>${publicEscape(item.title||'Hoạt động nhà trường')}</b>${item.category?`<span><i class="far fa-folder-open"></i> ${publicEscape(item.category)}</span>`:''}</figcaption></figure>`;
+        const title=publicEscape(item.title||'Hoạt động nhà trường');
+        const cat=publicEscape(item.category||'Hoạt động');
+        return `
+            <figure class="public-gallery-card public-gallery-preview-card"
+                    role="button"
+                    tabindex="0"
+                    onclick="openPublicMediaModal('${item.id}')"
+                    onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPublicMediaModal('${item.id}')}">
+                <img src="${url}" alt="${title}" loading="lazy">
+                <figcaption>
+                    <b>${title}</b>
+                    <span><i class="far fa-folder-open"></i> ${cat}</span>
+                    <i class="fas fa-arrow-up-right-from-square public-gallery-card-arrow"></i>
+                </figcaption>
+            </figure>`;
     }).join('');
+
+    if(PUBLIC_GALLERY_VISIBLE.length>4){
+        grid.insertAdjacentHTML('afterend',`
+            <div id="publicGallerySeeAllWrap" class="public-gallery-see-all-wrap">
+                <button type="button" class="public-gallery-see-all-btn" onclick="openPublicGalleryAll()">
+                    <i class="far fa-images"></i>
+                    <span>Xem tất cả ${PUBLIC_GALLERY_VISIBLE.length} ảnh</span>
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>`);
+    }
 }
+
+function openPublicGalleryAll(){
+    const items=Array.isArray(PUBLIC_GALLERY_VISIBLE)?PUBLIC_GALLERY_VISIBLE:[];
+    if(!items.length) return;
+
+    document.getElementById('publicGalleryAllModal')?.remove();
+
+    const modal=document.createElement('div');
+    modal.id='publicGalleryAllModal';
+    modal.className='public-gallery-all-modal';
+    modal.innerHTML=`
+        <div class="public-gallery-all-backdrop" data-gallery-close></div>
+        <div class="public-gallery-all-shell" role="dialog" aria-modal="true" aria-label="Tất cả hình ảnh">
+            <div class="public-gallery-all-head">
+                <div>
+                    <strong>KHOẢNH KHẮC</strong>
+                    <span>${items.length} ảnh trong chuyên mục hiện tại</span>
+                </div>
+                <button type="button" class="public-gallery-all-close" data-gallery-close aria-label="Đóng">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+            <div class="public-gallery-all-grid">
+                ${items.map(item=>{
+                    const url=publicSafeMediaUrl(item.media_url);
+                    if(!url) return '';
+                    const title=publicEscape(item.title||'Hình ảnh hoạt động');
+                    const cat=publicEscape(item.category||'Hoạt động');
+                    return `
+                        <button type="button"
+                                class="public-gallery-all-item"
+                                data-gallery-image-id="${item.id}">
+                            <span class="public-gallery-all-thumb">
+                                <img src="${url}" alt="${title}" loading="lazy">
+                            </span>
+                            <span class="public-gallery-all-caption">
+                                <b>${title}</b>
+                                <small><i class="far fa-folder-open"></i> ${cat}</small>
+                            </span>
+                        </button>`;
+                }).join('')}
+            </div>
+        </div>`;
+
+    modal.addEventListener('click',(event)=>{
+        const closeTarget=event.target.closest('[data-gallery-close]');
+        if(closeTarget){
+            closePublicGalleryAll();
+            return;
+        }
+
+        const imageButton=event.target.closest('[data-gallery-image-id]');
+        if(imageButton){
+            const id=imageButton.dataset.galleryImageId;
+            closePublicGalleryAll();
+            openPublicMediaModal(id);
+        }
+    });
+
+    document.body.appendChild(modal);
+    document.body.classList.add('public-modal-open');
+}
+
+function closePublicGalleryAll(){
+    document.getElementById('publicGalleryAllModal')?.remove();
+    document.body.classList.remove('public-modal-open');
+}
+
 function setPublicGalleryCategory(category='Tất cả'){
     PUBLIC_GALLERY_CATEGORY=String(category||'Tất cả');
     renderPublicGallery(PUBLIC_MEDIA_CACHE.filter(x=>x.media_type==='image'));
@@ -9049,6 +9572,31 @@ function publicSafeExternalUrl(value='') {
         return publicEscape(u.href);
     } catch { return ''; }
 }
+
+let PUBLIC_LIVE_CLOCK_TIMER = null;
+
+function updatePublicLiveClock(){
+    const el = document.getElementById('publicLiveClock');
+    if(!el) return;
+    const now = new Date();
+    const time = new Intl.DateTimeFormat('vi-VN', {
+        hour:'2-digit',
+        minute:'2-digit',
+        second:'2-digit',
+        hour12:false
+    }).format(now);
+    el.innerHTML = `<i class="far fa-clock"></i> ${time}`;
+}
+
+function startPublicLiveClock(){
+    if(PUBLIC_LIVE_CLOCK_TIMER){
+        clearInterval(PUBLIC_LIVE_CLOCK_TIMER);
+        PUBLIC_LIVE_CLOCK_TIMER = null;
+    }
+    updatePublicLiveClock();
+    PUBLIC_LIVE_CLOCK_TIMER = setInterval(updatePublicLiveClock, 1000);
+}
+
 function renderPublicAnnouncements(items=[]) {
     const box=document.getElementById('publicAnnouncementList');
     if(!box) return;
@@ -9064,21 +9612,77 @@ function renderPublicAnnouncements(items=[]) {
         return href?`<a class="u-announcement-item" href="${href}" target="_blank" rel="noopener noreferrer">${body}</a>`:`<div class="u-announcement-item">${body}</div>`;
     }).join('');
 }
+let PUBLIC_QUICK_LINKS_TIMER=null;
+let PUBLIC_QUICK_LINKS_INDEX=0;
+let PUBLIC_QUICK_LINKS_DATA=[];
+
+function publicQuickLinkHTML(x){
+    return `<a href="${publicSafeExternalUrl(x.url)}" target="_blank" rel="noopener noreferrer">
+        <i class="fas fa-${publicLinkIcon(x.icon)}"></i>
+        <span>${publicEscape(x.title||'Liên kết')}</span>
+    </a>`;
+}
+
+function paintPublicQuickLinks(){
+    const quick=document.getElementById('publicQuickLinks');
+    if(!quick) return;
+
+    const list=PUBLIC_QUICK_LINKS_DATA;
+    if(!list.length){
+        quick.innerHTML='<span class="u-utility-empty">Chưa có liên kết.</span>';
+        return;
+    }
+
+    // Với <=3 liên kết: hiển thị tĩnh.
+    if(list.length<=3){
+        quick.innerHTML=`<div class="u-quick-links-static">
+            ${list.map(publicQuickLinkHTML).join('')}
+        </div>`;
+        return;
+    }
+
+    // Nhân đôi toàn bộ danh sách để tạo vòng lặp cuộn liên tục, không giật.
+    const content=list.map(publicQuickLinkHTML).join('');
+    quick.innerHTML=`
+        <div class="u-quick-links-marquee">
+            <div class="u-quick-links-marquee-track">
+                <div class="u-quick-links-marquee-group">${content}</div>
+                <div class="u-quick-links-marquee-group" aria-hidden="true">${content}</div>
+            </div>
+        </div>`;
+}
+
+function startPublicQuickLinksRotation(){
+    // Giữ tên hàm để không ảnh hưởng logic gọi cũ.
+    // Hiệu ứng chuyển sang CSS animation liên tục.
+    if(PUBLIC_QUICK_LINKS_TIMER){
+        clearInterval(PUBLIC_QUICK_LINKS_TIMER);
+        PUBLIC_QUICK_LINKS_TIMER=null;
+    }
+    paintPublicQuickLinks();
+}
+
 function renderPublicLinks(items=[]) {
     const grid=document.getElementById('publicLinksGrid');
-    const quick=document.getElementById('publicQuickLinks');
     const list=(items||[]).filter(x=>publicSafeExternalUrl(x.url));
     if(grid){
         if(!list.length) grid.innerHTML='<div class="public-empty-state"><i class="fas fa-link"></i><strong>Chưa có liên kết công khai</strong><span>Admin có thể thêm các website giáo dục hữu ích.</span></div>';
-        else grid.innerHTML=list.map(x=>{
+        else grid.innerHTML=list.map((x,idx)=>{
             const href=publicSafeExternalUrl(x.url), icon=publicLinkIcon(x.icon);
-            return `<a href="${href}" target="_blank" rel="noopener noreferrer"><i class="fas fa-${icon}"></i><div><b>${publicEscape(x.title||'Liên kết')}</b><span>${publicEscape(x.description||'Mở website')}</span></div><i class="fas fa-arrow-up-right-from-square"></i></a>`;
+            const tone=['blue','green','orange','purple','pink','cyan'][idx%6];
+            return `<a class="public-link-card tone-${tone}" href="${href}" target="_blank" rel="noopener noreferrer">
+                <span class="public-link-icon"><i class="fas fa-${icon}"></i></span>
+                <span class="public-link-copy">
+                    <b>${publicEscape(x.title||'Liên kết')}</b>
+                    <span>${publicEscape(x.description||'Mở website')}</span>
+                </span>
+                <span class="public-link-arrow" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+            </a>`;
         }).join('');
     }
-    if(quick){
-        const top=list.slice(0,3);
-        quick.innerHTML=top.length?top.map(x=>`<a href="${publicSafeExternalUrl(x.url)}" target="_blank" rel="noopener noreferrer"><i class="fas fa-${publicLinkIcon(x.icon)}"></i><span>${publicEscape(x.title||'Liên kết')}</span></a>`).join(''):'<span class="u-utility-empty">Chưa có liên kết.</span>';
-    }
+    PUBLIC_QUICK_LINKS_DATA=list;
+    PUBLIC_QUICK_LINKS_INDEX=0;
+    startPublicQuickLinksRotation();
 }
 function renderPublicUtilityFallback(){
     renderPublicLinks([
@@ -9553,7 +10157,7 @@ function initPublicWebsite() {
     // Menu active theo vị trí cuộn + nút về đầu trang.
     const siteHeader = document.querySelector('.site-header');
     const backToTop = document.getElementById('publicBackToTop');
-    const navLinks = [...document.querySelectorAll('#publicSite .u-side-nav a[href^="#"], #publicSite .public-mobile-menu a[href^="#"]')];
+    const navLinks = [...document.querySelectorAll('#publicSite .public-desktop-nav a[href^="#"], #publicSite .u-side-nav a[href^="#"], #publicSite .public-mobile-menu a[href^="#"]')];
     const updatePublicScrollUI = () => {
         const y = window.scrollY || 0;
         siteHeader?.classList.toggle('scrolled', y > 10);
@@ -9971,7 +10575,6 @@ async function backupAllData(){
                 }
             });
             completed += 1;
-            console.log(`[BACKUP] ${table}: ${rows.length} dòng (${completed}/${BACKUP_TABLES.length})`);
             if (button) {
                 button.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Đang sao lưu ${completed}/${BACKUP_TABLES.length}`;
             }
@@ -10043,7 +10646,6 @@ async function fullRestoreBackupData(event){
         if(error)throw error;
         showToast('Khôi phục toàn bộ thành công!');
         await loadAllData();renderPage('settings');
-        console.log('FULL RESTORE RESULT:',data);
     }catch(err){showToast('Lỗi khôi phục toàn bộ: '+err.message,'error');}finally{event.target.value='';}
 }
 // Tương thích với tên hàm cũ nếu có nơi khác còn gọi.
@@ -11697,6 +12299,8 @@ window.publicVideoError = publicVideoError;
 window.setPublicVideoCategory = setPublicVideoCategory; window.openPublicVideoModal = openPublicVideoModal; window.closePublicVideoModal = closePublicVideoModal;
 window.setPublicNewsCategory = setPublicNewsCategory;
 window.setPublicGalleryCategory = setPublicGalleryCategory; window.stepPublicGallery = stepPublicGallery;
+window.openPublicGalleryAll = openPublicGalleryAll;
+window.closePublicGalleryAll = closePublicGalleryAll;
 
 // BƯỚC 150.3.1: hỗ trợ truy cập hệ thống trên thiết bị di động
 window.showPublicSite = showPublicSite;
