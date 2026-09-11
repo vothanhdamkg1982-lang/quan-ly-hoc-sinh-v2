@@ -2834,3 +2834,192 @@ a[onclick="goHome()"],
     gap:7px!important;
   }
 }
+
+
+/* ============================================================
+   BƯỚC 151.21 - HOÀN THIỆN GIAO DIỆN MODULE FILE
+   Chỉ thay đổi cách trình bày loại file và nút thao tác.
+   ============================================================ */
+.file-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 240px;
+}
+.file-kind-icon {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(148, 163, 184, 0.12);
+    font-size: 1.05rem;
+}
+.file-name-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-weight: 600;
+}
+.file-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    padding: 0.32rem 0.58rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: rgba(148, 163, 184, 0.12);
+}
+.file-kind-excel { color: #15803d; background: rgba(34, 197, 94, 0.12); }
+.file-kind-word { color: #2563eb; background: rgba(37, 99, 235, 0.12); }
+.file-kind-pdf { color: #dc2626; background: rgba(239, 68, 68, 0.12); }
+.file-kind-powerpoint { color: #c2410c; background: rgba(249, 115, 22, 0.12); }
+.file-kind-image { color: #7c3aed; background: rgba(139, 92, 246, 0.12); }
+.file-kind-text { color: #0369a1; background: rgba(14, 165, 233, 0.12); }
+.file-kind-archive { color: #a16207; background: rgba(234, 179, 8, 0.12); }
+.file-kind-other { color: #64748b; background: rgba(148, 163, 184, 0.12); }
+
+.file-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+    white-space: nowrap;
+}
+.file-actions .btn-icon,
+.file-action-disabled {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+}
+.file-actions .btn-icon {
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+.file-actions .btn-icon:hover {
+    transform: translateY(-1px);
+}
+.file-action-view { color: #2563eb; }
+.file-action-download { color: #0284c7; }
+.file-action-edit { color: #d97706; }
+.file-action-delete { color: #dc2626 !important; }
+
+@media (max-width: 768px) {
+    .file-name-cell { min-width: 190px; }
+    .file-type-badge { font-size: 0.74rem; }
+    .file-actions .btn-icon,
+    .file-action-disabled { width: 32px; height: 32px; }
+}
+
+
+/* ============================================================
+   BƯỚC 151.22 - SỬA VÒNG QUAY TRÊN MOBILE
+   Chỉ tối ưu bố cục/nhãn, không đổi logic quay.
+   ============================================================ */
+@media (max-width: 760px) {
+    body.page-wheel-active .topbar {
+        min-height: 64px;
+        height: auto;
+        padding: 8px 12px;
+        gap: 8px;
+    }
+    body.page-wheel-active #pageTitle {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin: 0;
+        font-size: clamp(18px, 5vw, 22px);
+        line-height: 1.15;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    body.page-wheel-active .topbar-right {
+        flex: 0 0 auto;
+        gap: 7px;
+    }
+    body.page-wheel-active .topbar-right #currentUserName {
+        max-width: 92px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 12px;
+    }
+    body.page-wheel-active .page-container {
+        padding: 12px 10px 20px;
+    }
+    body.page-wheel-active .wheel-page > .card {
+        padding: 10px 12px !important;
+        margin-bottom: 10px !important;
+    }
+    body.page-wheel-active .wheel-page > .card .flex-between {
+        gap: 10px !important;
+    }
+    body.page-wheel-active .wheel-page > .card .flex-between > div {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    body.page-wheel-active #wheelClassSelect {
+        min-width: 190px;
+        max-width: calc(100vw - 90px);
+        height: 42px;
+    }
+    body.page-wheel-active .wheel-container {
+        margin-top: 8px !important;
+    }
+    body.page-wheel-active .wheel-stage {
+        gap: 12px !important;
+    }
+    body.page-wheel-active .wheel-wrapper {
+        width: min(84vw, 340px) !important;
+        height: min(84vw, 340px) !important;
+        margin: 16px auto 2px !important;
+    }
+    body.page-wheel-active .wheel-pointer {
+        top: -15px !important;
+        font-size: 2.15rem !important;
+    }
+    body.page-wheel-active .wheel-controls-center {
+        width: 100%;
+        margin: 0 0 8px !important;
+    }
+    body.page-wheel-active #spinBtn {
+        min-width: 150px;
+        min-height: 48px;
+        font-size: 1.05rem;
+    }
+    body.page-wheel-active .wheel-result {
+        padding: 16px 12px;
+    }
+    body.page-wheel-active .result-header {
+        font-size: 1.35rem;
+    }
+    body.page-wheel-active .result-avatar {
+        width: 96px;
+        height: 96px;
+    }
+    body.page-wheel-active .result-name {
+        font-size: 1.25rem;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+    }
+    /* Khi lớp đông, tên trên từng lát được ẩn để không chồng chéo.
+       Tên người trúng vẫn hiển thị đầy đủ ở khung CHÚC MỪNG. */
+    body.page-wheel-active .wheel-mobile-fallback.wheel-compact-labels > .wheel-fallback-label {
+        display: none !important;
+    }
+}
+
+@media (max-width: 390px) {
+    body.page-wheel-active .wheel-wrapper {
+        width: min(82vw, 315px) !important;
+        height: min(82vw, 315px) !important;
+    }
+    body.page-wheel-active .topbar-right #currentUserName {
+        max-width: 72px;
+    }
+}

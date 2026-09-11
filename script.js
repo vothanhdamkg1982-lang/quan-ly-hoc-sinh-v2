@@ -387,7 +387,8 @@ function updateWheelFallback(students) {
     }
     fallback.style.setProperty('background', `conic-gradient(${stops.join(',')})`, 'important');
 
-    const labels = list.map((student, i) => {
+    const compactMobile = window.matchMedia?.('(max-width: 760px)').matches && count > 12;
+    const labels = compactMobile ? '' : list.map((student, i) => {
         const full = String(student?.fullName || student?.name || student?.student_name || `HS ${i + 1}`).trim();
         // Trên màn hình điện thoại ưu tiên 2 từ cuối để tên đủ lớn và dễ đọc.
         const parts = full.split(/\s+/).filter(Boolean);
@@ -396,6 +397,7 @@ function updateWheelFallback(students) {
         return `<span class="wheel-fallback-label" style="--label-angle:${angle}deg" title="${escapeHtml(full)}">${escapeHtml(shortName)}</span>`;
     }).join('');
 
+    fallback.classList.toggle('wheel-compact-labels', compactMobile);
     fallback.innerHTML = labels + '<span class="wheel-fallback-center">🎯</span>';
 }
 
@@ -479,10 +481,13 @@ function drawWheel() {
         ctx2.shadowColor = 'rgba(0,0,0,0.3)';
         ctx2.shadowBlur = 4;
         
-        const textRadius = radius * 0.65;
-        const name = String(students[i]?.fullName || students[i]?.name || students[i]?.student_name || `HS ${i + 1}`);
-        const displayName = name.length > 15 ? name.substring(0, 13) + '…' : name;
-        ctx2.fillText(displayName, textRadius, 0);
+        const hideCrowdedMobileLabels = window.matchMedia?.('(max-width: 760px)').matches && count > 12;
+        if (!hideCrowdedMobileLabels) {
+            const textRadius = radius * 0.65;
+            const name = String(students[i]?.fullName || students[i]?.name || students[i]?.student_name || `HS ${i + 1}`);
+            const displayName = name.length > 15 ? name.substring(0, 13) + '…' : name;
+            ctx2.fillText(displayName, textRadius, 0);
+        }
         ctx2.restore();
     }
     
@@ -2368,6 +2373,7 @@ window.deleteLearningComment = async function(commentId) {
 
 function renderPage(page) {
     APP_STATE.currentPage = page;
+    document.body.classList.toggle('page-wheel-active', page === 'wheel');
     document.getElementById('pageTitle').textContent = getPageTitle(page);
     const container = document.getElementById('pageContainer');
     switch (page) {
@@ -4746,6 +4752,38 @@ async function deleteDiscipline(id) {
 // ============================================================
 // 14. QUẢN LÝ FILE (Upload/Download với Supabase Storage)
 // ============================================================
+// BƯỚC 151.21: Nhận diện loại file từ phần mở rộng để hiển thị rõ ràng,
+// không phụ thuộc file_type cũ trong database (ví dụ chỉ lưu "application").
+function getFileDisplayInfo(file) {
+    const name = String(file?.name || '');
+    const ext = (name.includes('.') ? name.split('.').pop() : '').toLowerCase();
+
+    const groups = {
+        xls:  { label: 'Excel', icon: 'fa-file-excel', className: 'file-kind-excel' },
+        xlsx: { label: 'Excel', icon: 'fa-file-excel', className: 'file-kind-excel' },
+        doc:  { label: 'Word', icon: 'fa-file-word', className: 'file-kind-word' },
+        docx: { label: 'Word', icon: 'fa-file-word', className: 'file-kind-word' },
+        pdf:  { label: 'PDF', icon: 'fa-file-pdf', className: 'file-kind-pdf' },
+        ppt:  { label: 'PowerPoint', icon: 'fa-file-powerpoint', className: 'file-kind-powerpoint' },
+        pptx: { label: 'PowerPoint', icon: 'fa-file-powerpoint', className: 'file-kind-powerpoint' },
+        jpg:  { label: 'Hình ảnh', icon: 'fa-file-image', className: 'file-kind-image' },
+        jpeg: { label: 'Hình ảnh', icon: 'fa-file-image', className: 'file-kind-image' },
+        png:  { label: 'Hình ảnh', icon: 'fa-file-image', className: 'file-kind-image' },
+        gif:  { label: 'Hình ảnh', icon: 'fa-file-image', className: 'file-kind-image' },
+        webp: { label: 'Hình ảnh', icon: 'fa-file-image', className: 'file-kind-image' },
+        txt:  { label: 'Văn bản', icon: 'fa-file-lines', className: 'file-kind-text' },
+        csv:  { label: 'CSV', icon: 'fa-file-csv', className: 'file-kind-text' },
+        zip:  { label: 'ZIP', icon: 'fa-file-zipper', className: 'file-kind-archive' },
+        rar:  { label: 'RAR', icon: 'fa-file-zipper', className: 'file-kind-archive' }
+    };
+
+    return groups[ext] || {
+        label: ext ? ext.toUpperCase() : (file?.type || 'File'),
+        icon: 'fa-file',
+        className: 'file-kind-other'
+    };
+}
+
 function renderFiles() {
     const files = APP_STATE.files;
     if (!Array.isArray(files)) {
@@ -4770,24 +4808,33 @@ function renderFiles() {
                     </tr></thead>
                     <tbody>
                         ${files.length === 0 ? '<tr><td colspan="7" class="text-center text-muted">Chưa có file nào.</td></tr>' :
-                        files.map((f, i) => `
+                        files.map((f, i) => {
+                            const fileInfo = getFileDisplayInfo(f);
+                            return `
                             <tr>
                                 <td>${i+1}</td>
-                                <td>${f.name}</td>
-                                <td>${f.type}</td>
+                                <td>
+                                    <div class="file-name-cell">
+                                        <span class="file-kind-icon ${fileInfo.className}" title="${fileInfo.label}">
+                                            <i class="fas ${fileInfo.icon}"></i>
+                                        </span>
+                                        <span class="file-name-text">${f.name}</span>
+                                    </div>
+                                </td>
+                                <td><span class="file-type-badge ${fileInfo.className}"><i class="fas ${fileInfo.icon}"></i> ${fileInfo.label}</span></td>
                                 <td>${f.size}</td>
                                 <td>${formatDate(f.uploadDate)}</td>
                                 <td>${f.desc || ''}</td>
                                 <td>
-                                    <div class="table-actions">
-                                        ${f.url ? `<button class="btn-icon" onclick="viewFile('${f.id}')" title="Xem"><i class="fas fa-eye"></i></button>` : `<span class="text-muted" title="File mẫu không có dữ liệu"><i class="fas fa-eye-slash"></i></span>`}
-                                        <button class="btn-icon" onclick="downloadFile('${f.id}')" title="Tải xuống"><i class="fas fa-download"></i></button>
-                                        <button class="btn-icon" onclick="editFile('${f.id}')" title="Sửa"><i class="fas fa-edit"></i></button>
-                                        <button class="btn-icon" onclick="deleteFile('${f.id}')" style="color:#dc2626;" title="Xóa"><i class="fas fa-trash"></i></button>
+                                    <div class="table-actions file-actions">
+                                        ${f.url ? `<button class="btn-icon file-action-view" onclick="viewFile('${f.id}')" title="Xem trực tiếp" aria-label="Xem trực tiếp"><i class="fas fa-eye"></i></button>` : `<span class="text-muted file-action-disabled" title="File mẫu không có dữ liệu"><i class="fas fa-eye-slash"></i></span>`}
+                                        <button class="btn-icon file-action-download" onclick="downloadFile('${f.id}')" title="Tải xuống" aria-label="Tải xuống"><i class="fas fa-download"></i></button>
+                                        <button class="btn-icon file-action-edit" onclick="editFile('${f.id}')" title="Sửa thông tin" aria-label="Sửa thông tin"><i class="fas fa-pen"></i></button>
+                                        <button class="btn-icon file-action-delete" onclick="deleteFile('${f.id}')" title="Xóa file" aria-label="Xóa file"><i class="fas fa-trash"></i></button>
                                     </div>
                                 </td>
                             </tr>
-                        `).join('')}
+                        `}).join('')}
                     </tbody>
                 </table>
             </div>
