@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=151539';
+import { supabase } from './supabase.js?v=1514931';
 
 
 // ============================================================
@@ -253,92 +253,72 @@ function restoreMillionaireStateFromStorage() {
 function renderWheel() {
     restoreWheelStateFromStorage();
     return `
-        <div class="wheel-page">
-            <!-- Thanh điều khiển thu gọn trên 1 hàng -->
-            <div class="card mb-2" style="padding: 0.6rem 1rem;">
-                <div class="flex-between" style="flex-wrap: wrap; gap: 0.75rem;">
-                    
-                    <!-- Nhóm chọn lớp -->
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <i class="fas fa-dharmachakra" style="color: var(--primary); font-size: 1.2rem;"></i>
-                        <select id="wheelClassSelect" onchange="onWheelClassChange()" style="padding: 0.35rem 0.6rem; font-weight: 600;">
-                            <option value="">-- Chọn lớp --</option>
-                            ${(hasAssignedScope() ? getAccessibleClassesForSubject('') : APP_STATE.classes).map(c => `
-                                <option value="${c.id}" data-name="${c.name}">${c.name} - Khối ${c.grade}</option>
-                            `).join('')}
-                        </select>
-                    </div>
+        <div class="wheel-page wheel-page-modern">
+            <div class="wheel-toolbar-modern">
+                <div class="wheel-class-box">
+                    <div class="wheel-tool-icon"><i class="fas fa-users"></i></div>
+                    <label for="wheelClassSelect">Chọn lớp:</label>
+                    <select id="wheelClassSelect" onchange="onWheelClassChange()">
+                        <option value="">-- Chọn lớp --</option>
+                        ${(hasAssignedScope() ? getAccessibleClassesForSubject('') : APP_STATE.classes).map(c => `
+                            <option value="${c.id}" data-name="${c.name}">${c.name} - Khối ${c.grade}</option>
+                        `).join('')}
+                    </select>
+                </div>
 
-                    <!-- Thống kê nhanh -->
-                    <div style="display: flex; align-items: center; gap: 1.2rem; font-size: 0.9rem;">
-                        <span>Tổng: <strong id="wheelStudentCount">0</strong></span>
-                        <span style="color: var(--success);">Đã gọi: <strong id="wheelCalledCount">0</strong></span>
-                        <span style="color: var(--primary);">Còn lại: <strong id="wheelRemainingCount">0</strong></span>
-                    </div>
+                <div class="wheel-stat-box stat-total"><i class="fas fa-user"></i><span>Tổng:<strong id="wheelStudentCount">0</strong></span></div>
+                <div class="wheel-stat-box stat-called"><i class="fas fa-check-circle"></i><span>Đã gọi:<strong id="wheelCalledCount">0</strong></span></div>
+                <div class="wheel-stat-box stat-left"><i class="far fa-clock"></i><span>Còn lại:<strong id="wheelRemainingCount">0</strong></span></div>
 
-                    <!-- Tùy chọn & Thao tác -->
-                    <div style="display: flex; align-items: center; gap: 0.6rem;">
-                        <label style="display: flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; cursor: pointer; margin: 0;">
-                            <input type="checkbox" id="wheelPreventDuplicates" checked onchange="setWheelPreventDuplicates(this.checked)">
-                            Không trùng
-                        </label>
-                        <button class="btn btn-secondary btn-sm" onclick="resetWheel()" title="Đặt lại lượt quay">
-                            <i class="fas fa-undo"></i>
-                        </button>
-                        <button class="btn btn-danger btn-sm" onclick="endWheelSession()" title="Kết thúc vòng quay và trở về trạng thái ban đầu">
-                            <i class="fas fa-stop"></i> Kết thúc
-                        </button>
-                        <button class="btn btn-secondary btn-sm" onclick="togglePresentationMode()">
-                            <i class="fas fa-expand"></i> Trình chiếu
-                        </button>
-                        <!-- NÚT VỀ TRANG CHỦ -->
-                        <button class="btn btn-primary btn-sm btn-home-mode" onclick="goHome()" title="Về trang chủ">
-                            <i class="fas fa-home"></i> Trang chủ
-                        </button>
-                    </div>
+                <div class="wheel-toolbar-actions">
+                    <label class="wheel-no-duplicate">
+                        <input type="checkbox" id="wheelPreventDuplicates" checked onchange="setWheelPreventDuplicates(this.checked)"> Không trùng
+                    </label>
+                    <button class="btn btn-secondary btn-sm wheel-icon-btn" onclick="resetWheel()" title="Đặt lại lượt quay"><i class="fas fa-undo"></i></button>
+                    <button class="btn btn-danger btn-sm" onclick="endWheelSession()" title="Kết thúc vòng quay và trở về trạng thái ban đầu"><i class="fas fa-stop"></i> Kết thúc</button>
+                    <button class="btn btn-secondary btn-sm" onclick="togglePresentationMode()"><i class="fas fa-expand"></i> Trình chiếu</button>
+                    <button class="btn btn-primary btn-sm btn-home-mode" onclick="goHome()" title="Về trang chủ"><i class="fas fa-home"></i> Trang chủ</button>
                 </div>
             </div>
 
-            <!-- Khu vực Vòng quay -->
             <div class="wheel-container ${WHEEL_STATE.presentationMode ? 'presentation-mode' : ''}">
-                <div class="wheel-stage">
+                <section class="wheel-stage wheel-stage-modern">
+                    <div class="wheel-title-block">
+                        <h2><i class="fas fa-star"></i> VÒNG QUAY MAY MẮN <i class="fas fa-star"></i></h2>
+                        <span>Học vui · Học tốt · Cùng tiến bộ</span>
+                    </div>
                     <div class="wheel-wrapper">
                         <div id="wheelFallback" class="wheel-mobile-fallback" aria-hidden="true"><span>🎯</span></div>
                         <canvas id="wheelCanvas"></canvas>
                         <div class="wheel-pointer">▼</div>
                     </div>
                     <div class="wheel-controls-center">
-                        <button class="btn btn-primary btn-lg" id="spinBtn" onclick="spinWheel()">
-                            <i class="fas fa-play"></i> QUAY
-                        </button>
+                        <button class="btn btn-primary btn-lg" id="spinBtn" onclick="spinWheel()"><i class="fas fa-play"></i> QUAY</button>
                     </div>
-                </div>
+                    <div class="wheel-tip"><i class="fas fa-trophy"></i><div><strong>Nhấn nút QUAY để chọn ngẫu nhiên một học sinh trong lớp!</strong><span>Chúc các em luôn học tập tốt và đạt nhiều thành tích!</span></div></div>
+                </section>
 
-                <div class="wheel-sidebar">
-                    <div class="wheel-result" id="wheelResult" style="display:none;">
-                        <div class="result-header">🎉 CHÚC MỪNG!</div>
-                        <div class="result-avatar">
-                            <img id="winnerAvatar" src="${DEFAULT_AVATAR}" alt="Avatar">
+                <aside class="wheel-sidebar wheel-sidebar-modern">
+                    <div class="wheel-panel wheel-result-panel">
+                        <div class="wheel-panel-title"><span><i class="fas fa-trophy"></i> Kết quả quay</span></div>
+                        <div class="wheel-result" id="wheelResult" style="display:none;">
+                            <div class="result-header">🎉 CHÚC MỪNG!</div>
+                            <div class="result-avatar"><img id="winnerAvatar" src="${DEFAULT_AVATAR}" alt="Avatar"></div>
+                            <div class="result-name" id="winnerName">Nguyễn Văn A</div>
+                            <div class="result-class" id="winnerClass">Lớp 3A</div>
+                            <div class="result-actions">
+                                <button class="btn btn-primary" onclick="spinWheel()"><i class="fas fa-play"></i> Quay tiếp</button>
+                                <button class="btn btn-secondary" onclick="resetWheel()"><i class="fas fa-undo"></i> Đặt lại</button>
+                            </div>
                         </div>
-                        <div class="result-name" id="winnerName">Nguyễn Văn A</div>
-                        <div class="result-class" id="winnerClass">Lớp 3A</div>
-                        <div class="result-actions">
-                            <button class="btn btn-primary" onclick="spinWheel()">
-                                <i class="fas fa-play"></i> Quay tiếp
-                            </button>
-                            <button class="btn btn-secondary" onclick="resetWheel()">
-                                <i class="fas fa-undo"></i> Đặt lại
-                            </button>
-                        </div>
+                        <div class="wheel-result-empty"><i class="fas fa-gift"></i><strong>Chưa có học sinh được chọn</strong><span>Hãy nhấn nút QUAY để bắt đầu!</span></div>
                     </div>
 
-                    <div class="student-list-container">
-                        <h4 style="margin-bottom: 0.5rem;"><i class="fas fa-users"></i> Danh sách tham gia</h4>
-                        <div class="student-list-scroll" id="wheelStudentList">
-                            <p class="text-muted">Vui lòng chọn lớp</p>
-                        </div>
+                    <div class="wheel-panel wheel-students-panel">
+                        <div class="wheel-panel-title"><span><i class="fas fa-users"></i> Danh sách học sinh tham gia</span></div>
+                        <div class="student-list-scroll" id="wheelStudentList"><p class="text-muted">Vui lòng chọn lớp</p></div>
                     </div>
-                </div>
+                </aside>
             </div>
         </div>
     `;

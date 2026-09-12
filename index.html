@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản - Hệ thống quản lý học sinh</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=151539">
+    <link rel="stylesheet" href="style.css?v=1514931">
     <!-- Thêm thư viện XLSX để xuất file Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- ExcelJS: xuất file VNEDU có định dạng, đường viền, căn lề -->
@@ -336,8 +336,8 @@
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
                 <div class="logo admin-school-logo">
-                    <img src="assets/logo-lai-son.png" alt="Logo Lại Sơn">
-                    <span><b>LẠI SƠN</b><small>Quản trị hệ thống</small></span>
+                    <img src="assets/logo-lai-son.png" alt="Logo Trường Tiểu học Trần Quốc Toản">
+                    <span class="admin-brand-copy"><b>TRƯỜNG TIỂU HỌC<br>TRẦN QUỐC TOẢN</b><small>Hệ thống quản lý học sinh</small></span>
                 </div>
                 <button id="toggleSidebar" class="sidebar-toggle"><i class="fas fa-bars"></i></button>
             </div>
@@ -390,8 +390,21 @@
                 <div class="topbar-left">
                     <button id="toggleSidebarMobile" class="sidebar-toggle-mobile"><i class="fas fa-bars"></i></button>
                     <div class="topbar-title-wrap">
-                        <span class="topbar-eyebrow">HỆ THỐNG QUẢN LÝ</span>
+                        <span class="topbar-eyebrow">HỆ THỐNG QUẢN LÝ HỌC SINH</span>
                         <h2 id="pageTitle">Dashboard</h2>
+                    </div>
+                </div>
+
+                <div class="topbar-mini-banner" aria-hidden="true">
+                    <div class="topbar-mini-wave"></div>
+                    <div class="topbar-mini-message">Vì học sinh thân yêu</div>
+                    <div class="topbar-mini-scene">
+                        <span class="mini-plane"><i class="fas fa-paper-plane"></i></span>
+                        <span class="mini-book mini-book-a"></span>
+                        <span class="mini-book mini-book-b"></span>
+                        <span class="mini-book mini-book-c"></span>
+                        <span class="mini-flower mini-flower-a">✿</span>
+                        <span class="mini-flower mini-flower-b">✿</span>
                     </div>
                 </div>
                 <div class="topbar-right">
@@ -424,7 +437,7 @@
             setTimeout(() => document.getElementById('loginUsername')?.focus(), 50);
         };
     </script>
-    <script type="module" src="script.js?v=151539"></script>
+    <script type="module" src="script.js?v=1514931"></script>
     <div id="sidebarOverlay" class="sidebar-overlay"></div>
 </body>
 </html>
