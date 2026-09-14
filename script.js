@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=15149313';
+import { supabase } from './supabase.js?v=15149361';
 
 
 // ============================================================
@@ -4851,7 +4851,7 @@ function renderPage(page) {
         default: container.innerHTML = '<p>Trang không tồn tại.</p>';
     }
     setTimeout(() => {
-        if (page === 'dashboard') initCharts();
+        if (page === 'dashboard') { initCharts(); loadAdminVisitStats(); }
         if (page === 'students') initStudentTable();
         if (page === 'classes') initClassTable();
         if (page === 'scores') initScoreTable();
@@ -4932,6 +4932,46 @@ function renderDashboard() {
                     </div>
                 </div>
             </div>
+
+            <section class="admin-visit-section" id="adminVisitStats" hidden>
+                <div class="admin-visit-head">
+                    <div>
+                        <span class="dashboard-chart-kicker">THỐNG KÊ WEBSITE</span>
+                        <h3>Lượt truy cập website công khai</h3>
+                        <p>Chỉ tài khoản Admin nhìn thấy thống kê chi tiết này.</p>
+                    </div>
+                    <span class="admin-visit-status" id="visitStatsStatus"><i class="fas fa-spinner fa-spin"></i> Đang tải...</span>
+                </div>
+
+                <div class="admin-visit-grid">
+                    <div class="admin-visit-card">
+                        <i class="far fa-eye"></i>
+                        <div><b id="visitStatTotal">--</b><span>Tổng lượt</span></div>
+                    </div>
+                    <div class="admin-visit-card">
+                        <i class="far fa-calendar-check"></i>
+                        <div><b id="visitStatToday">--</b><span>Hôm nay</span></div>
+                    </div>
+                    <div class="admin-visit-card">
+                        <i class="fas fa-calendar-week"></i>
+                        <div><b id="visitStat7Days">--</b><span>7 ngày gần đây</span></div>
+                    </div>
+                    <div class="admin-visit-card">
+                        <i class="far fa-calendar-alt"></i>
+                        <div><b id="visitStat30Days">--</b><span>30 ngày gần đây</span></div>
+                    </div>
+                </div>
+
+                <div class="admin-visit-chart">
+                    <div class="admin-visit-chart-title">
+                        <strong>Biểu đồ lượt truy cập theo ngày</strong>
+                        <span>30 ngày gần nhất</span>
+                    </div>
+                    <div class="admin-visit-chart-canvas">
+                        <canvas id="chartSiteVisits"></canvas>
+                    </div>
+                </div>
+            </section>
 
             <div class="chart-grid dashboard-chart-grid">
                 <div class="chart-box dashboard-chart-card">
@@ -7036,6 +7076,37 @@ function renderAttendance() {
                 </button>
             </div>
 
+            <div class="attendance-stats-card">
+                <div class="attendance-stats-head">
+                    <div>
+                        <span class="attendance-list-icon"><i class="fas fa-chart-column"></i></span>
+                        <div>
+                            <h3>Thống kê chuyên cần</h3>
+                            <p>Xem Có mặt, Vắng/Phép, Không phép và Muộn theo tuần, tháng hoặc năm học.</p>
+                        </div>
+                    </div>
+                    <div class="attendance-stats-controls">
+                        <select id="attendanceStatsPeriod" aria-label="Khoảng thống kê">
+                            <option value="week">Tuần</option>
+                            <option value="month" selected>Tháng</option>
+                            <option value="schoolyear">Năm học</option>
+                        </select>
+                        <button type="button" class="btn btn-primary" onclick="loadAttendanceStats()">
+                            <i class="fas fa-chart-simple"></i> Xem thống kê
+                        </button>
+                        <button type="button" class="btn btn-success" onclick="exportAttendanceStatsExcel()">
+                            <i class="fas fa-file-excel"></i> Xuất Excel thống kê
+                        </button>
+                    </div>
+                </div>
+                <div id="attendanceStatsResult" class="attendance-stats-result">
+                    <div class="attendance-stats-placeholder">
+                        <i class="fas fa-chart-line"></i>
+                        <span>Chọn lớp, ngày tham chiếu và khoảng thời gian rồi bấm <b>Xem thống kê</b>.</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="attendance-list-card">
                 <div class="attendance-list-head">
                     <div>
@@ -7182,8 +7253,340 @@ async function updateAttendanceStatus(date, classId, studentUuid, status) {
 
 async function saveAttendance() {
     if (!requireEditPermission('lưu điểm danh')) return;
-    showToast('Đã lưu điểm danh!');
-    loadAttendance();
+
+    const clsName = document.getElementById('attendanceClass')?.value;
+    const date = document.getElementById('attendanceDate')?.value;
+    const classObj = APP_STATE.classes.find(c => c.name === clsName);
+    const selects = Array.from(document.querySelectorAll('#attendanceTableWrapper .attendance-status'));
+
+    if (!classObj || !date || selects.length === 0) {
+        showToast('Vui lòng chọn lớp, ngày và tải danh sách điểm danh trước khi lưu.', 'warning');
+        return;
+    }
+
+    const payload = selects.map(select => ({
+        student_id: select.dataset.student,
+        class_id: classObj.id,
+        attendance_date: date,
+        status: select.value || 'Có mặt'
+    }));
+
+    try {
+        const { error } = await supabase
+            .from('app3_attendance')
+            .upsert(payload, { onConflict: 'student_id,attendance_date' });
+        if (error) throw error;
+
+        showToast(`Đã lưu điểm danh ${payload.length} học sinh!`, 'success', 1800);
+        await loadAttendance();
+    } catch (err) {
+        showToast('Lỗi lưu điểm danh: ' + err.message, 'error');
+    }
+}
+
+
+function attendanceStatsRange(referenceDate, period) {
+    const base = new Date(`${referenceDate}T12:00:00`);
+    if (Number.isNaN(base.getTime())) return null;
+
+    let start, end, label;
+    if (period === 'week') {
+        const day = base.getDay();
+        const diffToMonday = day === 0 ? -6 : 1 - day;
+        start = new Date(base);
+        start.setDate(base.getDate() + diffToMonday);
+        end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        label = `Tuần ${start.toLocaleDateString('vi-VN')} – ${end.toLocaleDateString('vi-VN')}`;
+    } else if (period === 'schoolyear') {
+        const y = base.getMonth() >= 8 ? base.getFullYear() : base.getFullYear() - 1;
+        start = new Date(y, 8, 1, 12, 0, 0);
+        end = new Date(y + 1, 7, 31, 12, 0, 0);
+        label = `Năm học ${y}–${y + 1}`;
+    } else {
+        start = new Date(base.getFullYear(), base.getMonth(), 1, 12, 0, 0);
+        end = new Date(base.getFullYear(), base.getMonth() + 1, 0, 12, 0, 0);
+        label = `Tháng ${base.getMonth() + 1}/${base.getFullYear()}`;
+    }
+
+    const iso = d => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+    return { start: iso(start), end: iso(end), label };
+}
+
+async function loadAttendanceStats() {
+    const result = document.getElementById('attendanceStatsResult');
+    const clsName = document.getElementById('attendanceClass')?.value;
+    const referenceDate = document.getElementById('attendanceDate')?.value;
+    const period = document.getElementById('attendanceStatsPeriod')?.value || 'month';
+    const classObj = APP_STATE.classes.find(c => c.name === clsName);
+
+    if (!result) return;
+    if (!classObj || !referenceDate) {
+        result.innerHTML = '<div class="attendance-stats-placeholder"><i class="fas fa-circle-exclamation"></i><span>Vui lòng chọn lớp và ngày tham chiếu trước.</span></div>';
+        return;
+    }
+
+    const range = attendanceStatsRange(referenceDate, period);
+    if (!range) return;
+
+    const formatAttendanceDate = (isoDate) => {
+        const parts = String(isoDate || '').split('-');
+        return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : String(isoDate || '');
+    };
+
+    result.innerHTML = '<div class="attendance-stats-placeholder"><i class="fas fa-spinner fa-spin"></i><span>Đang tổng hợp học sinh vắng và đi muộn...</span></div>';
+
+    try {
+        const { data: records, error } = await supabase
+            .from('app3_attendance')
+            .select('student_id,attendance_date,status')
+            .eq('class_id', classObj.id)
+            .gte('attendance_date', range.start)
+            .lte('attendance_date', range.end)
+            .order('attendance_date', { ascending: true });
+        if (error) throw error;
+
+        const students = APP_STATE.students
+            .filter(s => s.class === clsName)
+            .slice()
+            .sort((a,b) => String(a.fullName||'').localeCompare(String(b.fullName||''), 'vi'));
+
+        const studentMap = new Map(students.map(s => [String(s.db_uuid), s]));
+        const specialRows = new Map();
+
+        (records || []).forEach(r => {
+            const status = String(r.status || '').trim();
+            if (!['Vắng', 'Phép', 'Không phép', 'Muộn'].includes(status)) return;
+
+            const key = String(r.student_id || '');
+            const student = studentMap.get(key);
+            if (!student) return;
+
+            if (!specialRows.has(key)) {
+                specialRows.set(key, {
+                    student,
+                    excusedDates: [],
+                    unexcusedDates: [],
+                    lateDates: []
+                });
+            }
+
+            const row = specialRows.get(key);
+            if (status === 'Không phép') row.unexcusedDates.push(r.attendance_date);
+            else if (status === 'Muộn') row.lateDates.push(r.attendance_date);
+            else row.excusedDates.push(r.attendance_date);
+        });
+
+        const rows = Array.from(specialRows.values()).map(r => {
+            r.excusedDates = [...new Set(r.excusedDates)].sort();
+            r.unexcusedDates = [...new Set(r.unexcusedDates)].sort();
+            r.lateDates = [...new Set(r.lateDates)].sort();
+            r.total = r.excusedDates.length + r.unexcusedDates.length + r.lateDates.length;
+            return r;
+        }).sort((a,b) => b.total - a.total || String(a.student.fullName||'').localeCompare(String(b.student.fullName||''), 'vi'));
+
+        const totals = rows.reduce((acc, r) => {
+            acc.students += 1;
+            acc.excused += r.excusedDates.length;
+            acc.unexcused += r.unexcusedDates.length;
+            acc.late += r.lateDates.length;
+            return acc;
+        }, { students:0, excused:0, unexcused:0, late:0 });
+
+        const dateListHtml = (dates, type) => {
+            if (!dates.length) return '<span class="attendance-no-event">—</span>';
+            return `<div class="attendance-date-list">${dates.map(d =>
+                `<span class="attendance-date-chip ${type}"><i class="fas fa-calendar-day"></i>${formatAttendanceDate(d)}</span>`
+            ).join('')}</div>`;
+        };
+
+        if (rows.length === 0) {
+            result.innerHTML = `
+                <div class="attendance-stats-summary">
+                    <div class="attendance-stats-caption">
+                        <strong>${range.label}</strong>
+                        <span>${clsName}</span>
+                    </div>
+                </div>
+                <div class="attendance-stats-empty">
+                    <i class="fas fa-user-check"></i>
+                    <strong>Không có học sinh vắng hoặc đi muộn</strong>
+                    <span>Trong ${range.label.toLowerCase()}, chưa ghi nhận trường hợp Vắng/Phép, Không phép hoặc Muộn.</span>
+                </div>`;
+            return;
+        }
+
+        const tableRows = rows.map((r, idx) => `
+            <tr>
+                <td>${idx + 1}</td>
+                <td>${publicEscape(r.student.id || '')}</td>
+                <td class="attendance-stats-name">${publicEscape(r.student.fullName || '')}</td>
+                <td>${dateListHtml(r.excusedDates, 'is-excused')}</td>
+                <td>${dateListHtml(r.unexcusedDates, 'is-unexcused')}</td>
+                <td>${dateListHtml(r.lateDates, 'is-late')}</td>
+                <td><span class="attendance-event-total">${r.total}</span></td>
+            </tr>`).join('');
+
+        result.innerHTML = `
+            <div class="attendance-stats-summary">
+                <div class="attendance-stats-caption">
+                    <strong>${range.label}</strong>
+                    <span>${clsName} · Chỉ hiển thị học sinh có Vắng/Phép, Không phép hoặc Muộn</span>
+                </div>
+                <div class="attendance-stats-cards attendance-special-summary">
+                    <div class="attendance-stat-card is-students"><i class="fas fa-users"></i><div><span>Học sinh cần theo dõi</span><strong>${totals.students}</strong></div></div>
+                    <div class="attendance-stat-card is-absent"><i class="fas fa-user-clock"></i><div><span>Vắng / Phép</span><strong>${totals.excused}</strong></div></div>
+                    <div class="attendance-stat-card is-unexcused"><i class="fas fa-user-xmark"></i><div><span>Không phép</span><strong>${totals.unexcused}</strong></div></div>
+                    <div class="attendance-stat-card is-late"><i class="fas fa-clock"></i><div><span>Muộn</span><strong>${totals.late}</strong></div></div>
+                </div>
+            </div>
+            <div class="table-wrapper attendance-stats-table-wrap">
+                <table class="attendance-stats-table attendance-special-table">
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Mã HS</th>
+                            <th>Họ tên</th>
+                            <th>Ngày vắng / phép</th>
+                            <th>Ngày không phép</th>
+                            <th>Ngày đi muộn</th>
+                            <th>Tổng</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+            <div class="attendance-stats-note">
+                <i class="fas fa-circle-info"></i>
+                Mỗi ngày được hiển thị theo định dạng <b>ngày/tháng/năm</b>. Học sinh có nhiều lần vắng hoặc muộn sẽ hiển thị đầy đủ tất cả ngày trong khoảng thống kê đã chọn.
+            </div>`;
+    } catch (err) {
+        result.innerHTML = `<div class="attendance-stats-placeholder"><i class="fas fa-triangle-exclamation"></i><span>Lỗi thống kê: ${publicEscape(err.message || String(err))}</span></div>`;
+    }
+}
+
+
+async function exportAttendanceStatsExcel() {
+    const clsName = document.getElementById('attendanceClass')?.value;
+    const referenceDate = document.getElementById('attendanceDate')?.value;
+    const period = document.getElementById('attendanceStatsPeriod')?.value || 'month';
+    const classObj = APP_STATE.classes.find(c => c.name === clsName);
+
+    if (!classObj || !referenceDate) {
+        showToast('Vui lòng chọn lớp và ngày tham chiếu trước khi xuất thống kê.', 'warning');
+        return;
+    }
+
+    const range = attendanceStatsRange(referenceDate, period);
+    if (!range) {
+        showToast('Không xác định được khoảng thời gian thống kê.', 'warning');
+        return;
+    }
+
+    try {
+        const { data: records, error } = await supabase
+            .from('app3_attendance')
+            .select('student_id,attendance_date,status')
+            .eq('class_id', classObj.id)
+            .gte('attendance_date', range.start)
+            .lte('attendance_date', range.end)
+            .order('attendance_date', { ascending: true });
+
+        if (error) throw error;
+
+        const students = APP_STATE.students
+            .filter(s => s.class === clsName)
+            .slice()
+            .sort((a,b) => String(a.fullName||'').localeCompare(String(b.fullName||''), 'vi'));
+
+        const studentMap = new Map(students.map(s => [String(s.db_uuid), s]));
+        const rowsMap = new Map();
+
+        (records || []).forEach(r => {
+            const status = String(r.status || '').trim();
+            if (!['Vắng', 'Phép', 'Không phép', 'Muộn'].includes(status)) return;
+
+            const key = String(r.student_id || '');
+            const student = studentMap.get(key);
+            if (!student) return;
+
+            if (!rowsMap.has(key)) {
+                rowsMap.set(key, {
+                    student,
+                    excusedDates: [],
+                    unexcusedDates: [],
+                    lateDates: []
+                });
+            }
+
+            const row = rowsMap.get(key);
+            if (status === 'Không phép') row.unexcusedDates.push(r.attendance_date);
+            else if (status === 'Muộn') row.lateDates.push(r.attendance_date);
+            else row.excusedDates.push(r.attendance_date);
+        });
+
+        const formatDateExcel = isoDate => {
+            const parts = String(isoDate || '').split('-');
+            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : String(isoDate || '');
+        };
+
+        const rows = Array.from(rowsMap.values()).map((r, index) => {
+            const excused = [...new Set(r.excusedDates)].sort();
+            const unexcused = [...new Set(r.unexcusedDates)].sort();
+            const late = [...new Set(r.lateDates)].sort();
+
+            return {
+                'STT': index + 1,
+                'Mã HS': r.student.id || '',
+                'Họ tên': r.student.fullName || '',
+                'Lớp': clsName,
+                'Ngày vắng/phép': excused.map(formatDateExcel).join(', '),
+                'Ngày không phép': unexcused.map(formatDateExcel).join(', '),
+                'Ngày đi muộn': late.map(formatDateExcel).join(', '),
+                'Tổng số lần': excused.length + unexcused.length + late.length
+            };
+        }).sort((a,b) =>
+            (b['Tổng số lần'] - a['Tổng số lần']) ||
+            String(a['Họ tên']).localeCompare(String(b['Họ tên']), 'vi')
+        );
+
+        if (rows.length === 0) {
+            showToast(`Không có học sinh vắng, không phép hoặc muộn trong ${range.label.toLowerCase()}.`, 'warning');
+            return;
+        }
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(rows);
+
+        ws['!cols'] = [
+            { wch: 6 },
+            { wch: 14 },
+            { wch: 28 },
+            { wch: 10 },
+            { wch: 28 },
+            { wch: 28 },
+            { wch: 28 },
+            { wch: 12 }
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, 'ThongKeChuyenCan');
+
+        const safeLabel = range.label
+            .replace(/\//g, '-')
+            .replace(/[–—]/g, '-')
+            .replace(/\s+/g, '_');
+
+        XLSX.writeFile(wb, `ThongKeChuyenCan_${clsName}_${safeLabel}.xlsx`);
+        showToast('Xuất Excel thống kê chuyên cần thành công!', 'success', 1800);
+
+    } catch (err) {
+        showToast('Lỗi xuất Excel thống kê: ' + (err.message || String(err)), 'error');
+    }
 }
 
 function exportAttendanceExcel() {
@@ -7196,7 +7599,7 @@ function exportAttendanceExcel() {
 
     const records = APP_STATE.attendance.find(a => a.class === cls && a.date === date);
     if (!records || records.records.length === 0) {
-        showToast('Không có dữ liệu điểm danh cho ngày và lớp này.', 'warning');
+        showToast('Ngày đang chọn chưa có dữ liệu điểm danh. Muốn xuất Tuần/Tháng/Năm học, hãy dùng nút “Xuất Excel thống kê” bên dưới.', 'warning');
         return;
     }
 
@@ -7215,7 +7618,7 @@ function exportAttendanceExcel() {
     const ws = XLSX.utils.json_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, 'DiemDanh');
     XLSX.writeFile(wb, `DiemDanh_${cls}_${date}.xlsx`);
-    showToast('Xuất Excel điểm danh thành công!');
+    showToast('Xuất Excel điểm danh theo ngày thành công!', 'success', 1800);
 }
 
 // ============================================================
@@ -9592,9 +9995,24 @@ function renderPublicDocuments(items=PUBLIC_DOCUMENT_CACHE){
         const url=publicSafeExternalUrl(item.file_url||'');
         const cat=publicEscape(item.category||'Tài liệu');
         const title=publicEscape(item.title||'Tài liệu');
-        return `<article class="public-document-card"><div class="public-document-icon"><i class="fas ${publicDocumentIcon(item)}"></i></div><div class="public-document-copy"><div class="public-document-meta"><span>${cat}</span><small>${publicDocumentType(item)} · ${publicDate(item.created_at)}</small></div><h3>${title}</h3><p>${publicEscape(item.description||'Tài liệu công khai của nhà trường.')}</p></div><div class="public-document-actions">${url?`<a class="public-doc-link" href="${url}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i> Mở tài liệu</a><a class="public-doc-download" href="${url}" download target="_blank" rel="noopener" aria-label="Tải ${title}"><i class="fas fa-download"></i></a>`:'<span class="public-doc-unavailable"><i class="fas fa-clock"></i> Đang cập nhật tệp</span>'}</div></article>`;
+        const rawDescription=String(item.description||'Tài liệu công khai của nhà trường.').trim();
+        const description=publicEscape(rawDescription);
+        const hasMore=rawDescription.length>220;
+        return `<article class="public-document-card"><div class="public-document-icon"><i class="fas ${publicDocumentIcon(item)}"></i></div><div class="public-document-copy"><div class="public-document-meta"><span>${cat}</span><small>${publicDocumentType(item)} · ${publicDate(item.created_at)}</small></div><h3>${title}</h3><p class="public-document-description${hasMore?' is-collapsible':''}">${description}</p>${hasMore?`<button type="button" class="public-document-more" onclick="togglePublicDocumentPreview(this)"><span>Xem thêm</span><i class="fas fa-chevron-down"></i></button>`:''}</div><div class="public-document-actions">${url?`<a class="public-doc-link" href="${url}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i> Mở tài liệu</a><a class="public-doc-download" href="${url}" download target="_blank" rel="noopener" aria-label="Tải ${title}"><i class="fas fa-download"></i></a>`:'<span class="public-doc-unavailable"><i class="fas fa-clock"></i> Đang cập nhật tệp</span>'}</div></article>`;
     }).join('');
 }
+
+function togglePublicDocumentPreview(button){
+    const card=button?.closest('.public-document-card');
+    const description=card?.querySelector('.public-document-description');
+    if(!description) return;
+    const expanded=description.classList.toggle('is-expanded');
+    button.classList.toggle('is-expanded',expanded);
+    const label=button.querySelector('span');
+    if(label) label.textContent=expanded?'Thu gọn':'Xem thêm';
+    button.setAttribute('aria-expanded',expanded?'true':'false');
+}
+
 function setPublicDocumentCategory(category='Tất cả'){PUBLIC_DOCUMENT_CATEGORY=String(category||'Tất cả');renderPublicDocuments();}
 function setPublicDocumentSearch(value=''){PUBLIC_DOCUMENT_SEARCH=String(value||'');renderPublicDocuments();}
 
@@ -10629,10 +11047,250 @@ function showAuthenticatedApp() {
     document.body.classList.add('app-open');
 }
 
+
+
+// ============================================================
+// BƯỚC 151.49.3E.3 - THỐNG KÊ LƯỢT TRUY CẬP
+// Website công khai: chỉ hiện Tổng lượt.
+// Admin Dashboard: Tổng / Hôm nay / 7 ngày / 30 ngày + biểu đồ theo ngày.
+// ============================================================
+function formatVisitNumber(value) {
+    return new Intl.NumberFormat('vi-VN').format(Number(value) || 0);
+}
+
+async function loadPublicVisitCount() {
+    const badge = document.getElementById('publicVisitBadge');
+    const target = document.getElementById('publicVisitTotal');
+    if (!target) return;
+
+    try {
+        const { data, error } = await supabase.rpc('app3_public_visit_total');
+        if (error) throw error;
+
+        const total = Number(data ?? 0);
+        target.textContent = formatVisitNumber(total);
+        if (badge) badge.classList.add('is-ready');
+    } catch (err) {
+        console.warn('Không thể tải tổng lượt truy cập:', err);
+        target.textContent = '0';
+        if (badge) badge.classList.add('is-ready');
+    }
+}
+
+function getLocalDayStart(date = new Date()) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function formatVisitDayKey(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function formatVisitDayLabel(date) {
+    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+async function fetchVisitRowsSince(startDate) {
+    const rows = [];
+    const pageSize = 1000;
+    let from = 0;
+
+    while (true) {
+        const { data, error } = await supabase
+            .from('app3_site_visits')
+            .select('created_at')
+            .gte('created_at', startDate.toISOString())
+            .order('created_at', { ascending: true })
+            .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+
+        const batch = data || [];
+        rows.push(...batch);
+
+        if (batch.length < pageSize) break;
+        from += pageSize;
+    }
+
+    return rows;
+}
+
+async function loadAdminVisitStats() {
+    const panel = document.getElementById('adminVisitStats');
+    if (!panel) return;
+
+    // Dashboard có thể render trước khi quyền tài khoản nạp xong.
+    // Chờ quyền rồi mới quyết định hiện/ẩn thống kê.
+    if (!APP_STATE.userAccessLoaded) {
+        await loadCurrentUserAccess();
+    }
+
+    if (!isAdmin()) {
+        panel.hidden = true;
+        return;
+    }
+
+    panel.hidden = false;
+
+    const totalEl = document.getElementById('visitStatTotal');
+    const todayEl = document.getElementById('visitStatToday');
+    const weekEl = document.getElementById('visitStat7Days');
+    const monthEl = document.getElementById('visitStat30Days');
+    const statusEl = document.getElementById('visitStatsStatus');
+
+    try {
+        if (statusEl) statusEl.textContent = 'Đang cập nhật dữ liệu...';
+
+        const now = new Date();
+        const todayStart = getLocalDayStart(now);
+
+        const start30 = new Date(todayStart);
+        start30.setDate(start30.getDate() - 29);
+
+        const start7 = new Date(todayStart);
+        start7.setDate(start7.getDate() - 6);
+
+        const [{ count: totalCount, error: totalError }, rows] = await Promise.all([
+            supabase
+                .from('app3_site_visits')
+                .select('id', { count: 'exact', head: true }),
+            fetchVisitRowsSince(start30)
+        ]);
+
+        if (totalError) throw totalError;
+
+        let todayCount = 0;
+        let sevenDayCount = 0;
+        const dailyCounts = {};
+
+        for (let i = 0; i < 30; i++) {
+            const day = new Date(start30);
+            day.setDate(start30.getDate() + i);
+            dailyCounts[formatVisitDayKey(day)] = 0;
+        }
+
+        rows.forEach(row => {
+            const visitDate = new Date(row.created_at);
+            if (Number.isNaN(visitDate.getTime())) return;
+
+            if (visitDate >= todayStart) todayCount++;
+            if (visitDate >= start7) sevenDayCount++;
+
+            const key = formatVisitDayKey(visitDate);
+            if (Object.prototype.hasOwnProperty.call(dailyCounts, key)) {
+                dailyCounts[key]++;
+            }
+        });
+
+        if (totalEl) totalEl.textContent = formatVisitNumber(totalCount || 0);
+        if (todayEl) todayEl.textContent = formatVisitNumber(todayCount);
+        if (weekEl) weekEl.textContent = formatVisitNumber(sevenDayCount);
+        if (monthEl) monthEl.textContent = formatVisitNumber(rows.length);
+
+        const canvas = document.getElementById('chartSiteVisits');
+        if (canvas && typeof Chart !== 'undefined') {
+            if (chartInstances.siteVisits) {
+                chartInstances.siteVisits.destroy();
+            }
+
+            const labels = [];
+            const values = [];
+            for (let i = 0; i < 30; i++) {
+                const day = new Date(start30);
+                day.setDate(start30.getDate() + i);
+                labels.push(formatVisitDayLabel(day));
+                values.push(dailyCounts[formatVisitDayKey(day)] || 0);
+            }
+
+            chartInstances.siteVisits = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Lượt truy cập',
+                        data: values,
+                        borderWidth: 2,
+                        tension: 0.32,
+                        fill: true,
+                        pointRadius: 2,
+                        pointHoverRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: context => ` ${formatVisitNumber(context.parsed.y)} lượt`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        },
+                        x: {
+                            ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }
+                        }
+                    }
+                }
+            });
+        }
+
+        if (statusEl) {
+            statusEl.innerHTML = `<i class="far fa-clock"></i> Cập nhật lúc ${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+    } catch (err) {
+        console.warn('Không thể tải thống kê lượt truy cập:', err);
+        if (statusEl) statusEl.textContent = 'Không tải được dữ liệu lượt truy cập.';
+    }
+}
+
+
+// ============================================================
+// BƯỚC 151.49.3E.2 - GHI NHẬN LƯỢT TRUY CẬP WEBSITE CÔNG KHAI
+// ============================================================
+async function recordPublicSiteVisit() {
+    try {
+        const storageKey = 'app3_public_visit_session_v1';
+
+        // Trong cùng một tab/phiên: refresh hoặc chuyển mục không tăng lượt mới.
+        if (sessionStorage.getItem(storageKey)) return;
+
+        const sessionKey = window.crypto?.randomUUID
+            ? window.crypto.randomUUID()
+            : `visit_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+        const { error } = await supabase
+            .from('app3_site_visits')
+            .insert({
+                session_key: sessionKey,
+                page_path: window.location.pathname || '/'
+            });
+
+        if (error) {
+            console.warn('Không thể ghi nhận lượt truy cập website:', error);
+            return;
+        }
+
+        // Chỉ đánh dấu sau khi Supabase ghi thành công.
+        sessionStorage.setItem(storageKey, sessionKey);
+    } catch (err) {
+        console.warn('Lỗi ghi nhận lượt truy cập website:', err);
+    }
+}
+
 function initPublicWebsite() {
     updatePublicTodayLabel();
     setupPublicHero([]);
     loadPublicWebsiteContent();
+    recordPublicSiteVisit().finally(loadPublicVisitCount);
     // BƯỚC 150.3.1: Một luồng mở hệ thống dùng chung cho desktop + mobile.
     // Dùng event delegation để nút vẫn hoạt động ổn định trên Safari/Chrome mobile
     // và cả khi giao diện công khai được render/cập nhật lại.
@@ -11396,8 +12054,67 @@ async function loadUserRolePanel(){
         }).join('');
 
         panel.innerHTML = `
+            <div class="account-create-card">
+                <div class="account-create-head">
+                    <div class="account-create-icon"><i class="fas fa-user-plus"></i></div>
+                    <div>
+                        <h4>Tạo tài khoản giáo viên</h4>
+                        <p>Tạo tài khoản đăng nhập mới. Sau khi tạo, có thể dùng nút <strong>Phân công</strong> bên dưới để chọn Môn – Lớp.</p>
+                    </div>
+                </div>
+
+                <form id="createTeacherAccountForm" class="account-create-form" onsubmit="createTeacherAccount(event)">
+                    <div class="form-group">
+                        <label for="newTeacherDisplayName">Họ và tên</label>
+                        <input id="newTeacherDisplayName" type="text" maxlength="120" placeholder="Ví dụ: Nguyễn Văn A" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newTeacherEmail">Email đăng nhập</label>
+                        <input id="newTeacherEmail" type="email" maxlength="180" placeholder="giaovien@truong.edu.vn" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newTeacherPassword">Mật khẩu ban đầu</label>
+                        <div class="account-password-wrap">
+                            <input id="newTeacherPassword" type="password" minlength="8" maxlength="72" placeholder="Tối thiểu 8 ký tự" required autocomplete="new-password">
+                            <button type="button" class="account-password-toggle" onclick="toggleNewTeacherPassword()" aria-label="Hiện hoặc ẩn mật khẩu">
+                                <i class="far fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newTeacherRole">Vai trò</label>
+                        <select id="newTeacherRole">
+                            <option value="teacher" selected>Giáo viên</option>
+                            <option value="viewer">Chỉ xem</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newTeacherScope">Phạm vi</label>
+                        <select id="newTeacherScope">
+                            <option value="assigned" selected>Theo phân công</option>
+                            <option value="all">Tất cả môn/lớp</option>
+                        </select>
+                    </div>
+
+                    <div class="account-create-action">
+                        <button id="btnCreateTeacherAccount" type="submit" class="btn btn-primary">
+                            <i class="fas fa-user-plus"></i> Tạo tài khoản
+                        </button>
+                    </div>
+                </form>
+
+                <div class="account-create-note">
+                    <i class="fas fa-shield-halved"></i>
+                    <span>Việc tạo tài khoản được xử lý qua hàm bảo mật phía Supabase; khóa quản trị không được đưa vào mã nguồn website.</span>
+                </div>
+            </div>
+
             <p>Vai trò hiện tại: <strong>${escapeRoleHtml(APP_STATE.currentUserRole)}</strong></p>
-            <p class="text-muted" style="font-size:.84rem">Phạm vi <strong>Tất cả</strong>: được truy cập toàn bộ môn/lớp theo vai trò. <strong>Theo phân công</strong>: chỉ các cặp Môn – Lớp được Admin chọn. Bước này mới quản lý cấu hình; bộ lọc nghiệp vụ sẽ được áp dụng ở bước sau.</p>
+            <p class="text-muted" style="font-size:.84rem">Phạm vi <strong>Tất cả</strong>: được truy cập toàn bộ môn/lớp theo vai trò. <strong>Theo phân công</strong>: chỉ các cặp Môn – Lớp được Admin chọn.</p>
             <div class="table-wrapper">
                 <table>
                     <thead><tr><th>Email</th><th>Tên hiển thị</th><th>Vai trò</th><th>Phạm vi</th><th>Hoạt động</th><th>Thao tác</th></tr></thead>
@@ -11407,6 +12124,88 @@ async function loadUserRolePanel(){
     } catch(err) {
         console.error('LOAD USER ROLE PANEL ERROR:', err);
         panel.innerHTML = `<p class="text-muted">Không tải được cấu hình phân quyền: ${escapeRoleHtml(err.message || err)}</p>`;
+    }
+}
+
+
+function toggleNewTeacherPassword() {
+    const input = document.getElementById('newTeacherPassword');
+    const icon = document.querySelector('.account-password-toggle i');
+    if (!input) return;
+
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+
+    if (icon) {
+        icon.className = show ? 'far fa-eye-slash' : 'far fa-eye';
+    }
+}
+
+async function createTeacherAccount(event) {
+    event?.preventDefault();
+
+    if (!isAdmin()) {
+        showToast('Chỉ Admin được tạo tài khoản giáo viên.', 'warning');
+        return;
+    }
+
+    const displayName = document.getElementById('newTeacherDisplayName')?.value.trim() || '';
+    const email = document.getElementById('newTeacherEmail')?.value.trim().toLowerCase() || '';
+    const password = document.getElementById('newTeacherPassword')?.value || '';
+    const role = document.getElementById('newTeacherRole')?.value === 'viewer' ? 'viewer' : 'teacher';
+    const accessScope = document.getElementById('newTeacherScope')?.value === 'all' ? 'all' : 'assigned';
+    const button = document.getElementById('btnCreateTeacherAccount');
+
+    if (!displayName || !email || !password) {
+        showToast('Vui lòng nhập đầy đủ họ tên, email và mật khẩu.', 'warning');
+        return;
+    }
+
+    if (password.length < 8) {
+        showToast('Mật khẩu ban đầu phải có ít nhất 8 ký tự.', 'warning');
+        return;
+    }
+
+    const originalHtml = button?.innerHTML;
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tạo...';
+    }
+
+    try {
+        const { data, error } = await supabase.functions.invoke('rapid-action', {
+            body: {
+                email,
+                password,
+                display_name: displayName,
+                role,
+                access_scope: accessScope
+            }
+        });
+
+        if (error) throw error;
+        if (!data?.ok) throw new Error(data?.error || 'Không tạo được tài khoản.');
+
+        showToast(`Đã tạo tài khoản ${email} thành công!`, 'success', 2200);
+
+        const form = document.getElementById('createTeacherAccountForm');
+        if (form) form.reset();
+
+        await loadUserRolePanel();
+    } catch (err) {
+        console.error('CREATE TEACHER ACCOUNT ERROR:', err);
+
+        let message = err?.message || String(err);
+        if (/Failed to send a request|FunctionsHttpError|404/i.test(message)) {
+            message = 'Chưa triển khai hàm Supabase app3-create-user hoặc hàm đang lỗi.';
+        }
+
+        showToast('Lỗi tạo tài khoản: ' + message, 'error', 3500);
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalHtml || '<i class="fas fa-user-plus"></i> Tạo tài khoản';
+        }
     }
 }
 
@@ -11467,6 +12266,8 @@ async function saveUserRole(userId){
     }
 }
 
+window.createTeacherAccount = createTeacherAccount;
+window.toggleNewTeacherPassword = toggleNewTeacherPassword;
 window.loadCurrentUserAccess = loadCurrentUserAccess;
 window.isAdmin = isAdmin;
 window.isTeacher = isTeacher;
@@ -12901,10 +13702,13 @@ window.showPublicSite = showPublicSite;
 window.showLoginFromPublic = showLoginFromPublic;
 window.showAuthenticatedApp = showAuthenticatedApp;
 
+window.togglePublicDocumentPreview = togglePublicDocumentPreview;
 window.setPublicDocumentCategory=setPublicDocumentCategory;
 window.setPublicDocumentSearch=setPublicDocumentSearch;
 
 // BƯỚC 151.49.2F-R2: export bộ lọc trạng thái cho inline onclick
 window.filterAttendanceStatus = filterAttendanceStatus;
+window.loadAttendanceStats = loadAttendanceStats;
+window.exportAttendanceStatsExcel = exportAttendanceStatsExcel;
 
 

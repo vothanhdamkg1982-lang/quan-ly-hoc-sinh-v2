@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản - Hệ thống quản lý học sinh</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=15149313">
+    <link rel="stylesheet" href="style.css?v=15149361">
     <!-- Thêm thư viện XLSX để xuất file Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- ExcelJS: xuất file VNEDU có định dạng, đường viền, căn lề -->
@@ -89,6 +89,10 @@
                             <button type="button" class="public-hero-arrow public-hero-next" id="publicHeroNext" aria-label="Ảnh banner tiếp theo"><i class="fas fa-chevron-right"></i></button>
                             <div id="publicHeroDots" class="public-hero-dots" aria-label="Chọn ảnh banner"><button type="button" class="active" data-hero-dot="0" aria-label="Ảnh banner 1"></button></div>
                             <span class="hero-banner-shine"></span>
+                            <div class="public-visit-badge" id="publicVisitBadge" title="Tổng lượt truy cập website">
+                                <i class="far fa-eye"></i>
+                                <span><b id="publicVisitTotal">--</b> lượt truy cập</span>
+                            </div>
                         </div>
                         <div class="public-school-ticker" aria-label="Thông điệp nhà trường">
                             <div class="public-school-ticker-label"><i class="fas fa-bullhorn"></i><span>THÔNG ĐIỆP NHÀ TRƯỜNG</span></div>
@@ -437,7 +441,7 @@
             setTimeout(() => document.getElementById('loginUsername')?.focus(), 50);
         };
     </script>
-    <script type="module" src="script.js?v=15149313"></script>
+    <script type="module" src="script.js?v=15149361"></script>
     <div id="sidebarOverlay" class="sidebar-overlay"></div>
 </body>
 </html>
