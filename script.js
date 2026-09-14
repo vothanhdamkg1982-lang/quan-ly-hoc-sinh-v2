@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=15149361';
+import { supabase } from './supabase.js?v=151493610';
 
 
 // ============================================================
@@ -3135,9 +3135,9 @@ function normalizeMillionaireExcelHeader(value) {
 
 function normalizeMillionaireDifficulty(value) {
     const v = normalizeMillionaireExcelHeader(value);
-    if (['de', 'easy', '1'].includes(v)) return 'easy';
-    if (['trung binh', 'medium', 'tb', '2'].includes(v)) return 'medium';
-    if (['kho', 'hard', '3'].includes(v)) return 'hard';
+    if (['de', 'easy', '1', 'nhan biet'].includes(v)) return 'easy';
+    if (['trung binh', 'medium', 'tb', '2', 'thong hieu'].includes(v)) return 'medium';
+    if (['kho', 'hard', '3', 'van dung', 'van dung cao'].includes(v)) return 'hard';
     return '';
 }
 
@@ -3678,6 +3678,101 @@ function importMillionaireQuestionsFromPastedAI() {
     if (newBox && imported.length) newBox.value = '';
 }
 
+function getMillionaireAIPromptData() {
+    const gradeValue = String(document.getElementById('mqGrade')?.value || 'all').trim();
+    const subject = String(document.getElementById('mqSubject')?.value || '').trim();
+    const topic = String(document.getElementById('mqTopic')?.value || '').trim();
+    const difficultyValue = String(document.getElementById('mqDifficulty')?.value || 'easy').trim();
+    const countRaw = Number(document.getElementById('millionaireAICount')?.value || 20);
+    const count = Math.max(1, Math.min(100, Number.isFinite(countRaw) ? Math.round(countRaw) : 20));
+
+    const grade = gradeValue === 'all' ? '[ghi khối lớp]' : `Khối ${gradeValue}`;
+    const difficultyMap = { easy: 'Dễ', medium: 'Trung bình', hard: 'Khó' };
+
+    return {
+        grade,
+        subject: subject || '[ghi môn học]',
+        topic: topic || '[ghi chủ đề/bài học]',
+        difficulty: difficultyMap[difficultyValue] || 'Dễ',
+        count
+    };
+}
+
+function buildMillionaireAIPrompt() {
+    const data = getMillionaireAIPromptData();
+    return `Hãy tạo cho tôi ${data.count} câu hỏi trắc nghiệm dùng cho học sinh.
+
+` +
+`Khối: ${data.grade}
+` +
+`Môn: ${data.subject}
+` +
+`Chủ đề: ${data.topic}
+` +
+`Mức độ: ${data.difficulty}
+
+` +
+`Yêu cầu:
+` +
+`- Mỗi câu có 4 phương án A, B, C, D và chỉ có 1 đáp án đúng.
+` +
+`- Nội dung chính xác, rõ ràng, phù hợp lứa tuổi học sinh.
+` +
+`- Các phương án nhiễu phải hợp lý nhưng không gây tranh cãi.
+` +
+`- Không lặp lại câu hỏi.
+
+` +
+`QUAN TRỌNG: Hãy trả kết quả đúng theo cấu trúc dưới đây để tôi sao chép trực tiếp vào phần mềm. ` +
+`Không viết lời mở đầu, không giải thích, không dùng bảng Markdown và không thêm nội dung trước hoặc sau danh sách.
+
+` +
+`Khối: ${data.grade}
+` +
+`Môn: ${data.subject}
+` +
+`Chủ đề: ${data.topic}
+` +
+`Mức độ: ${data.difficulty}
+` +
+`Câu hỏi: [nội dung câu hỏi]
+` +
+`A: [phương án A]
+` +
+`B: [phương án B]
+` +
+`C: [phương án C]
+` +
+`D: [phương án D]
+` +
+`Đáp án đúng: [A/B/C/D]
+
+` +
+`Lặp lại đúng cấu trúc trên cho đủ ${data.count} câu. Giữa hai câu để đúng 1 dòng trống.`;
+}
+
+async function millionaireBuildAndCopyAIPrompt() {
+    const prompt = buildMillionaireAIPrompt();
+    const box = document.getElementById('millionaireAIPromptBox');
+    if (box) box.value = prompt;
+
+    try {
+        await navigator.clipboard.writeText(prompt);
+        alert(`Đã tạo và sao chép câu lệnh AI.
+
+Bây giờ hãy dán câu lệnh này vào ChatGPT.`);
+    } catch (error) {
+        if (box) {
+            box.removeAttribute('readonly');
+            box.focus();
+            box.select();
+            try { document.execCommand('copy'); } catch (_) {}
+            box.setAttribute('readonly', 'readonly');
+        }
+        alert('Đã tạo câu lệnh AI. Nếu trình duyệt không tự sao chép, hãy bấm vào ô câu lệnh và nhấn Ctrl+C.');
+    }
+}
+
 function millionaireFillAIPasteExample() {
     const box = document.getElementById('millionaireAIPasteBox');
     if (!box) return;
@@ -3907,20 +4002,49 @@ function renderMillionaireQuestionManager() {
             <div class="millionaire-ai-paste-panel">
                 <div class="millionaire-ai-paste-title">
                     <div>
-                        <strong><i class="fas fa-wand-magic-sparkles"></i> Dán câu hỏi trực tiếp từ AI</strong>
-                        <span>Copy bảng hoặc danh sách câu hỏi do AI tạo rồi dán vào đây.</span>
+                        <strong><i class="fas fa-wand-magic-sparkles"></i> Tạo câu hỏi bằng AI</strong>
+                        <span>Phần mềm tạo sẵn câu lệnh theo Khối – Môn – Chủ đề – Mức độ ở phía trên. Sao chép câu lệnh sang ChatGPT, rồi dán kết quả trở lại đây.</span>
                     </div>
-                    <button type="button" onclick="millionaireFillAIPasteExample()" title="Điền ví dụ">
-                        <i class="fas fa-lightbulb"></i> Ví dụ
+                    <button type="button" onclick="millionaireFillAIPasteExample()" title="Điền ví dụ kết quả AI">
+                        <i class="fas fa-lightbulb"></i> Ví dụ kết quả
                     </button>
                 </div>
-                <textarea id="millionaireAIPasteBox" rows="10"
-                    placeholder="Dán nội dung từ ChatGPT/AI vào đây...
 
-Hỗ trợ:
-• Bảng Markdown 10 cột
-• Dữ liệu tab
-• Dạng Khối: ... / Môn: ... / Chủ đề: ... / Mức độ: ... / Câu hỏi: ... / A: ... / B: ... / C: ... / D: ... / Đáp án đúng: ..."></textarea>
+                <div class="millionaire-ai-prompt-builder">
+                    <div class="millionaire-ai-prompt-row">
+                        <label>
+                            <span>Số câu cần tạo</span>
+                            <input id="millionaireAICount" type="number" min="1" max="100" value="20">
+                        </label>
+                        <button type="button" class="btn millionaire-ai-copy-btn" onclick="millionaireBuildAndCopyAIPrompt()">
+                            <i class="fas fa-copy"></i> Tạo & sao chép câu lệnh AI
+                        </button>
+                    </div>
+                    <textarea id="millionaireAIPromptBox" rows="9" readonly
+                        placeholder="Nhấn “Tạo & sao chép câu lệnh AI”. Câu lệnh hoàn chỉnh sẽ xuất hiện tại đây và được sao chép vào clipboard."></textarea>
+                    <div class="millionaire-ai-guide">
+                        <strong>Cách dùng:</strong> 1. Chọn Khối, nhập Môn và Chủ đề ở phía trên → 2. Chọn số câu → 3. Sao chép câu lệnh AI → 4. Dán vào ChatGPT → 5. Sao chép danh sách ChatGPT trả về → 6. Dán vào ô bên dưới và bấm <b>Phân tích & nhập</b>.
+                    </div>
+                </div>
+
+                <div class="millionaire-ai-result-title">
+                    <strong><i class="fas fa-paste"></i> Dán danh sách câu hỏi ChatGPT trả về</strong>
+                    <span>Không cần sửa lại nếu ChatGPT làm đúng câu lệnh mẫu.</span>
+                </div>
+                <textarea id="millionaireAIPasteBox" rows="10"
+                    placeholder="Dán danh sách câu hỏi ChatGPT/AI trả về vào đây...
+
+Ví dụ mỗi câu:
+Khối: 5
+Môn: Tin học
+Chủ đề: Internet
+Mức độ: Dễ
+Câu hỏi: ...
+A: ...
+B: ...
+C: ...
+D: ...
+Đáp án đúng: B"></textarea>
                 <div class="millionaire-ai-paste-actions">
                     <button class="btn" onclick="importMillionaireQuestionsFromPastedAI()">
                         <i class="fas fa-wand-magic-sparkles"></i> Phân tích & nhập
@@ -4801,6 +4925,7 @@ window.millionaireDownloadExcelTemplate = millionaireDownloadExcelTemplate;
 window.millionairePickExcelFile = millionairePickExcelFile;
 window.exportMillionaireQuestionsToExcel = exportMillionaireQuestionsToExcel;
 window.importMillionaireQuestionsFromPastedAI = importMillionaireQuestionsFromPastedAI;
+window.millionaireBuildAndCopyAIPrompt = millionaireBuildAndCopyAIPrompt;
 window.millionaireFillAIPasteExample = millionaireFillAIPasteExample;
 window.runAdminHealthCheck = runAdminHealthCheck;
 
@@ -10959,9 +11084,63 @@ async function showPublicMediaEditor(){
       <div class="form-grid"><div class="form-group"><label>Thứ tự</label><input id="publicMediaSortOrder" type="number" value="0" min="0" step="1"></div><div class="form-group"><label>Hiển thị</label><label class="switch-inline"><input type="checkbox" id="publicMediaPublished" checked> <span>Công khai trên website</span></label></div></div>
       <div class="flex gap-2 mt-2"><button class="btn btn-primary btn-sm" onclick="savePublicMedia()"><i class="fas fa-save"></i> Lưu</button><button class="btn btn-secondary btn-sm" onclick="resetPublicMediaForm()">Làm mới</button></div>
     </div>
-    <div class="table-wrapper mt-2"><table><thead><tr><th>Loại</th><th>Tiêu đề</th><th>Nhóm</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td>${mediaTypeLabel(x.media_type)}</td><td><strong>${publicEscape(x.title||'')}</strong></td><td>${publicEscape(x.category||'')}</td><td>${x.is_published?'Công khai':'Đang ẩn'}</td><td><button class="btn btn-primary btn-sm" onclick='editPublicMedia(${JSON.stringify(JSON.stringify(x))})'><i class="fas fa-pen"></i></button> <button class="btn btn-danger btn-sm" onclick="deletePublicMedia('${x.id}')"><i class="fas fa-trash"></i></button></td></tr>`).join('')||'<tr><td colspan="5" class="text-muted">Chưa có hình ảnh/video.</td></tr>'}</tbody></table></div>`;
+
+    <div class="public-media-manager-toolbar mt-2">
+      <div class="public-media-manager-summary"><i class="fas fa-images"></i><strong>${(data||[]).filter(x=>x.media_type==='image').length} ảnh</strong><span>· ${(data||[]).length} mục trong thư viện</span></div>
+      <div class="public-media-manager-actions">
+        <label class="public-media-select-all-label"><input type="checkbox" id="publicMediaSelectAll" onchange="togglePublicMediaSelectAll(this.checked)"><span>Chọn tất cả</span></label>
+        <button id="publicMediaBulkDeleteBtn" class="btn btn-danger btn-sm" onclick="deleteSelectedPublicMedia()" disabled><i class="fas fa-trash"></i> Xóa đã chọn <span id="publicMediaSelectedCount">(0)</span></button>
+      </div>
+    </div>
+
+    <div class="table-wrapper public-media-manager-table"><table><thead><tr><th class="public-media-check-col"></th><th class="public-media-preview-col">Ảnh xem trước</th><th>Loại</th><th>Tiêu đề</th><th>Nhóm</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td class="public-media-check-col"><input class="public-media-select" type="checkbox" value="${publicEscape(String(x.id||''))}" onchange="updatePublicMediaBulkState()"></td><td class="public-media-preview-col">${publicMediaAdminPreview(x)}</td><td>${mediaTypeLabel(x.media_type)}</td><td><strong>${publicEscape(x.title||'')}</strong></td><td>${publicEscape(x.category||'')}</td><td>${x.is_published?'Công khai':'Đang ẩn'}</td><td class="public-media-row-actions"><button class="btn btn-primary btn-sm" onclick='editPublicMedia(${JSON.stringify(JSON.stringify(x))})' title="Chỉnh sửa"><i class="fas fa-pen"></i></button> <button class="btn btn-danger btn-sm" onclick="deletePublicMedia('${x.id}')" title="Xóa"><i class="fas fa-trash"></i></button></td></tr>`).join('')||'<tr><td colspan="7" class="text-muted">Chưa có hình ảnh/video.</td></tr>'}</tbody></table></div>`;
     updatePublicMediaFormByType();
+    updatePublicMediaBulkState();
 }
+function publicMediaAdminPreview(item){
+    if(!item) return '<span class="public-media-preview-placeholder"><i class="fas fa-photo-film"></i></span>';
+    if(item.media_type==='image' && item.media_url){
+        const src=publicEscape(item.media_url);
+        const alt=publicEscape(item.title||'Ảnh');
+        return `<button type="button" class="public-media-thumb-button" onclick="window.open('${src}','_blank','noopener')" title="Mở ảnh gốc"><img class="public-media-admin-thumb" src="${src}" alt="${alt}" loading="lazy" onerror="this.closest('button').innerHTML='<span class=&quot;public-media-preview-placeholder&quot;><i class=&quot;fas fa-image&quot;></i></span>'"></button>`;
+    }
+    if(item.media_type==='youtube'){
+        const yid=publicYouTubeId(item.media_url||'');
+        if(yid){
+            const src=`https://i.ytimg.com/vi/${yid}/mqdefault.jpg`;
+            return `<span class="public-media-thumb-button is-video"><img class="public-media-admin-thumb" src="${src}" alt="YouTube" loading="lazy"><i class="fab fa-youtube public-media-thumb-badge"></i></span>`;
+        }
+    }
+    return `<span class="public-media-preview-placeholder is-video"><i class="fas fa-play"></i></span>`;
+}
+function getSelectedPublicMediaIds(){return Array.from(document.querySelectorAll('.public-media-select:checked')).map(el=>el.value).filter(Boolean);}
+function updatePublicMediaBulkState(){
+    const all=Array.from(document.querySelectorAll('.public-media-select'));
+    const selected=all.filter(el=>el.checked);
+    const selectAll=document.getElementById('publicMediaSelectAll');
+    const btn=document.getElementById('publicMediaBulkDeleteBtn');
+    const count=document.getElementById('publicMediaSelectedCount');
+    if(count) count.textContent=`(${selected.length})`;
+    if(btn) btn.disabled=selected.length===0;
+    if(selectAll){selectAll.checked=all.length>0&&selected.length===all.length;selectAll.indeterminate=selected.length>0&&selected.length<all.length;}
+}
+function togglePublicMediaSelectAll(checked){document.querySelectorAll('.public-media-select').forEach(el=>{el.checked=!!checked;});updatePublicMediaBulkState();}
+async function deleteSelectedPublicMedia(){
+    if(!isAdmin())return;
+    const ids=getSelectedPublicMediaIds();
+    if(!ids.length){showToast('Chưa chọn ảnh/video để xóa.','warning');return;}
+    if(!confirm(`Xóa vĩnh viễn ${ids.length} mục đã chọn khỏi thư viện website?`))return;
+    const btn=document.getElementById('publicMediaBulkDeleteBtn');const oldHtml=btn?.innerHTML;
+    if(btn){btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Đang xóa...';}
+    try{
+        const {data:rows,error:readError}=await supabase.from('app3_public_media').select('id,media_url').in('id',ids);if(readError)throw readError;
+        const {error:deleteError}=await supabase.from('app3_public_media').delete().in('id',ids);if(deleteError)throw deleteError;
+        for(const url of (rows||[]).map(x=>x.media_url).filter(Boolean)){try{await removePublicMediaStoredFile(url);}catch(err){console.warn('Không xóa được tệp Storage:',url,err);}}
+        showToast(`Đã xóa ${ids.length} mục khỏi thư viện.`,'success');
+        await showPublicMediaEditor();await loadPublicWebsiteContent();
+    }catch(err){showToast('Lỗi xóa hàng loạt: '+(err?.message||err),'error');if(btn){btn.disabled=false;btn.innerHTML=oldHtml||'<i class="fas fa-trash"></i> Xóa đã chọn';}}
+}
+
 function editPublicMedia(json){
     const x=JSON.parse(json);
     document.getElementById('publicMediaEditId').value=x.id||'';
