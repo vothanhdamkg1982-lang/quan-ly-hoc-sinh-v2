@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=15149311';
+import { supabase } from './supabase.js?v=15149312';
 
 
 // ============================================================
@@ -12735,12 +12735,10 @@ window.editStudent = editStudent;
 
         if (mobileBtn) {
             mobileBtn.addEventListener('click', toggleMenu);
-            mobileBtn.addEventListener('touchstart', toggleMenu, { passive: false });
         }
 
         if (overlay) {
             overlay.addEventListener('click', closeMenu);
-            overlay.addEventListener('touchstart', closeMenu, { passive: false });
         }
 
         const navLinks = document.querySelectorAll('.sidebar a, aside a, .nav-item');
@@ -12876,61 +12874,3 @@ window.setPublicDocumentSearch=setPublicDocumentSearch;
 window.filterAttendanceStatus = filterAttendanceStatus;
 
 
-// ============================================================
-// BƯỚC 151.49.3B-R1 - HOTFIX MENU MOBILE
-// ============================================================
-function setMobileSidebarOpen(isOpen) {
-    document.body.classList.toggle('mobile-sidebar-open', !!isOpen);
-    const btn = document.getElementById('mobileMenuBtn');
-    const overlay = document.getElementById('mobileSidebarOverlay');
-    if (btn) {
-        btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-        btn.setAttribute('aria-label', isOpen ? 'Đóng menu chức năng' : 'Mở menu chức năng');
-    }
-    if (overlay) overlay.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-}
-
-function initMobileSidebarHotfix() {
-    const btn = document.getElementById('mobileMenuBtn');
-    const overlay = document.getElementById('mobileSidebarOverlay');
-    const sidebar = document.querySelector('.sidebar');
-    if (!btn || !sidebar) return;
-    if (btn.dataset.mobileSidebarReady === '1') return;
-    btn.dataset.mobileSidebarReady = '1';
-
-    btn.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        setMobileSidebarOpen(!document.body.classList.contains('mobile-sidebar-open'));
-    });
-
-    if (overlay && overlay.dataset.mobileSidebarReady !== '1') {
-        overlay.dataset.mobileSidebarReady = '1';
-        overlay.addEventListener('click', () => setMobileSidebarOpen(false));
-    }
-
-    sidebar.addEventListener('click', (event) => {
-        const navTarget = event.target.closest('[data-page], a, .nav-item, button[data-page]');
-        if (navTarget && window.matchMedia('(max-width: 992px)').matches) {
-            setMobileSidebarOpen(false);
-        }
-    });
-
-    window.addEventListener('resize', () => {
-        if (!window.matchMedia('(max-width: 992px)').matches) {
-            setMobileSidebarOpen(false);
-        }
-    });
-
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') setMobileSidebarOpen(false);
-    });
-}
-
-window.setMobileSidebarOpen = setMobileSidebarOpen;
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initMobileSidebarHotfix, { once: true });
-} else {
-    initMobileSidebarHotfix();
-}

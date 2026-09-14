@@ -9229,3 +9229,196 @@ tbody tr:hover td{
 @media(prefers-reduced-motion:reduce){
   .sidebar,.mobile-sidebar-overlay{transition:none!important}
 }
+
+
+/* ============================================================
+   BƯỚC 151.49.3B-R2 — FIX TOPBAR MOBILE
+   Mục tiêu:
+   - Chỉ còn 1 nút ☰ (#toggleSidebarMobile)
+   - Không cắt tiêu đề Dashboard
+   - Thanh topbar vừa màn hình iPhone/Android
+   ============================================================ */
+
+@media(max-width:992px){
+  /* R1 không còn dùng */
+  #mobileMenuBtn,
+  .mobile-menu-btn,
+  #mobileSidebarOverlay,
+  .mobile-sidebar-overlay{
+    display:none!important;
+  }
+
+  /* Dùng đúng nút menu mobile gốc của hệ thống */
+  #toggleSidebarMobile{
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    flex:0 0 42px!important;
+    width:42px!important;
+    height:42px!important;
+    min-width:42px!important;
+    min-height:42px!important;
+    margin:0 10px 0 0!important;
+    padding:0!important;
+    border:1px solid #dbe6f1!important;
+    border-radius:11px!important;
+    background:rgba(255,255,255,.92)!important;
+    color:#173d5d!important;
+    box-shadow:0 2px 8px rgba(31,95,150,.06)!important;
+    font-size:18px!important;
+  }
+
+  .topbar{
+    min-height:64px!important;
+    height:64px!important;
+    padding:0 12px!important;
+    gap:8px!important;
+    overflow:hidden!important;
+  }
+
+  .topbar-left{
+    flex:1 1 auto!important;
+    min-width:0!important;
+    display:flex!important;
+    align-items:center!important;
+    overflow:hidden!important;
+  }
+
+  .topbar-title-wrap{
+    flex:1 1 auto!important;
+    min-width:0!important;
+    overflow:hidden!important;
+    gap:0!important;
+  }
+
+  /* Trên mobile chỉ hiện tên module hiện tại, tránh 2 dòng bị cắt */
+  .topbar-eyebrow{
+    display:none!important;
+  }
+
+  #pageTitle{
+    display:block!important;
+    width:100%!important;
+    margin:0!important;
+    font-size:17px!important;
+    line-height:1.2!important;
+    font-weight:850!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+
+  .topbar-mini-banner{
+    display:none!important;
+  }
+
+  .topbar-right{
+    flex:0 0 auto!important;
+    gap:5px!important;
+    min-width:0!important;
+  }
+
+  .topbar-action{
+    width:36px!important;
+    height:36px!important;
+    min-width:36px!important;
+    padding:0!important;
+    border-radius:10px!important;
+  }
+
+  #publicHomeBtn{
+    width:36px!important;
+    min-width:36px!important;
+    padding:0!important;
+  }
+
+  #publicHomeBtn::after{
+    display:none!important;
+    content:none!important;
+  }
+
+  .topbar-user-chip{
+    width:36px!important;
+    min-width:36px!important;
+    max-width:36px!important;
+    height:36px!important;
+    min-height:36px!important;
+    padding:0!important;
+    display:grid!important;
+    place-items:center!important;
+    border-radius:10px!important;
+    overflow:hidden!important;
+  }
+
+  .topbar-user-avatar{
+    width:28px!important;
+    height:28px!important;
+    flex:0 0 28px!important;
+  }
+
+  #topbarCurrentUserName{
+    display:none!important;
+  }
+
+  .topbar-logout{
+    width:36px!important;
+    min-width:36px!important;
+  }
+}
+
+@media(max-width:430px){
+  .topbar{
+    padding-left:10px!important;
+    padding-right:8px!important;
+    gap:5px!important;
+  }
+
+  #toggleSidebarMobile{
+    flex-basis:40px!important;
+    width:40px!important;
+    height:40px!important;
+    min-width:40px!important;
+    min-height:40px!important;
+    margin-right:7px!important;
+  }
+
+  #pageTitle{
+    font-size:16px!important;
+  }
+
+  .topbar-right{
+    gap:4px!important;
+  }
+
+  .topbar-action,
+  #publicHomeBtn,
+  .topbar-user-chip,
+  .topbar-logout{
+    width:34px!important;
+    min-width:34px!important;
+    height:34px!important;
+    min-height:34px!important;
+  }
+}
+
+@media(max-width:360px){
+  #pageTitle{
+    font-size:14px!important;
+  }
+  .topbar-action,
+  #publicHomeBtn,
+  .topbar-user-chip,
+  .topbar-logout{
+    width:32px!important;
+    min-width:32px!important;
+    height:32px!important;
+    min-height:32px!important;
+  }
+}
+
+/* Dark mode cho nút ☰ gốc */
+[data-theme="dark"] #toggleSidebarMobile{
+  background:rgba(30,45,59,.96)!important;
+  color:#e7f2fb!important;
+  border-color:rgba(148,178,201,.22)!important;
+}
