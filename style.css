@@ -9422,3 +9422,88 @@ tbody tr:hover td{
   color:#e7f2fb!important;
   border-color:rgba(148,178,201,.22)!important;
 }
+
+
+/* ============================================================
+   BƯỚC 151.49.3B-R3 — FIX VÒNG QUAY MOBILE
+   ============================================================ */
+@media(max-width:700px){
+  body.page-wheel-active .wheel-page-modern .wheel-container{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:14px!important;
+  }
+  body.page-wheel-active .wheel-sidebar-modern{display:contents!important}
+  body.page-wheel-active .wheel-stage-modern{order:1!important}
+
+  body.page-wheel-active .wheel-result-panel{
+    order:2!important;
+    display:none!important;
+    min-height:0!important;
+  }
+  body.page-wheel-active .wheel-result-panel.has-winner{display:block!important}
+
+  body.page-wheel-active .wheel-students-panel{
+    order:3!important;
+    display:block!important;
+    min-height:0!important;
+  }
+  body.page-wheel-active .wheel-students-panel .student-list-scroll{
+    display:block!important;
+    max-height:360px!important;
+    overflow-y:auto!important;
+    padding:8px 10px!important;
+  }
+  body.page-wheel-active .wheel-students-panel .student-item{
+    display:flex!important;
+    min-height:42px!important;
+    align-items:center!important;
+    font-size:13px!important;
+  }
+
+  body.page-wheel-active .wheel-result-panel .wheel-result{
+    margin:10px!important;
+    padding:14px 12px!important;
+  }
+  body.page-wheel-active .result-avatar{
+    width:112px!important;
+    height:112px!important;
+    margin-left:auto!important;
+    margin-right:auto!important;
+  }
+  body.page-wheel-active #winnerAvatar{
+    display:block!important;
+    visibility:visible!important;
+    opacity:1!important;
+    width:100%!important;
+    height:100%!important;
+    object-fit:cover!important;
+    border-radius:50%!important;
+  }
+
+  /* Không còn ẩn tên khi lớp đông. */
+  body.page-wheel-active .wheel-mobile-fallback.wheel-compact-labels > .wheel-fallback-label,
+  body.page-wheel-active .wheel-mobile-fallback.wheel-dense-labels > .wheel-fallback-label{
+    display:flex!important;
+  }
+  body.page-wheel-active .wheel-mobile-fallback > .wheel-fallback-label.is-dense{
+    width:45%!important;
+    height:16px!important;
+    margin-top:-8px!important;
+    padding-right:3px!important;
+    font-size:clamp(6px,1.85vw,8px)!important;
+    line-height:1!important;
+    letter-spacing:-.15px!important;
+    text-shadow:0 1px 2px rgba(0,0,0,.9)!important;
+  }
+  body.page-wheel-active .wheel-panel-title{
+    height:48px!important;
+    padding:0 13px!important;
+    font-size:15px!important;
+  }
+}
+@media(max-width:390px){
+  body.page-wheel-active .wheel-mobile-fallback > .wheel-fallback-label.is-dense{
+    font-size:6px!important;
+  }
+}

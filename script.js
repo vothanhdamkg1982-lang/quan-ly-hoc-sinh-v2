@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=15149312';
+import { supabase } from './supabase.js?v=15149313';
 
 
 // ============================================================
@@ -371,6 +371,8 @@ function restoreWheelUIFromState() {
     renderStudentList();
 
     const resultDiv = document.getElementById('wheelResult');
+    const resultPanel = document.querySelector('.wheel-result-panel');
+    if (resultPanel) resultPanel.classList.toggle('has-winner', !!WHEEL_STATE.currentWinner);
     if (resultDiv) {
         if (WHEEL_STATE.currentWinner) {
             resultDiv.style.display = 'block';
@@ -438,6 +440,7 @@ function onWheelClassChange() {
         WHEEL_STATE.currentWinner = null;
         WHEEL_STATE.winnerId = null;
         document.getElementById('wheelResult').style.display = 'none';
+        document.querySelector('.wheel-result-panel')?.classList.remove('has-winner');
         updateWheelStats();
         renderStudentList();
         drawWheel();
@@ -450,6 +453,7 @@ function onWheelClassChange() {
     WHEEL_STATE.currentWinner = null;
     WHEEL_STATE.winnerId = null;
     document.getElementById('wheelResult').style.display = 'none';
+        document.querySelector('.wheel-result-panel')?.classList.remove('has-winner');
     
     loadWheelStudents(classId);
 }
@@ -474,6 +478,7 @@ function loadWheelStudents(classId) {
         WHEEL_STATE.currentWinner = null;
         WHEEL_STATE.winnerId = null;
         document.getElementById('wheelResult').style.display = 'none';
+        document.querySelector('.wheel-result-panel')?.classList.remove('has-winner');
         showToast('Lớp này chưa có học sinh.', 'warning');
         updateWheelStats();
         renderStudentList();
@@ -503,6 +508,7 @@ function loadWheelStudents(classId) {
     WHEEL_STATE.currentWinner = null;
     WHEEL_STATE.winnerId = null;
     document.getElementById('wheelResult').style.display = 'none';
+        document.querySelector('.wheel-result-panel')?.classList.remove('has-winner');
     
     updateWheelStats();
     renderStudentList();
@@ -626,17 +632,20 @@ function updateWheelFallback(students) {
     }
     fallback.style.setProperty('background', `conic-gradient(${stops.join(',')})`, 'important');
 
-    const compactMobile = window.matchMedia?.('(max-width: 760px)').matches && count > 12;
-    const labels = compactMobile ? '' : list.map((student, i) => {
+    const isMobile = window.matchMedia?.('(max-width: 760px)').matches;
+    const denseMobile = isMobile && count > 16;
+    const labels = list.map((student, i) => {
         const full = String(student?.fullName || student?.name || student?.student_name || `HS ${i + 1}`).trim();
-        // Trên màn hình điện thoại ưu tiên 2 từ cuối để tên đủ lớn và dễ đọc.
         const parts = full.split(/\s+/).filter(Boolean);
-        const shortName = parts.length > 2 ? parts.slice(-2).join(' ') : full;
+        const shortName = denseMobile
+            ? (parts[parts.length - 1] || full)
+            : (parts.length > 2 ? parts.slice(-2).join(' ') : full);
         const angle = i * step + step / 2 - 90;
-        return `<span class="wheel-fallback-label" style="--label-angle:${angle}deg" title="${escapeHtml(full)}">${escapeHtml(shortName)}</span>`;
+        return `<span class="wheel-fallback-label${denseMobile ? ' is-dense' : ''}" style="--label-angle:${angle}deg" title="${escapeHtml(full)}">${escapeHtml(shortName)}</span>`;
     }).join('');
 
-    fallback.classList.toggle('wheel-compact-labels', compactMobile);
+    fallback.classList.remove('wheel-compact-labels');
+    fallback.classList.toggle('wheel-dense-labels', denseMobile);
     fallback.innerHTML = labels + '<span class="wheel-fallback-center">🎯</span>';
 }
 
@@ -720,13 +729,26 @@ function drawWheel() {
         ctx2.shadowColor = 'rgba(0,0,0,0.3)';
         ctx2.shadowBlur = 4;
         
-        const hideCrowdedMobileLabels = window.matchMedia?.('(max-width: 760px)').matches && count > 12;
-        if (!hideCrowdedMobileLabels) {
-            const textRadius = radius * 0.65;
-            const name = String(students[i]?.fullName || students[i]?.name || students[i]?.student_name || `HS ${i + 1}`);
-            const displayName = name.length > 15 ? name.substring(0, 13) + '…' : name;
-            ctx2.fillText(displayName, textRadius, 0);
+        const isMobileWheel = window.matchMedia?.('(max-width: 760px)').matches;
+        const name = String(students[i]?.fullName || students[i]?.name || students[i]?.student_name || `HS ${i + 1}`).trim();
+        const nameParts = name.split(/\s+/).filter(Boolean);
+        let displayName = name;
+
+        if (isMobileWheel && count > 16) {
+            displayName = nameParts[nameParts.length - 1] || name;
+        } else if (isMobileWheel && nameParts.length > 2) {
+            displayName = nameParts.slice(-2).join(' ');
+        } else if (name.length > 15) {
+            displayName = name.substring(0, 13) + '…';
         }
+
+        const dprNow = Math.min(window.devicePixelRatio || 1, 2);
+        const fontCss = isMobileWheel
+            ? (count > 28 ? 7 : (count > 20 ? 8 : (count > 14 ? 9 : 11)))
+            : 14;
+        ctx2.font = `800 ${Math.max(10, Math.round(fontCss * dprNow))}px Arial, sans-serif`;
+        const textRadius = radius * (isMobileWheel ? 0.73 : 0.65);
+        ctx2.fillText(displayName, textRadius, 0);
         ctx2.restore();
     }
     
@@ -921,6 +943,8 @@ function showWinner(winner) {
     
     // Cập nhật UI
     const resultDiv = document.getElementById('wheelResult');
+    const resultPanel = document.querySelector('.wheel-result-panel');
+    if (resultPanel) resultPanel.classList.add('has-winner');
     if (resultDiv) {
         resultDiv.style.display = 'block';
     }
@@ -966,6 +990,14 @@ function showWinner(winner) {
     updateWheelStats();
     renderStudentList();
     createConfetti();
+
+    // Mobile: đưa ảnh + tên người trúng vào vùng nhìn thấy ngay sau khi quay.
+    if (window.matchMedia?.('(max-width: 700px)').matches) {
+        setTimeout(() => {
+            const panel = document.querySelector('.wheel-result-panel.has-winner');
+            if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 180);
+    }
     // Sau khi cập nhật giao diện, gọi hàm updateWinnerAvatar
 updateWinnerAvatar(winner);
 
@@ -1024,6 +1056,7 @@ function endWheelSession() {
 
     const resultDiv = document.getElementById('wheelResult');
     if (resultDiv) resultDiv.style.display = 'none';
+    document.querySelector('.wheel-result-panel')?.classList.remove('has-winner');
 
     updateWheelStats();
     renderStudentList();
@@ -1050,6 +1083,7 @@ function resetWheel() {
     
     const resultDiv = document.getElementById('wheelResult');
     if (resultDiv) resultDiv.style.display = 'none';
+    document.querySelector('.wheel-result-panel')?.classList.remove('has-winner');
     
     updateWheelStats();
     renderStudentList();
