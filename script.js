@@ -1473,6 +1473,16 @@ function canEditData() {
     return isAdmin() || isTeacher();
 }
 
+// BƯỚC 151.49.3F.6: đồng bộ menu quản trị theo vai trò.
+// Nội dung website là module quản trị hệ thống nên chỉ Admin được nhìn thấy/mở.
+function applyRoleBasedNavigation() {
+    const adminOnlyNav = document.querySelectorAll('.admin-public-nav');
+    adminOnlyNav.forEach(item => {
+        item.style.display = isAdmin() ? '' : 'none';
+        item.setAttribute('aria-hidden', isAdmin() ? 'false' : 'true');
+    });
+}
+
 function requireEditPermission(action = 'thao tác này') {
     if (canEditData()) return true;
     showToast(`Tài khoản chỉ xem không được phép ${action}.`, 'warning', 2200);
@@ -1603,6 +1613,7 @@ async function loadCurrentUserAccess(force = false) {
 
             APP_STATE.userAccessLoaded = true;
             updateCurrentUserHeader();
+            applyRoleBasedNavigation();
 
 
             if (!active) {
@@ -4824,6 +4835,14 @@ function renderPage(page) {
 
     if (previousPage === 'wheel' && page !== 'wheel') {
         saveWheelStateToStorage();
+    }
+
+    // BƯỚC 151.49.3F.6: chặn truy cập trực tiếp module quản trị nội dung.
+    if (page === 'public-content' && !isAdmin()) {
+        showToast('Chỉ tài khoản Admin được quản trị nội dung website.', 'warning', 2400);
+        page = 'dashboard';
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.querySelector('.nav-item[data-page="dashboard"]')?.classList.add('active');
     }
 
     APP_STATE.currentPage = page;
@@ -9255,11 +9274,12 @@ async function runAdminHealthCheck() {
 
 function renderSettings() {
     const settings = APP_STATE.settings;
+    const admin = isAdmin();
     const subjects = APP_STATE.allSubjectCatalog?.length
         ? APP_STATE.allSubjectCatalog
         : SUBJECT_CONFIG.map(subject => ({ ...subject, grades: [1,2,3,4,5], active: true }));
 
-    const subjectRows = subjects.map(subject => {
+    const subjectRows = admin ? subjects.map(subject => {
         const grades = Array.isArray(subject.grades) ? subject.grades.map(String) : [];
         return `
             <tr>
@@ -9289,7 +9309,10 @@ function renderSettings() {
                     </button>
                 </td>
             </tr>`;
-    }).join('');
+    }).join('') : '';
+
+    const roleLabel = isTeacher() ? 'Giáo viên' : (isViewer() ? 'Chỉ xem' : 'Admin');
+    const scopeLabel = APP_STATE.currentUserAccessScope === 'assigned' ? 'Theo phân công Môn – Lớp' : 'Tất cả';
 
     return `
         <section class="settings-pro-page">
@@ -9297,16 +9320,18 @@ function renderSettings() {
                 <div class="settings-pro-title">
                     <span class="settings-title-icon"><i class="fas fa-cog"></i></span>
                     <div>
-                        <span class="settings-kicker">CẤU HÌNH HỆ THỐNG</span>
+                        <span class="settings-kicker">${admin ? 'CẤU HÌNH HỆ THỐNG' : 'TÀI KHOẢN CÁ NHÂN'}</span>
                         <h2>Cài đặt</h2>
-                        <p>Quản lý thông tin trường, giao diện, môn học, sao lưu và bảo mật tài khoản.</p>
+                        <p>${admin ? 'Quản lý thông tin trường, giao diện, môn học, sao lưu và bảo mật tài khoản.' : 'Xem thông tin quyền truy cập và quản lý mật khẩu tài khoản của bạn.'}</p>
                     </div>
                 </div>
+                ${admin ? `
                 <button class="btn btn-primary btn-sm settings-save-main" onclick="saveSettings()">
                     <i class="fas fa-save"></i> Lưu cài đặt
-                </button>
+                </button>` : ''}
             </div>
 
+            ${admin ? `
             <div class="settings-section-card">
                 <div class="settings-section-head">
                     <span class="settings-section-icon"><i class="fas fa-school"></i></span>
@@ -9360,7 +9385,6 @@ function renderSettings() {
                 </div>
             </div>
 
-            ${isAdmin() ? `
             <div class="settings-section-card settings-public-card">
                 <div class="settings-public-shortcut">
                     <span class="settings-public-icon"><i class="fas fa-globe"></i></span>
@@ -9373,7 +9397,6 @@ function renderSettings() {
                     </button>
                 </div>
             </div>
-            ` : ''}
 
             <div class="settings-section-card">
                 <div class="settings-section-head">
@@ -9384,7 +9407,6 @@ function renderSettings() {
                     </div>
                 </div>
                 <div class="settings-section-body">
-                    ${isAdmin() ? `
                     <div class="settings-backup-actions">
                         <button id="backupJsonBtn" class="btn btn-success" onclick="backupAllData()">
                             <i class="fas fa-download"></i> Sao lưu JSON
@@ -9402,11 +9424,6 @@ function renderSettings() {
                         <i class="fas fa-circle-info"></i>
                         <span><strong>Hợp nhất JSON:</strong> ghi đè/thêm theo khóa hiện có, không xóa dữ liệu mới. <strong>Khôi phục toàn bộ:</strong> đưa dữ liệu nghiệp vụ về snapshot trong file backup.</span>
                     </div>
-                    ` : `
-                    <div class="settings-note settings-note-locked">
-                        <i class="fas fa-lock"></i>
-                        <span>Chỉ tài khoản Admin được sử dụng Sao lưu, Hợp nhất và Khôi phục toàn bộ dữ liệu.</span>
-                    </div>`}
                 </div>
             </div>
 
@@ -9425,7 +9442,6 @@ function renderSettings() {
                 </div>
             </div>
 
-            ${isAdmin() ? `
             <div class="settings-section-card">
                 <div class="settings-section-head">
                     <span class="settings-section-icon"><i class="fas fa-heart-pulse"></i></span>
@@ -9442,7 +9458,23 @@ function renderSettings() {
                     <div id="adminHealthCheckResult"></div>
                 </div>
             </div>
-            ` : ''}
+            ` : `
+            <div class="settings-section-card">
+                <div class="settings-section-head">
+                    <span class="settings-section-icon"><i class="fas fa-user-shield"></i></span>
+                    <div>
+                        <h3>Tài khoản hiện tại</h3>
+                        <p>Thông tin quyền do Admin cấp. Tài khoản này không có quyền thay đổi cấu hình hệ thống.</p>
+                    </div>
+                </div>
+                <div class="settings-section-body">
+                    <div class="settings-form-grid">
+                        <div class="form-group"><label>Tài khoản</label><input type="text" value="${escapeRoleHtml(APP_STATE.currentUserEmail || '')}" disabled></div>
+                        <div class="form-group"><label>Vai trò</label><input type="text" value="${roleLabel}" disabled></div>
+                        <div class="form-group"><label>Phạm vi</label><input type="text" value="${scopeLabel}" disabled></div>
+                    </div>
+                </div>
+            </div>`}
 
             <div class="settings-section-card">
                 <div class="settings-section-head">
@@ -9471,11 +9503,13 @@ function renderSettings() {
         </section>`;
 }
 
-function initSettings() { loadUserRolePanel(); }
+function initSettings() {
+    if (isAdmin()) loadUserRolePanel();
+}
 function initSearch() {}
 
 async function saveSettings() {
-    if (!requireEditPermission('lưu cài đặt')) return;
+    if (!requireAdminPermission('lưu cấu hình hệ thống')) return;
     const settings = APP_STATE.settings;
     settings.schoolName = document.getElementById('setSchoolName').value.trim();
     settings.schoolYear = document.getElementById('setSchoolYear').value.trim();
@@ -9837,12 +9871,15 @@ function initNavigation() {
         if (icon) {
             icon.className = isDark ? 'fas fa-moon' : 'fas fa-sun';
         }
-        supabase.from('app3_settings').upsert({
-            config_id: 1, 
-            theme: APP_STATE.settings.theme
-        }, { onConflict: 'config_id' }).then(({ error }) => {
-            if (error) console.warn('Không thể lưu theme:', error);
-        });
+        // Theme cá nhân của Teacher/Viewer chỉ lưu trên trình duyệt; không ghi đè cấu hình toàn hệ thống.
+        if (isAdmin()) {
+            supabase.from('app3_settings').upsert({
+                config_id: 1,
+                theme: APP_STATE.settings.theme
+            }, { onConflict: 'config_id' }).then(({ error }) => {
+                if (error) console.warn('Không thể lưu theme:', error);
+            });
+        }
     });
 }
 
@@ -10048,7 +10085,7 @@ async function loadPublicWebsiteContent() {
     }
 
     try {
-        const mediaRes = await supabase.from('app3_public_media').select('*').eq('is_published', true).order('sort_order', { ascending:true }).order('created_at', { ascending:false }).limit(30);
+        const mediaRes = await supabase.from('app3_public_media').select('*').eq('is_published', true).order('sort_order', { ascending:true }).order('created_at', { ascending:false }).limit(1000);
         if (mediaRes.error) throw mediaRes.error;
         const media = mediaRes.data || [];
         PUBLIC_MEDIA_CACHE = media;
@@ -11045,6 +11082,7 @@ function showAuthenticatedApp() {
     }
     if (app) app.classList.remove('hidden');
     document.body.classList.add('app-open');
+    applyRoleBasedNavigation();
 }
 
 
@@ -11540,7 +11578,11 @@ function initLogin() {
 // 18. NÂNG CẤP QUẢN TRỊ: MÔN HỌC, BÁO CÁO, IMPORT, BACKUP, PHÂN QUYỀN
 // ============================================================
 async function saveSubjectConfig(subjectId) {
-    if (!requireEditPermission('thay đổi cấu hình môn học')) return;
+    // Cấu hình danh mục môn học là quyền quản trị hệ thống: chỉ Admin được phép thay đổi.
+    if (!isAdmin()) {
+        showToast('Chỉ tài khoản Admin được thay đổi cấu hình môn học.', 'error');
+        return;
+    }
     const source = APP_STATE.allSubjectCatalog.find(s => s.id === subjectId);
     if (!source) return;
     const grades = [...document.querySelectorAll(`.subject-grade[data-subject-id="${subjectId}"]:checked`)].map(el => Number(el.value));
@@ -11983,6 +12025,8 @@ function setAllAssignments(userId, checked) {
 }
 
 async function loadUserRolePanel(){
+    // Danh sách người dùng/phân quyền là dữ liệu quản trị: không tải đối với Teacher/Viewer.
+    if (!isAdmin()) return;
     const panel = document.getElementById('userRolePanel');
     if (!panel) return;
     try {
@@ -12274,6 +12318,7 @@ window.isTeacher = isTeacher;
 window.isViewer = isViewer;
 window.canManageSystem = canManageSystem;
 window.canEditData = canEditData;
+window.applyRoleBasedNavigation = applyRoleBasedNavigation;
 window.isActiveUser = isActiveUser;
 
 document.addEventListener('DOMContentLoaded', function() {
