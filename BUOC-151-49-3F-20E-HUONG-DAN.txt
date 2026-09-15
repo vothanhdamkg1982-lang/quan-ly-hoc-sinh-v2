@@ -1,0 +1,13 @@
+BƯỚC 151.49.3F.20E - GIAO DIỆN THEO QUYỀN NGÂN HÀNG CÂU HỎI
+
+Mục tiêu:
+- Admin: thêm/sửa/xóa mọi câu; có Xóa toàn bộ.
+- Teacher: thêm/nhập câu mới; chỉ thấy nút Sửa/Xóa và checkbox ở câu do chính mình tạo.
+- Viewer: chỉ xem/chơi/xuất; ẩn form thêm, AI, nhập Excel và các thao tác sửa/xóa.
+- RLS Bước 20A vẫn là lớp bảo vệ chính ở Supabase.
+
+Kiểm tra:
+1) Admin: quản lý như cũ.
+2) Teacher: câu Admin hiện "Chỉ xem"; câu của Teacher có nút Sửa/Xóa.
+3) Viewer: không có form thêm/AI/Nhập Excel/Xóa; vẫn thấy danh sách và nút xuất.
+4) Không thay đổi dữ liệu câu hỏi trong bước này.

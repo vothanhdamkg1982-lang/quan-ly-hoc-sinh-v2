@@ -1,0 +1,13 @@
+BƯỚC 151.49.3F.20A - RLS NGÂN HÀNG CÂU HỎI
+
+Bước này KHÔNG thay script.js. Chỉ bổ sung file SQL để siết quyền Supabase trước.
+Không xóa 32 câu hỏi hiện có.
+
+Quyền sau khi áp dụng:
+- Admin active: đọc/thêm/sửa/xóa mọi câu tự thêm.
+- Teacher active: đọc toàn bộ; chỉ sửa/xóa câu do chính teacher đó tạo.
+- Viewer active: chỉ đọc.
+- anon / inactive: không truy cập trực tiếp bảng.
+
+Chạy file BUOC-151-49-3F-20A-RLS-CAU-HOI.sql trong Supabase SQL Editor.
+Sau khi chạy, kiểm tra Admin hiện tại vẫn thấy đủ câu hỏi và thử thêm 1 câu test.
