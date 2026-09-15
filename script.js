@@ -2807,6 +2807,85 @@ const MILLIONAIRE_QUESTION_BANK = [
 
 const MILLIONAIRE_CUSTOM_STORAGE_KEY = 'qlhs_millionaire_custom_questions_v1';
 
+// ============================================================
+// BƯỚC 151.49.3F.17B.6
+// Bộ nhớ đệm ngân hàng câu hỏi dùng chung từ Supabase.
+// Giai đoạn này chỉ bổ sung nền tảng, chưa thay localStorage.
+// ============================================================
+let MILLIONAIRE_SUPABASE_QUESTIONS = [];
+let millionaireSupabaseQuestionsLoaded = false;
+
+function mapMillionaireQuestionFromSupabase(row) {
+    const correctMap = {
+        A: 0,
+        B: 1,
+        C: 2,
+        D: 3
+    };
+
+    return normalizeMillionaireQuestionInput({
+        id: row.id,
+        grade: row.grade || 'all',
+        subject: row.subject || '',
+        topic: row.topic || '',
+        difficulty: row.difficulty || 'easy',
+        q: row.question || '',
+        a: [
+            row.answer_a || '',
+            row.answer_b || '',
+            row.answer_c || '',
+            row.answer_d || ''
+        ],
+        c: correctMap[String(row.correct_answer || 'A').toUpperCase()] ?? 0
+    });
+}
+
+async function loadMillionaireQuestionsFromSupabase() {
+    try {
+        const { data, error } = await supabase
+            .from('app3_millionaire_questions')
+            .select(`
+                id,
+                grade,
+                subject,
+                topic,
+                difficulty,
+                question,
+                answer_a,
+                answer_b,
+                answer_c,
+                answer_d,
+                correct_answer,
+                active,
+                created_at
+            `)
+            .eq('active', true)
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+
+        MILLIONAIRE_SUPABASE_QUESTIONS =
+            (data || []).map(mapMillionaireQuestionFromSupabase);
+
+        millionaireSupabaseQuestionsLoaded = true;
+
+        console.log(
+            `[151.49.3F.17B.6] Đã tải ${MILLIONAIRE_SUPABASE_QUESTIONS.length} câu hỏi từ Supabase.`
+        );
+
+        return MILLIONAIRE_SUPABASE_QUESTIONS;
+
+    } catch (error) {
+        console.error(
+            '[151.49.3F.17B.6] Không tải được câu hỏi Supabase:',
+            error
+        );
+
+        millionaireSupabaseQuestionsLoaded = false;
+        return [];
+    }
+}
+window.loadMillionaireQuestionsFromSupabase = loadMillionaireQuestionsFromSupabase;
 function loadMillionaireCustomQuestions() {
     try {
         const raw = localStorage.getItem(MILLIONAIRE_CUSTOM_STORAGE_KEY);
@@ -2955,8 +3034,20 @@ function getMillionaireSubjectsForGrade(grade) {
 }
 
 function getMillionaireQuestionsBySource(source = MILLIONAIRE_STATE.questionSource || 'custom') {
-    // BƯỚC 151.49.3F.12D: tuyệt đối không trộn câu hỏi mẫu với câu hỏi giáo viên/AI đã thêm.
-    return source === 'default' ? [...MILLIONAIRE_QUESTION_BANK] : loadMillionaireCustomQuestions();
+    // Câu hỏi mặc định vẫn lấy từ mã nguồn như cũ.
+    if (source === 'default') {
+        return [...MILLIONAIRE_QUESTION_BANK];
+    }
+
+    // BƯỚC 151.49.3F.17B.8:
+    // Khi Supabase đã tải xong, dùng ngân hàng dùng chung.
+    if (millionaireSupabaseQuestionsLoaded) {
+        return [...MILLIONAIRE_SUPABASE_QUESTIONS];
+    }
+
+    // Trong lúc Supabase chưa tải xong hoặc gặp lỗi,
+    // tạm dùng localStorage để không làm gián đoạn trò chơi.
+    return loadMillionaireCustomQuestions();
 }
 
 function millionaireSetQuestionSource(value) {
@@ -4901,6 +4992,25 @@ function initMillionaire() {
         resetMillionaireState();
     }
 
+        // BƯỚC 151.49.3F.17B.7:
+    // Tự động tải ngân hàng câu hỏi dùng chung từ Supabase.
+    if (!millionaireSupabaseQuestionsLoaded) {
+        loadMillionaireQuestionsFromSupabase()
+            .then(items => {
+    console.log(
+        `[151.49.3F.17B.7] Ngân hàng dùng chung sẵn sàng: ${items.length} câu.`
+    );
+
+    // Render lại một lần sau khi dữ liệu Supabase đã tải xong.
+    refreshMillionaire();
+})
+            .catch(error => {
+                console.error(
+                    '[151.49.3F.17B.7] Lỗi khởi tạo ngân hàng Supabase:',
+                    error
+                );
+            });
+    }
     preloadMillionaireAudio();
 
     // Nếu đang giữa một câu và chỉ vừa chuyển module rồi quay lại,
