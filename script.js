@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=1514936121';
+import { supabase } from './supabase.js?v=1514936131';
 
 
 // ============================================================
@@ -2876,6 +2876,7 @@ const MILLIONAIRE_STATE = {
     started: false,
     ended: false,
     level: 0,
+    correctCount: 0,
     locked: false,
     questions: [],
     usedSwitchIndexes: [],
@@ -2909,6 +2910,7 @@ function resetMillionaireState() {
     MILLIONAIRE_STATE.started = false;
     MILLIONAIRE_STATE.ended = false;
     MILLIONAIRE_STATE.level = 0;
+    MILLIONAIRE_STATE.correctCount = 0;
     MILLIONAIRE_STATE.locked = false;
     MILLIONAIRE_STATE.questions = MILLIONAIRE_QUESTIONS.map(item => ({
         ...item,
@@ -4227,7 +4229,7 @@ function millionaireTone(freq = 440, duration = .12, type = 'sine', volume = .03
 }
 
 const MILLIONAIRE_AUDIO_FILES = {
-    start: 'assets/sounds/millionaire/start.mp3',
+    start: 'assets/sounds/millionaire/opening.mp3',
     thinking: 'assets/sounds/millionaire/thinking.mp3',
     lock: 'assets/sounds/millionaire/lock.mp3',
     correct: 'assets/sounds/millionaire/correct.mp3',
@@ -4514,6 +4516,101 @@ function millionaireSetMCEnabled(value) {
 if (millionaireMCSupported()) {
     millionaireMCFindVietnameseVoice();
     window.speechSynthesis.onvoiceschanged = () => millionaireMCFindVietnameseVoice();
+}
+
+
+// ============================================================
+// BƯỚC 151.49.3F.13 - KHÔNG KHÍ GAMESHOW + NGHI THỨC MỐC ĐIỂM
+// Nhạc mở màn là bản hiệu ứng gốc của ứng dụng, không sao chép nhạc chương trình truyền hình.
+// ============================================================
+function millionairePrizeAtLevel(level) {
+    const safe = Math.max(1, Math.min(15, Number(level) || 1));
+    return MILLIONAIRE_PRIZES[safe - 1] || '0';
+}
+
+function millionaireRemoveCelebration() {
+    document.querySelectorAll('.millionaire-celebration-overlay').forEach(el => el.remove());
+}
+
+function millionaireShowCelebration({ icon = 'fa-award', kicker = '', title = '', message = '', cheque = '', winner = false, duration = 3200 } = {}) {
+    millionaireRemoveCelebration();
+    const overlay = document.createElement('div');
+    overlay.className = `millionaire-celebration-overlay ${winner ? 'winner' : ''}`;
+    overlay.innerHTML = `
+        <div class="millionaire-celebration-card">
+            <div class="millionaire-celebration-rays"></div>
+            <div class="millionaire-celebration-icon"><i class="fas ${icon}"></i></div>
+            ${kicker ? `<div class="millionaire-celebration-kicker">${escapeHtml(kicker)}</div>` : ''}
+            <div class="millionaire-celebration-title">${escapeHtml(title)}</div>
+            <div class="millionaire-celebration-message">${escapeHtml(message)}</div>
+            ${cheque ? `<div class="millionaire-cheque"><small>TẤM SÉC THÀNH TÍCH</small><strong>${escapeHtml(cheque)}</strong><span>ĐIỂM THƯỞNG</span></div>` : ''}
+        </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('show'));
+
+    const close = () => {
+        if (!overlay.isConnected) return;
+        overlay.classList.remove('show');
+        setTimeout(() => overlay.remove(), 320);
+    };
+    overlay._millionaireClose = close;
+    if (duration > 0) setTimeout(close, Math.max(1600, duration));
+    return overlay;
+}
+
+function millionaireMilestoneMCText(level) {
+    const prize = millionairePrizeAtLevel(level);
+    if (level === 5) return `Xin chúc mừng! Bạn đã vượt qua mốc số 5 và nhận tấm séc thành tích tượng trưng ${prize} điểm thưởng. Một khởi đầu rất tuyệt vời. Hãy tiếp tục tự tin!`;
+    if (level === 10) return `Tuyệt vời! Bạn đã chinh phục mốc số 10 và nhận tấm séc thành tích tượng trưng ${prize} điểm thưởng. Bạn đang tiến rất gần đến đích. Chúc bạn giữ vững phong độ!`;
+    return `Xin chúc mừng! Bạn đã vượt qua mốc ${level}.`;
+}
+
+function millionaireCelebrateMilestone(level, onComplete = null) {
+    const prize = millionairePrizeAtLevel(level);
+    millionaireSound('milestone');
+    const startedAt = Date.now();
+    const overlay = millionaireShowCelebration({
+        icon: 'fa-file-signature',
+        kicker: `CHINH PHỤC MỐC ${level}`,
+        title: 'XIN CHÚC MỪNG!',
+        message: level === 5 ? 'Bạn đã có một khởi đầu rất ấn tượng.' : 'Bạn đang tiến rất gần đến thử thách cuối cùng.',
+        cheque: prize,
+        duration: 0
+    });
+
+    const finish = () => {
+        const wait = Math.max(0, 3400 - (Date.now() - startedAt));
+        setTimeout(() => {
+            if (overlay && typeof overlay._millionaireClose === 'function') overlay._millionaireClose();
+            if (typeof onComplete === 'function') setTimeout(onComplete, 380);
+        }, wait);
+    };
+
+    if (MILLIONAIRE_STATE.mcEnabled && millionaireMCSupported()) {
+        millionaireMCSpeak(millionaireMilestoneMCText(level), { clear: false, onEnd: finish });
+    } else {
+        finish();
+    }
+}
+
+function millionaireWinnerMCText(totalQuestions) {
+    if (totalQuestions >= 15) {
+        return `Một màn chinh phục xuất sắc! Xin chúc mừng bạn đã vượt qua cả 15 câu hỏi và hoàn thành thử thách cao nhất của trò chơi. Bạn xứng đáng nhận tấm séc thành tích ở mốc 15. Cảm ơn bạn đã tham gia và hẹn gặp lại ở lượt chơi tiếp theo!`;
+    }
+    return `Xuất sắc! Xin chúc mừng bạn đã trả lời đúng toàn bộ ${totalQuestions} câu hỏi của bài học và hoàn thành trọn vẹn thử thách hôm nay. Cảm ơn bạn đã tham gia và hẹn gặp lại ở lượt chơi tiếp theo!`;
+}
+
+function millionaireWrongEndingMCText(safeLevel, answeredCorrect, totalQuestions) {
+    const correct = Math.max(0, Number(answeredCorrect) || 0);
+    const total = Math.max(0, Number(totalQuestions) || 0);
+    const result = `Trong lượt chơi này, bạn đã trả lời đúng ${correct} trên ${total} câu hỏi.`;
+    if (safeLevel >= 10) {
+        return `Rất tiếc, đáp án cuối cùng bạn vừa chọn chưa chính xác và cuộc chơi dừng lại tại đây. ${result} Bạn đã bảo toàn mốc số 10 với ${millionairePrizeAtLevel(10)} điểm thưởng. Đây là một kết quả rất đáng khen. Cảm ơn bạn đã tham gia và hẹn gặp lại!`;
+    }
+    if (safeLevel >= 5) {
+        return `Rất tiếc, đáp án cuối cùng bạn vừa chọn chưa chính xác và cuộc chơi phải dừng lại. ${result} Bạn đã bảo toàn mốc số 5 với ${millionairePrizeAtLevel(5)} điểm thưởng. Chúc mừng những gì bạn đã làm được và hẹn gặp lại ở lượt chơi tiếp theo!`;
+    }
+    return `Rất tiếc, đáp án cuối cùng bạn vừa chọn chưa chính xác và cuộc chơi dừng lại tại đây. ${result} Cảm ơn bạn đã tham gia. Hãy ôn lại bài học và trở lại chinh phục thử thách trong lượt chơi tiếp theo nhé!`;
 }
 
 function millionaireStageClass() {
@@ -4830,7 +4927,12 @@ function millionaireStart() {
     MILLIONAIRE_STATE.message = `Bộ câu hỏi có ${MILLIONAIRE_STATE.questions.length} câu. Chọn đáp án đúng.`;
     millionaireSound('start');
     refreshMillionaire();
-    millionaireMCPresentCurrentQuestion({ intro: true, clear: true });
+    // 3F.13: dành vài giây cho nhạc mở màn trước khi MC bắt đầu dẫn chương trình.
+    setTimeout(() => {
+        if (MILLIONAIRE_STATE.started && !MILLIONAIRE_STATE.ended && MILLIONAIRE_STATE.level === 0) {
+            millionaireMCPresentCurrentQuestion({ intro: true, clear: true });
+        }
+    }, 3600);
 }
 
 function millionaireRestart() {
@@ -4856,6 +4958,7 @@ function millionaireChooseAnswer(index) {
 
     setTimeout(() => {
         if (index === question.c) {
+            state.correctCount = Math.min(state.questions.length, (Number(state.correctCount) || 0) + 1);
             state.phase = 'correct';
             state.message = 'Chính xác!';
             state.wrongAttempts = [];
@@ -4873,8 +4976,17 @@ function millionaireChooseAnswer(index) {
                     state.phase = 'winner';
                     state.message = `Bạn đã hoàn thành ${totalQuestions} câu hỏi!`;
                     millionaireSound('winner');
-                    millionaireMCAnnounce(`Xuất sắc! Bạn đã hoàn thành toàn bộ ${totalQuestions} câu hỏi. Xin chúc mừng!`);
                     refreshMillionaire();
+                    millionaireShowCelebration({
+                        icon: 'fa-trophy',
+                        kicker: totalQuestions >= 15 ? 'CHINH PHỤC MỐC 15' : 'HOÀN THÀNH THỬ THÁCH',
+                        title: 'XUẤT SẮC!',
+                        message: totalQuestions >= 15 ? 'Bạn đã vượt qua toàn bộ 15 câu hỏi.' : `Bạn đã trả lời đúng toàn bộ ${totalQuestions} câu hỏi của bài học.`,
+                        cheque: totalQuestions >= 15 ? millionairePrizeAtLevel(15) : millionairePrizeAtLevel(totalQuestions),
+                        winner: true,
+                        duration: 4600
+                    });
+                    millionaireMCAnnounce(millionaireWinnerMCText(totalQuestions));
                     return;
                 }
                 state.level++;
@@ -4885,10 +4997,19 @@ function millionaireChooseAnswer(index) {
                 state.wrongAttempts = [];
                 state.phase = 'question';
                 state.message = `Chính xác! Tiếp tục câu ${state.level + 1}.`;
-                if ([5,10].includes(answeredLevel)) millionaireSound('milestone');
-                else millionaireSound('question');
-                refreshMillionaire();
-                millionaireMCPresentCurrentQuestion();
+                const isMilestone = [5,10].includes(answeredLevel);
+                if (isMilestone) {
+                    refreshMillionaire();
+                    millionaireCelebrateMilestone(answeredLevel, () => {
+                        if (state.started && !state.ended && state.level === answeredLevel) {
+                            millionaireMCPresentCurrentQuestion({ clear: true });
+                        }
+                    });
+                } else {
+                    millionaireSound('question');
+                    refreshMillionaire();
+                    millionaireMCPresentCurrentQuestion();
+                }
             }, 850);
             return;
         }
@@ -4909,6 +5030,7 @@ function millionaireChooseAnswer(index) {
                     state.phase = 'finished';
                     state.message = `Đã hoàn thành ${totalQuestions} câu hỏi.`;
                     refreshMillionaire();
+                    millionaireMCAnnounce(`Bạn đã đi hết ${totalQuestions} câu hỏi của lượt chơi. Cảm ơn bạn đã tham gia. Hãy xem lại những câu chưa chính xác và thử sức thêm một lần nữa nhé!`);
                     return;
                 }
                 state.level++;
@@ -4952,9 +5074,20 @@ function millionaireChooseAnswer(index) {
             state.ended = true;
             state.phase = 'ended';
             state.message = safeLevel
-                ? `Rất tiếc, đáp án chưa đúng. Bạn bảo toàn mốc câu ${safeLevel}.`
-                : 'Rất tiếc, đáp án chưa đúng. Hẹn bạn ở lượt chơi tiếp theo.';
+                ? `Rất tiếc, đáp án chưa đúng. Bạn đã trả lời đúng ${state.correctCount}/${state.questions.length} câu và bảo toàn mốc câu ${safeLevel}.`
+                : `Rất tiếc, đáp án chưa đúng. Bạn đã trả lời đúng ${state.correctCount}/${state.questions.length} câu.`;
             refreshMillionaire();
+            if (safeLevel) {
+                millionaireShowCelebration({
+                    icon: 'fa-file-signature',
+                    kicker: `BẢO TOÀN MỐC ${safeLevel}`,
+                    title: 'CẢM ƠN BẠN ĐÃ THAM GIA',
+                    message: 'Bạn đã giữ được thành tích ở mốc an toàn.',
+                    cheque: millionairePrizeAtLevel(safeLevel),
+                    duration: 3900
+                });
+            }
+            millionaireMCAnnounce(millionaireWrongEndingMCText(safeLevel, state.correctCount, state.questions.length));
         }, 1000);
     }, 800);
 }
@@ -5123,7 +5256,7 @@ function millionaireQuit() {
     state.message = state.level > 0
         ? `Bạn chủ động dừng cuộc chơi sau ${state.level} câu đúng.`
         : 'Bạn đã dừng cuộc chơi.';
-    millionaireMCAnnounce(state.message);
+    millionaireMCAnnounce(`${state.message} Cảm ơn bạn đã tham gia chương trình. Hẹn gặp lại ở lượt chơi tiếp theo!`);
     refreshMillionaire();
 }
 

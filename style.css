@@ -10525,3 +10525,101 @@ tbody tr:hover td{
 .millionaire-source-option strong{font-size:12px}
 .millionaire-source-option small{font-size:10px;opacity:.72;line-height:1.35}
 @media(max-width:700px){.millionaire-source-choice{grid-template-columns:1fr}}
+
+/* ============================================================
+   BƯỚC 151.49.3F.13 - NGHI THỨC MỐC ĐIỂM / KẾT THÚC GAMESHOW
+   ============================================================ */
+.millionaire-celebration-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10080;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    background: rgba(2, 8, 30, .72);
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    transform: scale(.98);
+    transition: opacity .28s ease, transform .28s ease;
+    pointer-events: none;
+}
+.millionaire-celebration-overlay.show { opacity: 1; transform: scale(1); }
+.millionaire-celebration-card {
+    position: relative;
+    width: min(560px, 94vw);
+    overflow: hidden;
+    text-align: center;
+    padding: 28px 24px 25px;
+    border: 2px solid rgba(250, 204, 21, .78);
+    border-radius: 24px;
+    background: radial-gradient(circle at 50% 0%, rgba(37,99,235,.38), transparent 42%), linear-gradient(155deg, #07163f, #0d2860 55%, #07163f);
+    box-shadow: 0 24px 80px rgba(0,0,0,.5), 0 0 38px rgba(250,204,21,.18);
+}
+.millionaire-celebration-overlay.winner .millionaire-celebration-card {
+    box-shadow: 0 24px 90px rgba(0,0,0,.55), 0 0 52px rgba(250,204,21,.32);
+}
+.millionaire-celebration-rays {
+    position: absolute;
+    width: 460px;
+    height: 460px;
+    left: 50%;
+    top: -330px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: repeating-conic-gradient(from 0deg, rgba(250,204,21,.12) 0 8deg, transparent 8deg 18deg);
+    animation: millionaireRaysSpin 12s linear infinite;
+}
+@keyframes millionaireRaysSpin { to { transform: translateX(-50%) rotate(360deg); } }
+.millionaire-celebration-icon {
+    position: relative;
+    width: 70px;
+    height: 70px;
+    margin: 0 auto 10px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    font-size: 31px;
+    color: #172554;
+    background: linear-gradient(145deg, #fde68a, #f59e0b);
+    box-shadow: 0 0 28px rgba(250,204,21,.3);
+}
+.millionaire-celebration-kicker {
+    position: relative;
+    color: #93c5fd;
+    font-size: .78rem;
+    font-weight: 900;
+    letter-spacing: .16em;
+}
+.millionaire-celebration-title {
+    position: relative;
+    margin-top: 5px;
+    color: #fde68a;
+    font-size: clamp(1.55rem, 5vw, 2.25rem);
+    font-weight: 1000;
+    letter-spacing: .04em;
+}
+.millionaire-celebration-message {
+    position: relative;
+    margin: 8px auto 16px;
+    max-width: 430px;
+    color: #dbeafe;
+    line-height: 1.55;
+}
+.millionaire-cheque {
+    position: relative;
+    width: min(390px, 100%);
+    margin: 0 auto;
+    padding: 13px 18px;
+    display: grid;
+    border: 1px solid rgba(253,230,138,.72);
+    border-radius: 14px;
+    background: linear-gradient(120deg, rgba(250,204,21,.16), rgba(59,130,246,.14));
+    box-shadow: inset 0 0 20px rgba(255,255,255,.035);
+}
+.millionaire-cheque small { color: #bfdbfe; font-weight: 800; letter-spacing: .12em; }
+.millionaire-cheque strong { color: #fef08a; font-size: clamp(1.45rem, 6vw, 2rem); line-height: 1.2; }
+.millionaire-cheque span { color: #93c5fd; font-size: .75rem; font-weight: 800; }
+@media (max-width: 640px) {
+    .millionaire-celebration-card { padding: 22px 15px 20px; border-radius: 19px; }
+    .millionaire-celebration-icon { width: 58px; height: 58px; font-size: 25px; }
+}
