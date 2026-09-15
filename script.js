@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=151493612';
+import { supabase } from './supabase.js?v=1514936121';
 
 
 // ============================================================
@@ -172,6 +172,7 @@ function sanitizeMillionaireStateForStorage() {
         selectedGrade: MILLIONAIRE_STATE.selectedGrade || 'all',
         selectedSubject: MILLIONAIRE_STATE.selectedSubject || 'all',
         selectedTopic: MILLIONAIRE_STATE.selectedTopic || 'all',
+        questionSource: MILLIONAIRE_STATE.questionSource || 'custom',
         bankInfo: MILLIONAIRE_STATE.bankInfo ? { ...MILLIONAIRE_STATE.bankInfo } : null,
         playMode: MILLIONAIRE_STATE.playMode || 'stop_on_wrong',
         wrongAttempts: Array.isArray(MILLIONAIRE_STATE.wrongAttempts) ? [...MILLIONAIRE_STATE.wrongAttempts] : [],
@@ -238,6 +239,7 @@ function restoreMillionaireStateFromStorage() {
         MILLIONAIRE_STATE.selectedGrade = saved.selectedGrade || 'all';
         MILLIONAIRE_STATE.selectedSubject = saved.selectedSubject || 'all';
         MILLIONAIRE_STATE.selectedTopic = saved.selectedTopic || 'all';
+        MILLIONAIRE_STATE.questionSource = ['custom','default'].includes(saved.questionSource) ? saved.questionSource : 'custom';
         MILLIONAIRE_STATE.bankInfo = saved.bankInfo || null;
         MILLIONAIRE_STATE.playMode = ['stop_on_wrong','continue_on_wrong','retry_until_correct'].includes(saved.playMode) ? saved.playMode : 'stop_on_wrong';
         MILLIONAIRE_STATE.wrongAttempts = Array.isArray(saved.wrongAttempts) ? [...saved.wrongAttempts] : [];
@@ -2887,6 +2889,7 @@ const MILLIONAIRE_STATE = {
     selectedGrade: 'all',
     selectedSubject: 'all',
     selectedTopic: 'all',
+    questionSource: 'custom',
     bankInfo: null,
     playMode: 'stop_on_wrong',
     wrongAttempts: [],
@@ -2922,6 +2925,7 @@ function resetMillionaireState() {
     MILLIONAIRE_STATE.selectedGrade = MILLIONAIRE_STATE.selectedGrade || 'all';
     MILLIONAIRE_STATE.selectedSubject = MILLIONAIRE_STATE.selectedSubject || 'all';
     MILLIONAIRE_STATE.selectedTopic = MILLIONAIRE_STATE.selectedTopic || 'all';
+    MILLIONAIRE_STATE.questionSource = ['custom','default'].includes(MILLIONAIRE_STATE.questionSource) ? MILLIONAIRE_STATE.questionSource : 'custom';
     MILLIONAIRE_STATE.bankInfo = null;
     MILLIONAIRE_STATE.playMode = MILLIONAIRE_STATE.playMode || 'stop_on_wrong';
     MILLIONAIRE_STATE.wrongAttempts = [];
@@ -2948,10 +2952,22 @@ function getMillionaireSubjectsForGrade(grade) {
     return [...MILLIONAIRE_SYSTEM_SUBJECTS];
 }
 
+function getMillionaireQuestionsBySource(source = MILLIONAIRE_STATE.questionSource || 'custom') {
+    // BƯỚC 151.49.3F.12D: tuyệt đối không trộn câu hỏi mẫu với câu hỏi giáo viên/AI đã thêm.
+    return source === 'default' ? [...MILLIONAIRE_QUESTION_BANK] : loadMillionaireCustomQuestions();
+}
+
+function millionaireSetQuestionSource(value) {
+    MILLIONAIRE_STATE.questionSource = value === 'default' ? 'default' : 'custom';
+    MILLIONAIRE_STATE.selectedTopic = 'all';
+    MILLIONAIRE_STATE.bankInfo = null;
+    refreshMillionaire();
+}
+
 function getMillionaireTopicsForSelection(grade, subject) {
     const values = new Set();
 
-    getAllMillionaireQuestions().forEach(item => {
+    getMillionaireQuestionsBySource().forEach(item => {
         // Lọc tuyệt đối theo khối/môn đã chọn. Không kéo "Tổng hợp" vào môn cụ thể.
         const gradeOk = grade === 'all' || item.grade === grade;
         const subjectOk = subject === 'all' || item.subject === subject;
@@ -2985,7 +3001,8 @@ function createMillionaireQuestionSet() {
     const subject = state.selectedSubject || 'all';
     const topic = state.selectedTopic || 'all';
 
-    const allQuestions = getAllMillionaireQuestions();
+    const questionSource = state.questionSource || 'custom';
+    const allQuestions = getMillionaireQuestionsBySource(questionSource);
     const exact = allQuestions.filter(item => {
         const gradeOk = grade === 'all' || item.grade === grade;
         const subjectOk = subject === 'all' || item.subject === subject;
@@ -3018,6 +3035,7 @@ function createMillionaireQuestionSet() {
         subject,
         topic,
         strictFilter: true,
+        questionSource,
         counts: {
             easy: exact.filter(x => x.difficulty === 'easy').length,
             medium: exact.filter(x => x.difficulty === 'medium').length,
@@ -3032,7 +3050,9 @@ function createMillionaireQuestionSet() {
         difficulty: item.difficulty,
         grade: item.grade,
         subject: item.subject,
-        topic: item.topic
+        topic: item.topic,
+        id: item.id || null,
+        source: questionSource
     }));
 }
 
@@ -4101,6 +4121,8 @@ D: ...
 
 function renderMillionaireBankSelector() {
     const state = MILLIONAIRE_STATE;
+    const customCount = loadMillionaireCustomQuestions().length;
+    const defaultCount = MILLIONAIRE_QUESTION_BANK.length;
     const subjects = getMillionaireSubjectsForGrade(state.selectedGrade);
     const topics = getMillionaireTopicsForSelection(state.selectedGrade, state.selectedSubject);
 
@@ -4115,6 +4137,16 @@ function renderMillionaireBankSelector() {
     return `
         <div class="millionaire-bank-selector">
             <div class="millionaire-bank-title"><i class="fas fa-layer-group"></i> Chọn bộ câu hỏi</div>
+            <div class="millionaire-source-choice">
+                <label class="millionaire-source-option ${state.questionSource === 'custom' ? 'active' : ''}">
+                    <input type="radio" name="millionaireQuestionSource" value="custom" ${state.questionSource === 'custom' ? 'checked' : ''} onchange="millionaireSetQuestionSource(this.value)">
+                    <span><strong>Câu hỏi đã thêm</strong><small>${customCount} câu · dùng câu do giáo viên/AI nhập</small></span>
+                </label>
+                <label class="millionaire-source-option ${state.questionSource === 'default' ? 'active' : ''}">
+                    <input type="radio" name="millionaireQuestionSource" value="default" ${state.questionSource === 'default' ? 'checked' : ''} onchange="millionaireSetQuestionSource(this.value)">
+                    <span><strong>Câu hỏi mẫu của phần mềm</strong><small>${defaultCount} câu · chỉ dùng khi muốn chơi bộ mẫu</small></span>
+                </label>
+            </div>
             <div class="millionaire-bank-grid">
                 <label>
                     <span>Khối lớp</span>
@@ -4137,8 +4169,9 @@ function renderMillionaireBankSelector() {
                 </label>
             </div>
             <div class="millionaire-bank-note">
-                Mỗi lượt dùng <strong>số câu hiện có của đúng bộ lọc</strong> (tối đa 15 câu); không bắt buộc phải đủ 15 câu.
-                <strong>Đã chọn Khối/Môn/Chủ đề thì hệ thống chỉ dùng đúng bộ lọc đó, không lấy câu môn khác.</strong>
+                <strong>Hai nguồn câu hỏi được tách hoàn toàn.</strong>
+                Khi chọn <strong>Câu hỏi đã thêm</strong>, trò chơi tuyệt đối không lấy câu hỏi mẫu có sẵn; kể cả khi dùng quyền <strong>Đổi câu</strong>.
+                Mỗi lượt dùng số câu phù hợp bộ lọc (tối đa 15 câu).
             </div>
         </div>
     `;
@@ -4296,7 +4329,13 @@ function millionaireFallbackSound(name) {
             [220, 185, 147].forEach((f, i) => millionaireTone(f, .24, 'sawtooth', .03, i * .11));
             break;
         case 'fifty':
+            // Hiệu ứng 50:50: hai nhịp hạ dần, gợi cảm giác loại bỏ hai phương án.
+            [880, 660, 440].forEach((f, i) => millionaireTone(f, .16, 'triangle', .045, i * .10));
+            break;
         case 'audience':
+            // Hiệu ứng khán giả: chuỗi nhịp tăng dần như kết quả bình chọn xuất hiện.
+            [392, 523.25, 659.25, 783.99].forEach((f, i) => millionaireTone(f, .13, 'sine', .04, i * .075));
+            break;
         case 'switch':
         case 'lifeline':
             [660, 880].forEach((f, i) => millionaireTone(f, .14, 'sine', .03, i * .08));
@@ -4313,6 +4352,14 @@ function millionaireFallbackSound(name) {
 
 function millionaireSound(name) {
     const mappedName = name === 'lifeline' ? 'audience' : name;
+
+    // 3F.12C: 50:50 và Khán giả phải luôn có âm thanh ngay cả khi gói web
+    // không có file MP3 riêng. Dùng hiệu ứng Web Audio tích hợp để bảo đảm phát được.
+    if (name === 'fifty' || name === 'audience') {
+        millionaireFallbackSound(name);
+        return;
+    }
+
     if (!playMillionaireAudioFile(mappedName)) {
         millionaireFallbackSound(name);
     }
@@ -4379,7 +4426,8 @@ function millionaireMCSpeak(text, options = {}) {
         if (options.clear) millionaireMCStop();
         const utter = new SpeechSynthesisUtterance(String(text).replace(/\s+/g, ' ').trim());
         utter.lang = 'vi-VN';
-        utter.rate = 0.92;
+        // 3F.12C: đọc nhanh hơn để nhịp trò chơi tự nhiên, không kéo dài thời gian chờ.
+        utter.rate = 1.15;
         utter.pitch = 1.0;
         utter.volume = 1.0;
         const voice = millionaireMCVoice || millionaireMCFindVietnameseVoice();
@@ -4753,6 +4801,7 @@ function millionaireStart() {
     const grade = MILLIONAIRE_STATE.selectedGrade || 'all';
     const subject = MILLIONAIRE_STATE.selectedSubject || 'all';
     const topic = MILLIONAIRE_STATE.selectedTopic || 'all';
+    const questionSource = MILLIONAIRE_STATE.questionSource || 'custom';
 
     resetMillionaireState();
     MILLIONAIRE_STATE.playMode = playMode;
@@ -4762,14 +4811,15 @@ function millionaireStart() {
     MILLIONAIRE_STATE.selectedGrade = grade;
     MILLIONAIRE_STATE.selectedSubject = subject;
     MILLIONAIRE_STATE.selectedTopic = topic;
+    MILLIONAIRE_STATE.questionSource = questionSource;
     MILLIONAIRE_STATE.questions = createMillionaireQuestionSet();
 
     if (MILLIONAIRE_STATE.questions.length < 1) {
         const info = MILLIONAIRE_STATE.bankInfo || {};
         MILLIONAIRE_STATE.started = false;
         MILLIONAIRE_STATE.message =
-            `Bộ lọc hiện chưa có câu hỏi phù hợp (${info.exactCount || 0} câu). ` +
-            `Hãy thêm câu hỏi đúng Khối/Môn/Chủ đề rồi bắt đầu lại.`;
+            `Nguồn ${questionSource === 'custom' ? 'Câu hỏi đã thêm' : 'Câu hỏi mẫu'} hiện chưa có câu hỏi phù hợp (${info.exactCount || 0} câu). ` +
+            `Hãy kiểm tra Khối/Môn/Chủ đề hoặc chọn nguồn câu hỏi khác.`;
         refreshMillionaire();
         alert(MILLIONAIRE_STATE.message);
         return;
@@ -4920,9 +4970,12 @@ function millionaireUseFifty() {
     state.hiddenAnswers = shuffled.slice(0, 2);
     state.lifelines.fifty = false;
     state.phase = 'lifeline';
+    stopMillionaireThinking();
     millionaireSound('fifty');
     state.message = '50:50 đã loại 2 phương án sai.';
     refreshMillionaire();
+    millionaireMCAnnounce('Bạn đã sử dụng quyền trợ giúp năm mươi năm mươi. Hai phương án sai đã được loại bỏ.');
+    setTimeout(() => millionaireStartThinking(0), 900);
 }
 
 function millionaireUseAudience() {
@@ -4957,37 +5010,66 @@ function millionaireUseAudience() {
     state.audienceResult = result;
     state.lifelines.audience = false;
     state.phase = 'lifeline';
+    stopMillionaireThinking();
     millionaireSound('audience');
     state.message = 'Khán giả đã đưa ra lựa chọn tham khảo.';
     refreshMillionaire();
+
+    const labels = ['A','B','C','D'];
+    const spokenResult = result
+        .map((percent, idx) => percent > 0 ? `${labels[idx]} ${percent} phần trăm` : '')
+        .filter(Boolean)
+        .join(', ');
+    millionaireMCAnnounce(`Kết quả hỏi ý kiến khán giả: ${spokenResult}. Đây là kết quả để bạn tham khảo.`);
+    setTimeout(() => millionaireStartThinking(0), 1200);
 }
 
 function millionaireUseSwitch() {
     const state = MILLIONAIRE_STATE;
     if (!state.lifelines.switch || state.locked) return;
 
-    const available = MILLIONAIRE_SWITCH_QUESTIONS
-        .map((q, idx) => ({ q, idx }))
-        .filter(item => !state.usedSwitchIndexes.includes(item.idx));
+    const grade = state.selectedGrade || 'all';
+    const subject = state.selectedSubject || 'all';
+    const topic = state.selectedTopic || 'all';
+    const source = state.questionSource || 'custom';
+    const usedTexts = new Set((state.questions || []).map(item => String(item?.q || '').trim()).filter(Boolean));
+
+    // 12D: câu đổi phải lấy đúng CÙNG NGUỒN + CÙNG BỘ LỌC; không dùng bộ câu dự phòng mẫu cứng.
+    const available = getMillionaireQuestionsBySource(source).filter(item => {
+        const gradeOk = grade === 'all' || item.grade === grade;
+        const subjectOk = subject === 'all' || item.subject === subject;
+        const topicOk = topic === 'all' || item.topic === topic;
+        return gradeOk && subjectOk && topicOk && !usedTexts.has(String(item.q || '').trim());
+    });
 
     if (!available.length) {
-        state.message = 'Không còn câu hỏi dự phòng.';
+        state.message = 'Không còn câu hỏi khác trong đúng nguồn và bộ lọc hiện tại để đổi.';
         refreshMillionaire();
+        millionaireMCAnnounce('Không còn câu hỏi khác trong đúng bộ câu hỏi hiện tại để đổi.');
         return;
     }
 
     const pick = available[Math.floor(Math.random() * available.length)];
-    state.usedSwitchIndexes.push(pick.idx);
-    state.questions[state.level] = { ...pick.q, a: [...pick.q.a] };
+    state.questions[state.level] = {
+        q: pick.q,
+        a: [...pick.a],
+        c: pick.c,
+        difficulty: pick.difficulty,
+        grade: pick.grade,
+        subject: pick.subject,
+        topic: pick.topic,
+        id: pick.id || null,
+        source
+    };
     state.hiddenAnswers = [];
     state.audienceResult = null;
     state.selectedIndex = null;
     state.lifelines.switch = false;
     state.phase = 'question';
     millionaireSound('switch');
-    state.message = 'Đã đổi sang câu hỏi mới.';
+    state.message = 'Đã đổi sang câu hỏi mới trong cùng bộ câu hỏi.';
     refreshMillionaire();
-    millionaireMCAnnounce('Bạn đã sử dụng quyền đổi câu hỏi. Đây là câu hỏi mới.');
+    millionaireMCAnnounce('Bạn đã sử dụng quyền đổi câu hỏi. Câu hỏi mới vẫn thuộc đúng bộ câu hỏi đang chơi.');
     millionaireMCPresentCurrentQuestion();
 }
 
@@ -5002,6 +5084,7 @@ function millionaireEndSession() {
     const keepGrade = state.selectedGrade || 'all';
     const keepSubject = state.selectedSubject || 'all';
     const keepTopic = state.selectedTopic || 'all';
+    const keepQuestionSource = state.questionSource || 'custom';
     const keepSound = state.soundEnabled;
     const keepMC = state.mcEnabled !== false;
     const keepPlayMode = state.playMode || 'stop_on_wrong';
@@ -5014,6 +5097,7 @@ function millionaireEndSession() {
     state.selectedGrade = keepGrade;
     state.selectedSubject = keepSubject;
     state.selectedTopic = keepTopic;
+    state.questionSource = keepQuestionSource;
     state.soundEnabled = keepSound;
     state.mcEnabled = keepMC;
     state.playMode = keepPlayMode;
@@ -5069,6 +5153,7 @@ window.millionaireMCRepeatQuestion = millionaireMCRepeatQuestion;
 window.millionaireSetGrade = millionaireSetGrade;
 window.millionaireSetSubject = millionaireSetSubject;
 window.millionaireSetTopic = millionaireSetTopic;
+window.millionaireSetQuestionSource = millionaireSetQuestionSource;
 window.millionaireOpenQuestionManager = millionaireOpenQuestionManager;
 window.millionaireCloseQuestionManager = millionaireCloseQuestionManager;
 window.millionaireSaveQuestion = millionaireSaveQuestion;
