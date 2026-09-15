@@ -10440,3 +10440,77 @@ tbody tr:hover td{
     .millionaire-ai-copy-btn { width: 100%; }
     #millionaireAIPromptBox { min-height: 240px; }
 }
+
+
+/* ============================================================
+   BƯỚC 151.49.3F.11 - NÚT XUẤT ẢNH HỌC SINH
+   ============================================================ */
+.student-photo-export-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+}
+.student-photo-export-count{
+    min-width:22px;
+    text-align:center;
+    font-weight:800;
+}
+.student-photo-export-btn:disabled{
+    opacity:.48;
+    cursor:not-allowed;
+}
+@media(max-width:760px){
+    .student-photo-export-btn{
+        flex:1 1 calc(50% - 6px);
+        justify-content:center;
+    }
+}
+
+/* BƯỚC 151.49.3F.12A */
+.millionaire-ai-auto-count-note{display:flex;align-items:center;gap:10px;flex:1;min-width:260px;padding:10px 12px;border:1px solid rgba(93,173,226,.28);border-radius:10px;background:rgba(52,152,219,.08);font-size:12px;line-height:1.45}.millionaire-ai-auto-count-note i{font-size:18px}.millionaire-ai-auto-count-note span{display:block}
+
+/* ============================================================
+   BƯỚC 151.49.3F.12B - NGƯỜI DẪN CHƯƠNG TRÌNH BẰNG GIỌNG NÓI
+   ============================================================ */
+.millionaire-mc-settings{
+    margin-top:14px;
+    padding:14px;
+    border:1px solid rgba(100,181,246,.28);
+    border-radius:14px;
+    background:rgba(20,55,92,.22);
+}
+.millionaire-mc-settings-title{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:10px;
+    font-weight:800;
+    color:#dceeff;
+}
+.millionaire-mc-test-btn{margin-top:10px}
+.millionaire-mc-warning{
+    display:block;
+    margin-top:8px;
+    color:#ffcc80;
+}
+.millionaire-audio-actions{
+    display:flex;
+    align-items:center;
+    gap:7px;
+}
+.millionaire-sound-toggle.mc-on{
+    box-shadow:0 0 0 1px rgba(76,175,80,.45) inset;
+}
+.millionaire-sound-toggle.mc-off{opacity:.68}
+.millionaire-sound-toggle:disabled{
+    opacity:.38;
+    cursor:not-allowed;
+}
+@media(max-width:640px){
+    .millionaire-audio-actions{gap:4px}
+    .millionaire-audio-actions .millionaire-sound-toggle{
+        width:34px;
+        height:34px;
+        min-width:34px;
+    }
+}

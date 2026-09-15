@@ -13,7 +13,7 @@
  * - Auth: Supabase Auth
  * ============================================================
  */
-import { supabase } from './supabase.js?v=151493610';
+import { supabase } from './supabase.js?v=151493612';
 
 
 // ============================================================
@@ -168,6 +168,7 @@ function sanitizeMillionaireStateForStorage() {
             : null,
         phase: MILLIONAIRE_STATE.phase || 'idle',
         soundEnabled: MILLIONAIRE_STATE.soundEnabled !== false,
+        mcEnabled: MILLIONAIRE_STATE.mcEnabled !== false,
         selectedGrade: MILLIONAIRE_STATE.selectedGrade || 'all',
         selectedSubject: MILLIONAIRE_STATE.selectedSubject || 'all',
         selectedTopic: MILLIONAIRE_STATE.selectedTopic || 'all',
@@ -210,11 +211,12 @@ function restoreMillionaireStateFromStorage() {
 
         MILLIONAIRE_STATE.started = !!saved.started;
         MILLIONAIRE_STATE.ended = !!saved.ended;
-        MILLIONAIRE_STATE.level = Math.max(0, Math.min(15, Number(saved.level) || 0));
+        MILLIONAIRE_STATE.level = Math.max(0, Number(saved.level) || 0);
         MILLIONAIRE_STATE.locked = !!saved.locked;
         MILLIONAIRE_STATE.questions = Array.isArray(saved.questions)
             ? saved.questions.map(q => ({ ...q, a: Array.isArray(q.a) ? [...q.a] : [] }))
             : [];
+        MILLIONAIRE_STATE.level = Math.min(MILLIONAIRE_STATE.level, Math.max(0, MILLIONAIRE_STATE.questions.length));
         MILLIONAIRE_STATE.usedSwitchIndexes = Array.isArray(saved.usedSwitchIndexes)
             ? [...saved.usedSwitchIndexes]
             : [];
@@ -232,6 +234,7 @@ function restoreMillionaireStateFromStorage() {
             : null;
         MILLIONAIRE_STATE.phase = saved.phase || 'idle';
         MILLIONAIRE_STATE.soundEnabled = saved.soundEnabled !== false;
+        MILLIONAIRE_STATE.mcEnabled = saved.mcEnabled !== false;
         MILLIONAIRE_STATE.selectedGrade = saved.selectedGrade || 'all';
         MILLIONAIRE_STATE.selectedSubject = saved.selectedSubject || 'all';
         MILLIONAIRE_STATE.selectedTopic = saved.selectedTopic || 'all';
@@ -2880,6 +2883,7 @@ const MILLIONAIRE_STATE = {
     audienceResult: null,
     phase: 'idle',
     soundEnabled: true,
+    mcEnabled: true,
     selectedGrade: 'all',
     selectedSubject: 'all',
     selectedTopic: 'all',
@@ -2913,7 +2917,8 @@ function resetMillionaireState() {
     MILLIONAIRE_STATE.selectedIndex = null;
     MILLIONAIRE_STATE.audienceResult = null;
     MILLIONAIRE_STATE.phase = 'idle';
-    MILLIONAIRE_STATE.soundEnabled = true;
+    MILLIONAIRE_STATE.soundEnabled = MILLIONAIRE_STATE.soundEnabled !== false;
+    MILLIONAIRE_STATE.mcEnabled = MILLIONAIRE_STATE.mcEnabled !== false;
     MILLIONAIRE_STATE.selectedGrade = MILLIONAIRE_STATE.selectedGrade || 'all';
     MILLIONAIRE_STATE.selectedSubject = MILLIONAIRE_STATE.selectedSubject || 'all';
     MILLIONAIRE_STATE.selectedTopic = MILLIONAIRE_STATE.selectedTopic || 'all';
@@ -2981,9 +2986,6 @@ function createMillionaireQuestionSet() {
     const topic = state.selectedTopic || 'all';
 
     const allQuestions = getAllMillionaireQuestions();
-
-    // BƯỚC 151.40: lọc tuyệt đối.
-    // Đã chọn khối/môn/chủ đề thì tuyệt đối không lấy câu ngoài bộ lọc.
     const exact = allQuestions.filter(item => {
         const gradeOk = grade === 'all' || item.grade === grade;
         const subjectOk = subject === 'all' || item.subject === subject;
@@ -2997,40 +2999,33 @@ function createMillionaireQuestionSet() {
         hard: shuffleMillionaireArray(exact.filter(x => x.difficulty === 'hard'))
     };
 
-    const selected = [
-        ...byDifficulty.easy.slice(0, 5),
-        ...byDifficulty.medium.slice(0, 5),
-        ...byDifficulty.hard.slice(0, 5)
-    ];
-
-    // Nếu một mức chưa đủ 5 nhưng tổng bộ lọc có >=15,
-    // chỉ bổ sung bằng câu CÙNG BỘ LỌC, không đổi môn/khối/chủ đề.
-    if (selected.length < 15 && exact.length >= 15) {
-        const used = new Set(selected.map(x => `${x.q}|${x.grade}|${x.subject}|${x.topic}`));
-        const extras = shuffleMillionaireArray(exact).filter(x => {
-            const key = `${x.q}|${x.grade}|${x.subject}|${x.topic}`;
-            return !used.has(key);
-        });
-        while (selected.length < 15 && extras.length) {
-            selected.push(extras.shift());
-        }
+    // BƯỚC 151.49.3F.12A: Không bắt buộc đủ 15 câu.
+    // Dùng toàn bộ câu đúng bộ lọc nếu <=15; nếu nhiều hơn thì lấy tối đa 15,
+    // luân phiên các mức độ để lượt chơi đa dạng.
+    const selected = [];
+    const pools = [byDifficulty.easy, byDifficulty.medium, byDifficulty.hard];
+    let cursor = 0;
+    while (selected.length < Math.min(15, exact.length) && pools.some(pool => pool.length)) {
+        const pool = pools[cursor % pools.length];
+        if (pool.length) selected.push(pool.shift());
+        cursor++;
     }
 
     state.bankInfo = {
         exactCount: exact.length,
-        selectedCount: Math.min(selected.length, 15),
+        selectedCount: selected.length,
         grade,
         subject,
         topic,
         strictFilter: true,
         counts: {
-            easy: byDifficulty.easy.length,
-            medium: byDifficulty.medium.length,
-            hard: byDifficulty.hard.length
+            easy: exact.filter(x => x.difficulty === 'easy').length,
+            medium: exact.filter(x => x.difficulty === 'medium').length,
+            hard: exact.filter(x => x.difficulty === 'hard').length
         }
     };
 
-    return selected.slice(0, 15).map(item => ({
+    return selected.map(item => ({
         q: item.q,
         a: [...item.a],
         c: item.c,
@@ -3040,7 +3035,6 @@ function createMillionaireQuestionSet() {
         topic: item.topic
     }));
 }
-
 
 function millionaireOpenQuestionManager() {
     MILLIONAIRE_STATE.managerOpen = true;
@@ -3650,7 +3644,23 @@ function importMillionaireQuestionsFromPastedAI() {
         imported.push(normalized);
     }
 
+    // BƯỚC 151.49.3F.12A: Cân bằng vị trí đáp án đúng A/B/C/D.
+    // Nếu AI vô tình dồn đáp án đúng vào A hoặc B, hệ thống tự hoán đổi vị trí
+    // nhưng giữ nguyên nội dung đúng/sai của từng câu.
     if (imported.length) {
+        const targetPositions = [];
+        for (let i = 0; i < imported.length; i++) targetPositions.push(i % 4);
+        shuffleMillionaireArray(targetPositions);
+        imported.forEach((item, idx) => {
+            const current = Number(item.c);
+            const target = targetPositions[idx];
+            if (current !== target && [0,1,2,3].includes(current)) {
+                const answers = [...item.a];
+                [answers[current], answers[target]] = [answers[target], answers[current]];
+                item.a = answers;
+                item.c = target;
+            }
+        });
         saveMillionaireCustomQuestions([...custom, ...imported]);
     }
 
@@ -3682,75 +3692,51 @@ function getMillionaireAIPromptData() {
     const gradeValue = String(document.getElementById('mqGrade')?.value || 'all').trim();
     const subject = String(document.getElementById('mqSubject')?.value || '').trim();
     const topic = String(document.getElementById('mqTopic')?.value || '').trim();
-    const difficultyValue = String(document.getElementById('mqDifficulty')?.value || 'easy').trim();
-    const countRaw = Number(document.getElementById('millionaireAICount')?.value || 20);
-    const count = Math.max(1, Math.min(100, Number.isFinite(countRaw) ? Math.round(countRaw) : 20));
-
-    const grade = gradeValue === 'all' ? '[ghi khối lớp]' : `Khối ${gradeValue}`;
-    const difficultyMap = { easy: 'Dễ', medium: 'Trung bình', hard: 'Khó' };
-
     return {
-        grade,
-        subject: subject || '[ghi môn học]',
-        topic: topic || '[ghi chủ đề/bài học]',
-        difficulty: difficultyMap[difficultyValue] || 'Dễ',
-        count
+        grade: gradeValue === 'all' ? '[xác định theo bài học hoặc tôi sẽ bổ sung]' : `Khối ${gradeValue}`,
+        subject: subject || '[xác định theo ảnh bài học hoặc tôi sẽ bổ sung]',
+        topic: topic || '[xác định theo ảnh bài học]'
     };
 }
 
 function buildMillionaireAIPrompt() {
     const data = getMillionaireAIPromptData();
-    return `Hãy tạo cho tôi ${data.count} câu hỏi trắc nghiệm dùng cho học sinh.
+    return `Tôi sẽ gửi cho bạn MỘT HOẶC NHIỀU ẢNH chứa TOÀN BỘ nội dung của một bài học trong sách giáo khoa/sách giáo viên.
 
-` +
-`Khối: ${data.grade}
-` +
-`Môn: ${data.subject}
-` +
-`Chủ đề: ${data.topic}
-` +
-`Mức độ: ${data.difficulty}
+Khối dự kiến: ${data.grade}
+Môn dự kiến: ${data.subject}
+Bài/Chủ đề dự kiến: ${data.topic}
 
-` +
-`Yêu cầu:
-` +
-`- Mỗi câu có 4 phương án A, B, C, D và chỉ có 1 đáp án đúng.
-` +
-`- Nội dung chính xác, rõ ràng, phù hợp lứa tuổi học sinh.
-` +
-`- Các phương án nhiễu phải hợp lý nhưng không gây tranh cãi.
-` +
-`- Không lặp lại câu hỏi.
+NHIỆM VỤ CỦA BẠN:
+1. Đọc kỹ toàn bộ các ảnh tôi gửi và chỉ sử dụng kiến thức có trong bài học đó để tạo câu hỏi.
+2. Tự xác định bài học cần BAO NHIÊU câu hỏi trắc nghiệm để học sinh ôn tập và hiểu được các kiến thức, ý chính và yêu cầu quan trọng của bài. KHÔNG bắt buộc 15 câu, KHÔNG cố kéo dài cho đủ số lượng. Bài ngắn có thể ít câu, bài nhiều nội dung có thể nhiều câu.
+3. Không bỏ sót nội dung trọng tâm, nhưng không tạo nhiều câu hỏi lặp ý chỉ để tăng số lượng.
+4. Mỗi câu có đúng 4 phương án A, B, C, D và chỉ có 1 đáp án đúng. Các phương án nhiễu phải hợp lý, rõ ràng, phù hợp lứa tuổi và không gây tranh cãi.
+5. Phân bố mức độ Dễ – Trung bình – Khó phù hợp với nội dung bài học. Mỗi câu phải ghi rõ mức độ.
+6. ĐẶC BIỆT QUAN TRỌNG VỀ ĐÁP ÁN: vị trí đáp án đúng phải được phân bố tương đối cân bằng giữa A, B, C và D. Không được để phần lớn hoặc toàn bộ câu có cùng đáp án đúng A/B/C/D; không tạo quy luật dễ đoán như tất cả A, tất cả B hoặc lặp một mẫu cố định. Hãy kiểm tra lại toàn bộ danh sách trước khi trả kết quả.
+7. Nếu ảnh bị mờ, thiếu trang hoặc chưa đủ nội dung để xác định bài học, hãy nói rõ phần nào còn thiếu thay vì tự suy đoán kiến thức ngoài ảnh.
 
-` +
-`QUAN TRỌNG: Hãy trả kết quả đúng theo cấu trúc dưới đây để tôi sao chép trực tiếp vào phần mềm. ` +
-`Không viết lời mở đầu, không giải thích, không dùng bảng Markdown và không thêm nội dung trước hoặc sau danh sách.
+CÁCH TÔI GỬI ẢNH:
+- Sau câu lệnh này tôi sẽ gửi lần lượt các ảnh của bài học.
+- Trong lúc tôi đang gửi ảnh, chỉ tiếp nhận và chưa tạo câu hỏi.
+- Chỉ bắt đầu phân tích và tạo danh sách khi tôi nhắn chính xác: ĐÃ GỬI ĐỦ ẢNH.
 
-` +
-`Khối: ${data.grade}
-` +
-`Môn: ${data.subject}
-` +
-`Chủ đề: ${data.topic}
-` +
-`Mức độ: ${data.difficulty}
-` +
-`Câu hỏi: [nội dung câu hỏi]
-` +
-`A: [phương án A]
-` +
-`B: [phương án B]
-` +
-`C: [phương án C]
-` +
-`D: [phương án D]
-` +
-`Đáp án đúng: [A/B/C/D]
+KHI TÔI NHẮN “ĐÃ GỬI ĐỦ ẢNH”, hãy tự xác định số câu phù hợp rồi trả kết quả. Không viết lời mở đầu, không giải thích, không dùng bảng Markdown và không thêm nội dung trước hoặc sau danh sách câu hỏi.
 
-` +
-`Lặp lại đúng cấu trúc trên cho đủ ${data.count} câu. Giữa hai câu để đúng 1 dòng trống.`;
+Mỗi câu phải đúng cấu trúc sau:
+Khối: [1/2/3/4/5]
+Môn: [tên môn]
+Chủ đề: [tên bài/chủ đề]
+Mức độ: [Dễ/Trung bình/Khó]
+Câu hỏi: [nội dung câu hỏi]
+A: [phương án A]
+B: [phương án B]
+C: [phương án C]
+D: [phương án D]
+Đáp án đúng: [A/B/C/D]
+
+Giữa hai câu để đúng 1 dòng trống. Trước khi trả kết quả, hãy kiểm tra lần cuối: số câu đã đủ để bao quát bài học nhưng không dư thừa, và đáp án đúng đã được phân bố đa dạng giữa A/B/C/D.`;
 }
-
 async function millionaireBuildAndCopyAIPrompt() {
     const prompt = buildMillionaireAIPrompt();
     const box = document.getElementById('millionaireAIPromptBox');
@@ -4012,10 +3998,10 @@ function renderMillionaireQuestionManager() {
 
                 <div class="millionaire-ai-prompt-builder">
                     <div class="millionaire-ai-prompt-row">
-                        <label>
-                            <span>Số câu cần tạo</span>
-                            <input id="millionaireAICount" type="number" min="1" max="100" value="20">
-                        </label>
+                        <div class="millionaire-ai-auto-count-note">
+                            <i class="fas fa-images"></i>
+                            <span><strong>Không cần nhập số câu.</strong> Hãy đưa toàn bộ ảnh bài học cho ChatGPT; AI sẽ tự xác định số câu cần thiết để bao quát nội dung.</span>
+                        </div>
                         <button type="button" class="btn millionaire-ai-copy-btn" onclick="millionaireBuildAndCopyAIPrompt()">
                             <i class="fas fa-copy"></i> Tạo & sao chép câu lệnh AI
                         </button>
@@ -4023,7 +4009,7 @@ function renderMillionaireQuestionManager() {
                     <textarea id="millionaireAIPromptBox" rows="9" readonly
                         placeholder="Nhấn “Tạo & sao chép câu lệnh AI”. Câu lệnh hoàn chỉnh sẽ xuất hiện tại đây và được sao chép vào clipboard."></textarea>
                     <div class="millionaire-ai-guide">
-                        <strong>Cách dùng:</strong> 1. Chọn Khối, nhập Môn và Chủ đề ở phía trên → 2. Chọn số câu → 3. Sao chép câu lệnh AI → 4. Dán vào ChatGPT → 5. Sao chép danh sách ChatGPT trả về → 6. Dán vào ô bên dưới và bấm <b>Phân tích & nhập</b>.
+                        <strong>Cách dùng:</strong> 1. Chọn Khối, nhập Môn/Chủ đề nếu đã biết → 2. Sao chép câu lệnh AI → 3. Dán vào ChatGPT → 4. Gửi lần lượt toàn bộ ảnh bài học → 5. Nhắn <b>ĐÃ GỬI ĐỦ ẢNH</b> → 6. Sao chép danh sách AI trả về, dán xuống dưới và bấm <b>Phân tích & nhập</b>.
                     </div>
                 </div>
 
@@ -4151,7 +4137,7 @@ function renderMillionaireBankSelector() {
                 </label>
             </div>
             <div class="millionaire-bank-note">
-                Mỗi lượt tối đa 15 câu, ưu tiên <strong>5 dễ · 5 trung bình · 5 khó</strong>.
+                Mỗi lượt dùng <strong>số câu hiện có của đúng bộ lọc</strong> (tối đa 15 câu); không bắt buộc phải đủ 15 câu.
                 <strong>Đã chọn Khối/Môn/Chủ đề thì hệ thống chỉ dùng đúng bộ lọc đó, không lấy câu môn khác.</strong>
             </div>
         </div>
@@ -4359,17 +4345,142 @@ function millionaireToggleSound() {
     refreshMillionaire();
 }
 
+// ============================================================
+// BƯỚC 151.49.3F.12B - GIỌNG MC (Web Speech API, không dùng API trả phí)
+// ============================================================
+let millionaireMCVoice = null;
+
+function millionaireMCSupported() {
+    return typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+}
+
+function millionaireMCFindVietnameseVoice() {
+    if (!millionaireMCSupported()) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    millionaireMCVoice = voices.find(v => /^vi-VN$/i.test(v.lang))
+        || voices.find(v => /^vi/i.test(v.lang))
+        || voices.find(v => /Vietnam/i.test(v.name))
+        || null;
+    return millionaireMCVoice;
+}
+
+function millionaireMCStop() {
+    if (!millionaireMCSupported()) return;
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+}
+
+function millionaireMCSpeak(text, options = {}) {
+    const onEnd = typeof options.onEnd === 'function' ? options.onEnd : null;
+    if (!MILLIONAIRE_STATE.mcEnabled || !millionaireMCSupported() || !String(text || '').trim()) {
+        if (onEnd) setTimeout(onEnd, 0);
+        return false;
+    }
+    try {
+        if (options.clear) millionaireMCStop();
+        const utter = new SpeechSynthesisUtterance(String(text).replace(/\s+/g, ' ').trim());
+        utter.lang = 'vi-VN';
+        utter.rate = 0.92;
+        utter.pitch = 1.0;
+        utter.volume = 1.0;
+        const voice = millionaireMCVoice || millionaireMCFindVietnameseVoice();
+        if (voice) utter.voice = voice;
+        let finished = false;
+        const done = () => {
+            if (finished) return;
+            finished = true;
+            if (onEnd) onEnd();
+        };
+        utter.onend = done;
+        utter.onerror = done;
+        window.speechSynthesis.speak(utter);
+        return true;
+    } catch (err) {
+        console.warn('[MILLIONAIRE MC] Không đọc được:', err);
+        if (onEnd) setTimeout(onEnd, 0);
+        return false;
+    }
+}
+
+function millionaireMCPlayModeRule() {
+    const mode = MILLIONAIRE_STATE.playMode || 'stop_on_wrong';
+    if (mode === 'continue_on_wrong') return 'Nếu trả lời sai, người chơi vẫn tiếp tục sang câu tiếp theo.';
+    if (mode === 'retry_until_correct') return 'Nếu trả lời sai, người chơi được chọn lại cho đến khi có đáp án đúng.';
+    return 'Nếu trả lời sai, lượt chơi sẽ kết thúc.';
+}
+
+function millionaireMCRulesText() {
+    const timer = MILLIONAIRE_STATE.timerEnabled
+        ? `Mỗi câu có ${millionaireTimerTotalSeconds()} giây để trả lời.`
+        : 'Trò chơi hiện không giới hạn thời gian cho mỗi câu.';
+    return `Xin chào! Chào mừng bạn đến với trò chơi Ai là triệu phú. Trò chơi sử dụng số câu hỏi hiện có của bộ câu hỏi đã chọn. Mỗi câu có bốn phương án A, B, C và D, chỉ có một đáp án đúng. Bạn có ba quyền trợ giúp: năm mươi năm mươi, hỏi ý kiến khán giả và đổi câu hỏi. ${millionaireMCPlayModeRule()} ${timer} Chúc bạn bình tĩnh, tự tin và có một lượt chơi thật vui!`;
+}
+
+function millionaireMCQuestionText(question = getMillionaireCurrentQuestion()) {
+    if (!question) return '';
+    const labels = ['A', 'B', 'C', 'D'];
+    const answers = (question.a || []).map((answer, idx) => `Đáp án ${labels[idx]}: ${answer}.`).join(' ');
+    return `Câu ${MILLIONAIRE_STATE.level + 1} trên ${MILLIONAIRE_STATE.questions.length}. ${question.q}. ${answers} Bạn chọn đáp án nào?`;
+}
+
+function millionaireMCPresentCurrentQuestion({ intro = false, clear = false } = {}) {
+    const state = MILLIONAIRE_STATE;
+    const question = getMillionaireCurrentQuestion();
+    if (!state.started || state.ended || !question) return;
+    millionaireStopTimer();
+    stopMillionaireThinking();
+    const expectedLevel = state.level;
+    const speech = `${intro ? millionaireMCRulesText() + ' ' : ''}${millionaireMCQuestionText(question)}`;
+    const resume = () => {
+        if (!state.started || state.ended || state.locked || state.level !== expectedLevel) return;
+        millionaireStartThinking(180);
+        millionaireStartTimer(true);
+    };
+    if (!state.mcEnabled || !millionaireMCSupported()) {
+        resume();
+        return;
+    }
+    millionaireMCSpeak(speech, { clear, onEnd: resume });
+}
+
+function millionaireMCAnnounce(text) {
+    if (!MILLIONAIRE_STATE.mcEnabled) return;
+    millionaireMCSpeak(text, { clear: false });
+}
+
+function millionaireMCRepeatQuestion() {
+    if (!MILLIONAIRE_STATE.started || MILLIONAIRE_STATE.ended) return;
+    millionaireMCPresentCurrentQuestion({ intro: false, clear: true });
+}
+
+function millionaireMCReadRules() {
+    millionaireMCSpeak(millionaireMCRulesText(), { clear: true });
+}
+
+function millionaireSetMCEnabled(value) {
+    MILLIONAIRE_STATE.mcEnabled = !!value;
+    if (!MILLIONAIRE_STATE.mcEnabled) millionaireMCStop();
+    saveMillionaireStateToStorage();
+    refreshMillionaire();
+}
+
+if (millionaireMCSupported()) {
+    millionaireMCFindVietnameseVoice();
+    window.speechSynthesis.onvoiceschanged = () => millionaireMCFindVietnameseVoice();
+}
+
 function millionaireStageClass() {
     const p = MILLIONAIRE_STATE.phase;
     return p ? `millionaire-phase-${p}` : '';
 }
 
 function renderMillionaireLadder() {
-    return MILLIONAIRE_PRIZES.map((prize, idx) => {
+    const total = MILLIONAIRE_STATE.questions?.length || 15;
+    const prizes = MILLIONAIRE_PRIZES.slice(0, Math.max(1, Math.min(15, total)));
+    return prizes.map((prize, idx) => {
         const level = idx + 1;
         const current = MILLIONAIRE_STATE.started && !MILLIONAIRE_STATE.ended && MILLIONAIRE_STATE.level === idx;
         const passed = MILLIONAIRE_STATE.started && idx < MILLIONAIRE_STATE.level;
-        const milestone = [5, 10, 15].includes(level);
+        const milestone = [5, 10, total].includes(level);
         return `
             <div class="millionaire-ladder-row ${current ? 'current' : ''} ${passed ? 'passed' : ''} ${milestone ? 'milestone' : ''}">
                 <span>${level}</span>
@@ -4413,7 +4524,7 @@ function renderMillionaire() {
             <div class="millionaire-welcome">
                 <div class="millionaire-logo-orb"><i class="fas fa-coins"></i></div>
                 <h2>AI LÀ TRIỆU PHÚ</h2>
-                <p>15 câu hỏi · 4 phương án · 3 quyền trợ giúp</p>
+                <p>Số câu linh hoạt · 4 phương án · 3 quyền trợ giúp</p>
                 ${renderMillionaireBankSelector()}
                 <div class="millionaire-welcome-actions">
                     <button class="btn millionaire-manager-open-btn" onclick="millionaireOpenQuestionManager()">
@@ -4438,6 +4549,12 @@ function renderMillionaire() {
                     <label><input type="radio" name="millionairePlayMode" value="continue_on_wrong" ${state.playMode === 'continue_on_wrong' ? 'checked' : ''} onchange="millionaireSetPlayMode(this.value)"><span><strong>2. Sai vẫn tiếp tục</strong><small>Chọn sai → báo sai → chuyển sang câu tiếp theo.</small></span></label>
                     <label><input type="radio" name="millionairePlayMode" value="retry_until_correct" ${state.playMode === 'retry_until_correct' ? 'checked' : ''} onchange="millionaireSetPlayMode(this.value)"><span><strong>3. Phải chọn đúng mới qua câu</strong><small>Chọn sai → ở nguyên câu và chọn lại đến khi đúng.</small></span></label>
                 </div>
+                <div class="millionaire-mc-settings">
+                    <div class="millionaire-mc-settings-title"><i class="fas fa-microphone-lines"></i> Người dẫn chương trình</div>
+                    <label class="millionaire-timer-switch"><input type="checkbox" ${state.mcEnabled ? 'checked' : ''} onchange="millionaireSetMCEnabled(this.checked)"><span><strong>Bật giọng MC</strong><small>MC đọc luật chơi, câu hỏi, 4 đáp án và thông báo đúng/sai bằng tiếng Việt.</small></span></label>
+                    <button class="btn millionaire-mc-test-btn" onclick="millionaireMCReadRules()"><i class="fas fa-volume-high"></i> Nghe thử luật chơi</button>
+                    ${!millionaireMCSupported() ? '<small class="millionaire-mc-warning">Trình duyệt này không hỗ trợ đọc văn bản. Trò chơi vẫn hoạt động bình thường.</small>' : ''}
+                </div>
                 <button class="btn millionaire-start-btn" onclick="millionaireStart()">
                     <i class="fas fa-play"></i> Bắt đầu
                 </button>
@@ -4446,7 +4563,7 @@ function renderMillionaire() {
     } else if (state.ended) {
         const wonLevel = Math.max(0, state.level);
         const wonPrize = wonLevel > 0 ? MILLIONAIRE_PRIZES[Math.min(wonLevel - 1, 14)] : '0';
-        const isWinner = state.level >= 15;
+        const isWinner = state.questions.length > 0 && state.level >= state.questions.length;
         mainContent = `
             <div class="millionaire-welcome millionaire-end">
                 <div class="millionaire-logo-orb ${isWinner ? 'winner' : ''}">
@@ -4464,7 +4581,7 @@ function renderMillionaire() {
         mainContent = `
             <div class="millionaire-stage">
                 <div class="millionaire-status-line">
-                    <span>Câu ${state.level + 1}/15 · ${question?.difficulty === 'easy' ? 'Dễ' : question?.difficulty === 'medium' ? 'Trung bình' : 'Khó'}</span>
+                    <span>Câu ${state.level + 1}/${state.questions.length} · ${question?.difficulty === 'easy' ? 'Dễ' : question?.difficulty === 'medium' ? 'Trung bình' : 'Khó'}</span>
                     ${state.timerEnabled ? `<span id="millionaireTimerDisplay" class="millionaire-timer-display ${state.timerRemaining<=10?'urgent':''} ${state.timerRemaining<=5?'critical':''}">${millionaireFormatTimer(state.timerRemaining)}</span>` : ''}
                     <strong>${MILLIONAIRE_PRIZES[state.level]} điểm</strong>
                 </div>
@@ -4512,9 +4629,17 @@ function renderMillionaire() {
                     <div class="millionaire-brand">
                         <div class="millionaire-brand-top">
                             <span><i class="fas fa-star"></i> Trò chơi kiến thức</span>
-                            <button class="millionaire-sound-toggle" onclick="millionaireToggleSound()" title="${state.soundEnabled ? 'Tắt âm thanh' : 'Bật âm thanh'}">
-                                <i class="fas ${state.soundEnabled ? 'fa-volume-high' : 'fa-volume-xmark'}"></i>
-                            </button>
+                            <div class="millionaire-audio-actions">
+                                <button class="millionaire-sound-toggle ${state.mcEnabled ? 'mc-on' : 'mc-off'}" onclick="millionaireSetMCEnabled(${state.mcEnabled ? 'false' : 'true'})" title="${state.mcEnabled ? 'Tắt giọng MC' : 'Bật giọng MC'}">
+                                    <i class="fas ${state.mcEnabled ? 'fa-microphone-lines' : 'fa-microphone-slash'}"></i>
+                                </button>
+                                <button class="millionaire-sound-toggle" onclick="millionaireMCRepeatQuestion()" title="Đọc lại câu hỏi và 4 đáp án" ${!state.started || state.ended ? 'disabled' : ''}>
+                                    <i class="fas fa-ear-listen"></i>
+                                </button>
+                                <button class="millionaire-sound-toggle" onclick="millionaireToggleSound()" title="${state.soundEnabled ? 'Tắt âm thanh' : 'Bật âm thanh'}">
+                                    <i class="fas ${state.soundEnabled ? 'fa-volume-high' : 'fa-volume-xmark'}"></i>
+                                </button>
+                            </div>
                         </div>
                         <h3>AI LÀ TRIỆU PHÚ</h3>
                     </div>
@@ -4594,7 +4719,24 @@ function millionaireFormatTimer(v){v=Math.max(0,Number(v)||0);return `${String(M
 function millionaireTimerBeep(kind='tick'){if(!MILLIONAIRE_STATE.timerEnabled||!MILLIONAIRE_STATE.timerSoundEnabled)return;try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=millionaireTimerBeep._ctx||(millionaireTimerBeep._ctx=new C());if(c.state==='suspended')c.resume();const o=c.createOscillator(),g=c.createGain(),n=c.currentTime;o.connect(g);g.connect(c.destination);if(kind==='timeout'){o.frequency.setValueAtTime(330,n);o.frequency.exponentialRampToValueAtTime(180,n+.55);g.gain.setValueAtTime(millionaireBoostVolume(.14),n);g.gain.exponentialRampToValueAtTime(.001,n+.65);o.start(n);o.stop(n+.68)}else{o.frequency.value=kind==='urgent'?980:720;g.gain.setValueAtTime(millionaireBoostVolume(kind==='urgent'?.10:.055),n);g.gain.exponentialRampToValueAtTime(.001,n+.10);o.start(n);o.stop(n+.11)}}catch(e){}}
 function millionaireStopTimer(){if(MILLIONAIRE_STATE.timerIntervalId){clearInterval(MILLIONAIRE_STATE.timerIntervalId);MILLIONAIRE_STATE.timerIntervalId=null}}
 function millionaireStartTimer(reset=true){millionaireStopTimer();const s=MILLIONAIRE_STATE;if(!s.timerEnabled||!s.started||s.ended)return;if(reset)s.timerRemaining=millionaireTimerTotalSeconds();s.timerIntervalId=setInterval(()=>{if(s.locked||s.ended||!s.started)return;s.timerRemaining=Math.max(0,s.timerRemaining-1);const r=s.timerRemaining;if(r>0&&r<=10)millionaireTimerBeep(r<=5?'urgent':'tick');const el=document.getElementById('millionaireTimerDisplay');if(el){el.textContent=millionaireFormatTimer(r);el.classList.toggle('urgent',r<=10);el.classList.toggle('critical',r<=5)}if(r<=0){millionaireStopTimer();millionaireTimerBeep('timeout');millionaireHandleTimeout()}},1000)}
-function millionaireHandleTimeout(){const s=MILLIONAIRE_STATE;if(!s.started||s.ended)return;stopMillionaireThinking();s.locked=true;s.phase='timeout';s.message='Hết thời gian!';refreshMillionaire();if(s.playMode==='continue_on_wrong'){setTimeout(()=>{if(s.level>=14){s.level=15;s.ended=true;s.phase='finished';s.message='Hết thời gian. Đã hoàn thành bộ câu hỏi.';refreshMillionaire();return}s.level++;s.locked=false;s.selectedIndex=null;s.hiddenAnswers=[];s.audienceResult=null;s.wrongAttempts=[];s.phase='question';s.message=`Hết thời gian. Tiếp tục câu ${s.level+1}.`;millionaireSound('question');millionaireStartThinking(350);refreshMillionaire();millionaireStartTimer(true)},1000);return}if(s.playMode==='retry_until_correct'){setTimeout(()=>{s.locked=false;s.selectedIndex=null;s.phase='question';s.message='Hết thời gian. Hãy tiếp tục chọn đến khi đúng.';refreshMillionaire()},900);return}setTimeout(()=>{const safe=s.level>=10?10:(s.level>=5?5:0);s.level=safe;s.ended=true;s.phase='ended';s.message=safe?`Hết thời gian. Bạn bảo toàn mốc câu ${safe}.`:'Hết thời gian. Lượt chơi kết thúc.';refreshMillionaire()},900)}
+function millionaireHandleTimeout(){
+    const s=MILLIONAIRE_STATE;
+    if(!s.started||s.ended)return;
+    const total=s.questions.length;
+    stopMillionaireThinking();s.locked=true;s.phase='timeout';s.message='Hết thời gian!';millionaireMCAnnounce('Hết thời gian trả lời.');refreshMillionaire();
+    if(s.playMode==='continue_on_wrong'){
+        setTimeout(()=>{
+            if(s.level>=total-1){s.level=total;s.ended=true;s.phase='finished';s.message=`Hết thời gian. Đã hoàn thành ${total} câu hỏi.`;refreshMillionaire();return}
+            s.level++;s.locked=false;s.selectedIndex=null;s.hiddenAnswers=[];s.audienceResult=null;s.wrongAttempts=[];s.phase='question';s.message=`Hết thời gian. Tiếp tục câu ${s.level+1}.`;millionaireSound('question');refreshMillionaire();millionaireMCPresentCurrentQuestion()
+        },1000);return
+    }
+    if(s.playMode==='retry_until_correct'){
+        setTimeout(()=>{s.locked=false;s.selectedIndex=null;s.phase='question';s.message='Hết thời gian. Hãy tiếp tục chọn đến khi đúng.';refreshMillionaire()},900);return
+    }
+    setTimeout(()=>{
+        const safe=s.level>=10?10:(s.level>=5?5:0);s.level=Math.min(safe,total);s.ended=true;s.phase='ended';s.message=safe?`Hết thời gian. Bạn bảo toàn mốc câu ${Math.min(safe,total)}.`:'Hết thời gian. Lượt chơi kết thúc.';refreshMillionaire()
+    },900)
+}
 
 function millionaireSetPlayMode(mode) {
     if (!['stop_on_wrong','continue_on_wrong','retry_until_correct'].includes(mode)) return;
@@ -4606,6 +4748,7 @@ function millionaireSetPlayMode(mode) {
 function millionaireStart() {
     stopMillionaireAllAudio();
     const playMode = MILLIONAIRE_STATE.playMode || 'stop_on_wrong';
+    const mcEnabled = MILLIONAIRE_STATE.mcEnabled !== false;
     const timerEnabled=MILLIONAIRE_STATE.timerEnabled, timerSoundEnabled=MILLIONAIRE_STATE.timerSoundEnabled, timerSeconds=millionaireTimerTotalSeconds();
     const grade = MILLIONAIRE_STATE.selectedGrade || 'all';
     const subject = MILLIONAIRE_STATE.selectedSubject || 'all';
@@ -4613,6 +4756,7 @@ function millionaireStart() {
 
     resetMillionaireState();
     MILLIONAIRE_STATE.playMode = playMode;
+    MILLIONAIRE_STATE.mcEnabled = mcEnabled;
     MILLIONAIRE_STATE.timerEnabled=timerEnabled; MILLIONAIRE_STATE.timerSoundEnabled=timerSoundEnabled; MILLIONAIRE_STATE.timerSeconds=timerSeconds; MILLIONAIRE_STATE.timerRemaining=timerSeconds;
     MILLIONAIRE_STATE.wrongAttempts = [];
     MILLIONAIRE_STATE.selectedGrade = grade;
@@ -4620,12 +4764,12 @@ function millionaireStart() {
     MILLIONAIRE_STATE.selectedTopic = topic;
     MILLIONAIRE_STATE.questions = createMillionaireQuestionSet();
 
-    if (MILLIONAIRE_STATE.questions.length < 15) {
+    if (MILLIONAIRE_STATE.questions.length < 1) {
         const info = MILLIONAIRE_STATE.bankInfo || {};
         MILLIONAIRE_STATE.started = false;
         MILLIONAIRE_STATE.message =
-            `Bộ lọc hiện chỉ có ${info.exactCount || 0} câu phù hợp. ` +
-            `Cần ít nhất 15 câu đúng Khối/Môn/Chủ đề; hệ thống không tự lấy câu môn khác.`;
+            `Bộ lọc hiện chưa có câu hỏi phù hợp (${info.exactCount || 0} câu). ` +
+            `Hãy thêm câu hỏi đúng Khối/Môn/Chủ đề rồi bắt đầu lại.`;
         refreshMillionaire();
         alert(MILLIONAIRE_STATE.message);
         return;
@@ -4633,11 +4777,10 @@ function millionaireStart() {
 
     MILLIONAIRE_STATE.started = true;
     MILLIONAIRE_STATE.phase = 'question';
-    MILLIONAIRE_STATE.message = 'Chọn đáp án đúng.';
+    MILLIONAIRE_STATE.message = `Bộ câu hỏi có ${MILLIONAIRE_STATE.questions.length} câu. Chọn đáp án đúng.`;
     millionaireSound('start');
-    millionaireStartThinking(1250);
     refreshMillionaire();
-    millionaireStartTimer(true);
+    millionaireMCPresentCurrentQuestion({ intro: true, clear: true });
 }
 
 function millionaireRestart() {
@@ -4654,6 +4797,7 @@ function millionaireChooseAnswer(index) {
     state.selectedIndex = index;
     millionaireStopTimer();
     stopMillionaireThinking();
+    millionaireMCStop();
     state.locked = true;
     state.phase = 'locked';
     state.message = 'Đã khóa đáp án...';
@@ -4666,17 +4810,20 @@ function millionaireChooseAnswer(index) {
             state.message = 'Chính xác!';
             state.wrongAttempts = [];
             millionaireSound('correct');
+            millionaireMCAnnounce('Chính xác! Xin chúc mừng bạn.');
             refreshMillionaire();
 
             setTimeout(() => {
                 const answeredLevel = state.level + 1;
-                if (answeredLevel >= 15) {
-                    state.level = 15;
+                const totalQuestions = state.questions.length;
+                if (answeredLevel >= totalQuestions) {
+                    state.level = totalQuestions;
                     state.ended = true;
                     stopMillionaireThinking();
                     state.phase = 'winner';
-                    state.message = 'Bạn đã hoàn thành 15 câu hỏi!';
+                    state.message = `Bạn đã hoàn thành ${totalQuestions} câu hỏi!`;
                     millionaireSound('winner');
+                    millionaireMCAnnounce(`Xuất sắc! Bạn đã hoàn thành toàn bộ ${totalQuestions} câu hỏi. Xin chúc mừng!`);
                     refreshMillionaire();
                     return;
                 }
@@ -4690,9 +4837,8 @@ function millionaireChooseAnswer(index) {
                 state.message = `Chính xác! Tiếp tục câu ${state.level + 1}.`;
                 if ([5,10].includes(answeredLevel)) millionaireSound('milestone');
                 else millionaireSound('question');
-                millionaireStartThinking(350);
                 refreshMillionaire();
-                millionaireStartTimer(true);
+                millionaireMCPresentCurrentQuestion();
             }, 850);
             return;
         }
@@ -4703,13 +4849,15 @@ function millionaireChooseAnswer(index) {
 
         if (state.playMode === 'continue_on_wrong') {
             state.message = `Chưa đúng. Đáp án đúng là ${['A','B','C','D'][question.c]}.`;
+            millionaireMCAnnounce(`Rất tiếc, đáp án chưa chính xác. Đáp án đúng là ${['A','B','C','D'][question.c]}: ${question.a[question.c]}.`);
             refreshMillionaire();
             setTimeout(() => {
-                if (state.level >= 14) {
-                    state.level = 15;
+                const totalQuestions = state.questions.length;
+                if (state.level >= totalQuestions - 1) {
+                    state.level = totalQuestions;
                     state.ended = true;
                     state.phase = 'finished';
-                    state.message = 'Đã hoàn thành 15 câu hỏi.';
+                    state.message = `Đã hoàn thành ${totalQuestions} câu hỏi.`;
                     refreshMillionaire();
                     return;
                 }
@@ -4722,9 +4870,8 @@ function millionaireChooseAnswer(index) {
                 state.phase = 'question';
                 state.message = `Tiếp tục câu ${state.level + 1}.`;
                 millionaireSound('question');
-                millionaireStartThinking(350);
                 refreshMillionaire();
-                millionaireStartTimer(true);
+                millionaireMCPresentCurrentQuestion();
             }, 1200);
             return;
         }
@@ -4732,20 +4879,22 @@ function millionaireChooseAnswer(index) {
         if (state.playMode === 'retry_until_correct') {
             if (!state.wrongAttempts.includes(index)) state.wrongAttempts.push(index);
             state.message = 'Chưa đúng. Hãy chọn lại đáp án khác.';
+            millionaireMCAnnounce('Rất tiếc, đáp án chưa chính xác. Bạn hãy suy nghĩ và chọn lại một đáp án khác.');
             refreshMillionaire();
             setTimeout(() => {
                 state.locked = false;
                 state.selectedIndex = null;
                 state.phase = 'question';
                 state.message = 'Hãy chọn lại. Chỉ khi đúng mới chuyển sang câu tiếp theo.';
-                millionaireStartThinking(250);
                 refreshMillionaire();
+                millionaireStartThinking(250);
                 millionaireStartTimer(true);
             }, 900);
             return;
         }
 
         state.message = 'Rất tiếc, đáp án chưa đúng.';
+        millionaireMCAnnounce(`Rất tiếc, đáp án chưa chính xác. Đáp án đúng là ${['A','B','C','D'][question.c]}: ${question.a[question.c]}.`);
         refreshMillionaire();
         setTimeout(() => {
             const safeLevel = state.level >= 10 ? 10 : (state.level >= 5 ? 5 : 0);
@@ -4838,6 +4987,8 @@ function millionaireUseSwitch() {
     millionaireSound('switch');
     state.message = 'Đã đổi sang câu hỏi mới.';
     refreshMillionaire();
+    millionaireMCAnnounce('Bạn đã sử dụng quyền đổi câu hỏi. Đây là câu hỏi mới.');
+    millionaireMCPresentCurrentQuestion();
 }
 
 function millionaireEndSession() {
@@ -4852,9 +5003,11 @@ function millionaireEndSession() {
     const keepSubject = state.selectedSubject || 'all';
     const keepTopic = state.selectedTopic || 'all';
     const keepSound = state.soundEnabled;
+    const keepMC = state.mcEnabled !== false;
     const keepPlayMode = state.playMode || 'stop_on_wrong';
 
     stopMillionaireAllAudio();
+    millionaireMCStop();
     resetMillionaireState();
 
     // Trở về màn hình ban đầu nhưng giữ bộ lọc người dùng đã chọn.
@@ -4862,6 +5015,7 @@ function millionaireEndSession() {
     state.selectedSubject = keepSubject;
     state.selectedTopic = keepTopic;
     state.soundEnabled = keepSound;
+    state.mcEnabled = keepMC;
     state.playMode = keepPlayMode;
     state.wrongAttempts = [];
     state.started = false;
@@ -4885,6 +5039,7 @@ function millionaireQuit() {
     state.message = state.level > 0
         ? `Bạn chủ động dừng cuộc chơi sau ${state.level} câu đúng.`
         : 'Bạn đã dừng cuộc chơi.';
+    millionaireMCAnnounce(state.message);
     refreshMillionaire();
 }
 
@@ -4908,6 +5063,9 @@ window.millionaireUseSwitch = millionaireUseSwitch;
 window.millionaireQuit = millionaireQuit;
 window.millionaireEndSession = millionaireEndSession;
 window.millionaireToggleSound = millionaireToggleSound;
+window.millionaireSetMCEnabled = millionaireSetMCEnabled;
+window.millionaireMCReadRules = millionaireMCReadRules;
+window.millionaireMCRepeatQuestion = millionaireMCRepeatQuestion;
 window.millionaireSetGrade = millionaireSetGrade;
 window.millionaireSetSubject = millionaireSetSubject;
 window.millionaireSetTopic = millionaireSetTopic;
@@ -4955,6 +5113,7 @@ function renderPage(page) {
 
     if (previousPage === 'millionaire' && page !== 'millionaire') {
         stopMillionaireThinking();
+        millionaireMCStop();
         saveMillionaireStateToStorage();
     }
 
@@ -5365,6 +5524,8 @@ function renderStudents() {
             <button class="btn btn-secondary" onclick="document.getElementById('importFileInput').click()"><i class="fas fa-file-import"></i> Nhập Excel</button>
             <button class="btn btn-info" onclick="document.getElementById('vneduStudentImportInput').click()"><i class="fas fa-school"></i> Cập nhật VNEDU</button>
             <button class="btn btn-secondary" onclick="exportExcel()"><i class="fas fa-download"></i> Xuất danh sách</button>
+            <button id="exportSelectedStudentPhotosBtn" class="btn btn-secondary student-photo-export-btn" onclick="exportStudentPhotos('selected')" title="Xuất ảnh của các học sinh đã đánh dấu trong danh sách"><i class="fas fa-images"></i> Ảnh đã chọn <span id="selectedStudentPhotoCount" class="student-photo-export-count">(0)</span></button>
+            <button class="btn btn-secondary student-photo-export-btn" onclick="exportStudentPhotos('all')" title="Xuất ảnh của toàn bộ học sinh mà tài khoản hiện tại được phép truy cập"><i class="fas fa-file-zipper"></i> Toàn bộ ảnh HS</button>
             <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event)">
           </div>
         </div>
@@ -5530,6 +5691,7 @@ const quality = evaluation.quality || '';
             initStudentTable();
         };
     });
+    updateStudentPhotoExportButtons();
 }
 
 function filterStudents() {
@@ -6216,6 +6378,171 @@ async function downloadAvatar(studentId) {
     link.click();
     document.body.removeChild(link);
     showToast('Đang tải ảnh...', 'info');
+}
+
+// ============================================================
+// BƯỚC 151.49.3F.11 - XUẤT ẢNH HỌC SINH ĐÃ CHỌN / TOÀN BỘ
+// ============================================================
+function updateStudentPhotoExportButtons() {
+    const selectedIds = new Set(APP_STATE.selectedStudents || []);
+    const accessibleIds = new Set((APP_STATE.students || []).map(student => student.id));
+    const count = [...selectedIds].filter(id => accessibleIds.has(id)).length;
+    const countEl = document.getElementById('selectedStudentPhotoCount');
+    const btn = document.getElementById('exportSelectedStudentPhotosBtn');
+    if (countEl) countEl.textContent = `(${count})`;
+    if (btn) btn.disabled = count === 0;
+}
+
+function sanitizeStudentPhotoFilePart(value, fallback = 'khong_ten') {
+    const safe = String(value ?? '')
+        .trim()
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+        .replace(/\s+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^[_\.]+|[_\.]+$/g, '');
+    return safe || fallback;
+}
+
+function studentPhotoExtension(blob, source = '') {
+    const type = String(blob?.type || '').toLowerCase();
+    if (type.includes('png')) return 'png';
+    if (type.includes('webp')) return 'webp';
+    if (type.includes('gif')) return 'gif';
+    if (type.includes('jpeg') || type.includes('jpg')) return 'jpg';
+    const cleanSource = String(source || '').split('?')[0].toLowerCase();
+    const match = cleanSource.match(/\.(png|webp|gif|jpe?g)$/);
+    if (match) return match[1] === 'jpeg' ? 'jpg' : match[1];
+    return 'jpg';
+}
+
+async function getStudentPhotoBlob(student) {
+    if (!student) return null;
+    const source = student.avatar_url ||
+        ((student.avatar && student.avatar !== DEFAULT_AVATAR) ? student.avatar : '');
+    if (!source || source === DEFAULT_AVATAR) return null;
+
+    try {
+        const response = await fetch(source, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        if (!blob || !String(blob.type || '').startsWith('image/')) return null;
+        return { blob, source };
+    } catch (error) {
+        console.warn('[EXPORT STUDENT PHOTO] Không tải được ảnh:', student.id, error);
+        return null;
+    }
+}
+
+async function exportStudentPhotos(mode = 'selected') {
+    if (typeof JSZip === 'undefined') {
+        showToast('Chưa tải được thư viện đóng gói ZIP. Hãy kiểm tra Internet và thử lại.', 'error');
+        return;
+    }
+
+    const accessibleStudents = [...(APP_STATE.students || [])];
+    const accessibleById = new Map(accessibleStudents.map(student => [student.id, student]));
+    let students = [];
+    let exportLabel = '';
+
+    if (mode === 'selected') {
+        students = (APP_STATE.selectedStudents || [])
+            .map(id => accessibleById.get(id))
+            .filter(Boolean);
+        exportLabel = 'các học sinh đã chọn';
+        if (!students.length) {
+            showToast('Vui lòng đánh dấu ít nhất một học sinh để xuất ảnh.', 'warning');
+            return;
+        }
+    } else {
+        students = accessibleStudents;
+        exportLabel = 'toàn bộ học sinh';
+        if (!students.length) {
+            showToast('Không có học sinh để xuất ảnh.', 'warning');
+            return;
+        }
+    }
+
+    const confirmed = await showModal(
+        'Xuất ảnh học sinh',
+        `Hệ thống sẽ xuất ảnh của <strong>${students.length}</strong> học sinh (${exportLabel}) thành một file ZIP.<br><br>Học sinh chưa có ảnh riêng sẽ được <strong>bỏ qua</strong>. Ảnh được chia theo thư mục lớp để dễ quản lý.`,
+        'Bắt đầu xuất',
+        'Hủy'
+    );
+    if (!confirmed) return;
+
+    try {
+        showLoading();
+        showToast(`Đang chuẩn bị ảnh của ${students.length} học sinh...`, 'info', 2500);
+
+        // Tải avatar theo lô để không phải truy vấn Supabase từng học sinh.
+        await loadStudentAvatars(students);
+
+        const zip = new JSZip();
+        let exported = 0;
+        let skipped = 0;
+
+        for (let index = 0; index < students.length; index++) {
+            const student = students[index];
+            const photo = await getStudentPhotoBlob(student);
+            if (!photo) {
+                skipped++;
+                continue;
+            }
+
+            const className = sanitizeStudentPhotoFilePart(student.class || 'Chua_xep_lop', 'Chua_xep_lop');
+            const studentCode = sanitizeStudentPhotoFilePart(student.id || student.db_uuid || String(index + 1), String(index + 1));
+            const fullName = sanitizeStudentPhotoFilePart(student.fullName || 'Hoc_sinh', 'Hoc_sinh');
+            const ext = studentPhotoExtension(photo.blob, photo.source);
+            const folder = zip.folder(`Lop_${className}`);
+            folder.file(`${studentCode}_${fullName}.${ext}`, photo.blob);
+            exported++;
+
+            if ((index + 1) % 10 === 0 || index === students.length - 1) {
+                showToast(`Đang xử lý ảnh: ${index + 1}/${students.length}`, 'info', 1200);
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        }
+
+        if (!exported) {
+            showToast('Không tìm thấy ảnh riêng của học sinh để xuất.', 'warning', 4500);
+            return;
+        }
+
+        zip.file('THONG_TIN.txt',
+            `XUẤT ẢNH HỌC SINH\n` +
+            `Thời gian: ${new Date().toLocaleString('vi-VN')}\n` +
+            `Số học sinh yêu cầu: ${students.length}\n` +
+            `Số ảnh đã xuất: ${exported}\n` +
+            `Số học sinh chưa có/không tải được ảnh: ${skipped}\n`
+        );
+
+        showToast(`Đang đóng gói ${exported} ảnh thành file ZIP...`, 'info', 2500);
+        const zipBlob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 1 }
+        });
+
+        const url = URL.createObjectURL(zipBlob);
+        const link = document.createElement('a');
+        const now = new Date();
+        const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+        link.href = url;
+        link.download = mode === 'selected'
+            ? `anh_hoc_sinh_da_chon_${stamp}.zip`
+            : `toan_bo_anh_hoc_sinh_${stamp}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+        showToast(`Đã xuất ${exported} ảnh${skipped ? ` · Bỏ qua ${skipped} học sinh chưa có ảnh` : ''}.`, 'success', 5000);
+    } catch (error) {
+        console.error('[EXPORT STUDENT PHOTOS]', error);
+        showToast('Lỗi xuất ảnh học sinh: ' + (error?.message || error), 'error', 5000);
+    } finally {
+        hideLoading();
+    }
 }
 
 async function deleteStudent(id) {
@@ -13724,6 +14051,7 @@ window.editStudent = editStudent;
     window.saveSettings = saveSettings;
     window.changePassword = changePassword;
     window.exportExcel = exportExcel;
+    window.exportStudentPhotos = exportStudentPhotos;
     window.downloadSampleExcel = downloadSampleExcel;
     window.importExcel = importExcel;
     window.importVnEduStudentWorkbook = importVnEduStudentWorkbook;
