@@ -3282,12 +3282,19 @@ async function millionaireImportExcelQuestions(event) {
 
         const custom = loadMillionaireCustomQuestions();
         const defaultQuestions = MILLIONAIRE_QUESTION_BANK;
-        const duplicateKeys = new Set(
-            [...defaultQuestions, ...custom].map(makeMillionaireDuplicateKey)
-        );
+
+        // BƯỚC 151.49.3F.16A: Nhập lại Excel có thể CẬP NHẬT câu tự thêm đã tồn tại.
+        // Khóa nhận diện vẫn là Khối + Môn + Câu hỏi để file đã xuất trước đây vẫn dùng được.
+        // Nếu khóa trùng câu mặc định: bỏ qua, tuyệt đối không sửa ngân hàng mặc định.
+        // Nếu khóa trùng câu tự thêm: giữ nguyên id và cập nhật Chủ đề/Mức độ/đáp án... từ Excel.
+        const defaultKeys = new Set(defaultQuestions.map(makeMillionaireDuplicateKey));
+        const workingCustom = custom.map(item => ({ ...item, a: Array.isArray(item.a) ? [...item.a] : [] }));
+        const customIndexByKey = new Map();
+        workingCustom.forEach((item, index) => customIndexByKey.set(makeMillionaireDuplicateKey(item), index));
 
         const imported = [];
         const errors = [];
+        let updated = 0;
         let duplicates = 0;
 
         for (let r = headerIndex + 1; r < rows.length; r++) {
@@ -3324,24 +3331,51 @@ async function millionaireImportExcelQuestions(event) {
             }
 
             const key = makeMillionaireDuplicateKey(item);
-            if (duplicateKeys.has(key)) {
+
+            // Câu mặc định chỉ được đọc, không cập nhật từ Excel.
+            if (defaultKeys.has(key)) {
                 duplicates++;
                 continue;
             }
 
-            duplicateKeys.add(key);
+            // Câu tự thêm đã có: cập nhật dữ liệu từ Excel nhưng giữ nguyên id.
+            if (customIndexByKey.has(key)) {
+                const index = customIndexByKey.get(key);
+                const existing = workingCustom[index];
+                const updatedItem = { ...item, id: existing.id };
+                const sameContent =
+                    String(existing.grade || '') === String(updatedItem.grade || '') &&
+                    String(existing.subject || '') === String(updatedItem.subject || '') &&
+                    String(existing.topic || '') === String(updatedItem.topic || '') &&
+                    String(existing.difficulty || '') === String(updatedItem.difficulty || '') &&
+                    String(existing.q || '') === String(updatedItem.q || '') &&
+                    Number(existing.c) === Number(updatedItem.c) &&
+                    JSON.stringify(existing.a || []) === JSON.stringify(updatedItem.a || []);
+
+                if (sameContent) {
+                    duplicates++;
+                } else {
+                    workingCustom[index] = updatedItem;
+                    updated++;
+                }
+                continue;
+            }
+
+            // Câu hoàn toàn mới.
+            customIndexByKey.set(key, workingCustom.length);
+            workingCustom.push(item);
             imported.push(item);
         }
 
-        if (imported.length) {
-            saveMillionaireCustomQuestions([...custom, ...imported]);
+        if (imported.length || updated) {
+            saveMillionaireCustomQuestions(workingCustom);
         }
 
         MILLIONAIRE_STATE.managerOpen = true;
         MILLIONAIRE_STATE.editingQuestionId = null;
-        MILLIONAIRE_STATE.message = imported.length
-            ? `Đã nhập ${imported.length} câu hỏi từ Excel.`
-            : 'Không có câu hỏi mới được nhập.';
+        MILLIONAIRE_STATE.message = (imported.length || updated)
+            ? `Excel: thêm ${imported.length}, cập nhật ${updated} câu hỏi.`
+            : 'Không có câu hỏi mới hoặc thay đổi cần cập nhật.';
         refreshMillionaire();
 
         const errorText = errors.length
@@ -3352,7 +3386,8 @@ async function millionaireImportExcelQuestions(event) {
         alert(
             `Kết quả nhập Excel:\n` +
             `- Thêm mới: ${imported.length}\n` +
-            `- Trùng, bỏ qua: ${duplicates}\n` +
+            `- Cập nhật: ${updated}\n` +
+            `- Trùng không đổi / câu mặc định, bỏ qua: ${duplicates}\n` +
             `- Lỗi, bỏ qua: ${errors.length}` +
             errorText
         );
@@ -3810,12 +3845,31 @@ D: 5,25
 }
 
 
+// BƯỚC 151.49.3F.16B: Cập nhật trạng thái chọn ngay trên DOM, không render lại toàn bộ
+// module. Nhờ đó thanh cuộn của danh sách câu hỏi giữ nguyên vị trí khi tích từng câu.
+function millionaireRefreshQuestionSelectionUI() {
+    const panel = document.querySelector('.millionaire-manager-panel');
+    if (!panel) return;
+
+    const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
+    const customCount = loadMillionaireCustomQuestions().length;
+
+    const countStrong = panel.querySelector('.millionaire-bulk-right > span strong');
+    if (countStrong) countStrong.textContent = String(selected.size);
+
+    const headerCheckbox = panel.querySelector('.millionaire-manager-table thead .millionaire-select-cell input[type="checkbox"]');
+    if (headerCheckbox) {
+        headerCheckbox.checked = customCount > 0 && selected.size === customCount;
+        headerCheckbox.indeterminate = selected.size > 0 && selected.size < customCount;
+    }
+}
+
 function millionaireToggleQuestionSelection(id, checked) {
     const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
     if (checked) selected.add(id);
     else selected.delete(id);
     MILLIONAIRE_STATE.selectedQuestionIds = [...selected];
-    refreshMillionaire();
+    millionaireRefreshQuestionSelectionUI();
 }
 
 function millionaireSelectAllCustomQuestions(checked = true) {
@@ -3824,7 +3878,13 @@ function millionaireSelectAllCustomQuestions(checked = true) {
     } else {
         MILLIONAIRE_STATE.selectedQuestionIds = [];
     }
-    refreshMillionaire();
+
+    // Đồng bộ các checkbox hàng hiện có mà không làm mất vị trí cuộn.
+    const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
+    document.querySelectorAll('.millionaire-manager-table tbody .millionaire-select-cell input[data-question-id]').forEach(box => {
+        box.checked = selected.has(box.dataset.questionId || '');
+    });
+    millionaireRefreshQuestionSelectionUI();
 }
 
 function millionaireDeleteSelectedQuestions() {
@@ -3902,6 +3962,7 @@ function renderMillionaireQuestionManager() {
             <tr>
                 <td class="millionaire-select-cell">
                     <input type="checkbox"
+                        data-question-id="${escapeHtml(item.id)}"
                         ${selectedIds.has(item.id) ? 'checked' : ''}
                         onchange="millionaireToggleQuestionSelection('${item.id}', this.checked)">
                 </td>
