@@ -42,7 +42,9 @@ const WHEEL_STATE = {
 // ============================================================
 const GAME_STATE_STORAGE_KEYS = {
     wheel: 'qlhs_wheel_state_v1',
-    millionaire: 'qlhs_millionaire_state_v1'
+    millionaire: 'qlhs_millionaire_state_v1',
+    // BƯỚC 151.49.3F.19: lịch sử câu đã đưa vào các ván chơi trên thiết bị này.
+    millionaireQuestionHistory: 'qlhs_millionaire_question_history_v1'
 };
 
 let wheelStateHydratedFromStorage = false;
@@ -2886,6 +2888,55 @@ async function loadMillionaireQuestionsFromSupabase() {
     }
 }
 window.loadMillionaireQuestionsFromSupabase = loadMillionaireQuestionsFromSupabase;
+
+
+// BƯỚC 151.49.3F.17B.10A:
+// Công cụ phục hồi MỘT LẦN cho các câu đã được lưu local trước khi Nhập Excel/Dán AI
+// được chuyển sang Supabase. Không tự chạy để tránh khôi phục nhầm câu người dùng đã xóa.
+async function syncMillionaireMissingLocalToSupabase() {
+    const localItems = loadMillionaireCustomQuestions();
+    const remoteItems = millionaireSupabaseQuestionsLoaded
+        ? [...MILLIONAIRE_SUPABASE_QUESTIONS]
+        : await loadMillionaireQuestionsFromSupabase();
+
+    const remoteKeys = new Set(remoteItems.map(makeMillionaireDuplicateKey));
+    const defaultKeys = new Set(MILLIONAIRE_QUESTION_BANK.map(makeMillionaireDuplicateKey));
+    const missing = [];
+
+    for (const item of localItems) {
+        const normalized = normalizeMillionaireQuestionInput(item);
+        const key = makeMillionaireDuplicateKey(normalized);
+        if (!key || remoteKeys.has(key) || defaultKeys.has(key)) continue;
+        remoteKeys.add(key);
+        missing.push(normalized);
+    }
+
+    if (!missing.length) {
+        console.log('[151.49.3F.17B.10A] Không có câu local nào thiếu trên Supabase.');
+        return { local: localItems.length, remote: remoteItems.length, added: 0 };
+    }
+
+    const { error } = await supabase
+        .from('app3_millionaire_questions')
+        .insert(missing.map(mapMillionaireQuestionToSupabase));
+    if (error) throw error;
+
+    await loadMillionaireQuestionsFromSupabase();
+    saveMillionaireCustomQuestions(MILLIONAIRE_SUPABASE_QUESTIONS);
+    refreshMillionaire();
+
+    console.log(
+        `[151.49.3F.17B.10A] Đã phục hồi ${missing.length} câu local còn thiếu lên Supabase. Tổng Supabase: ${MILLIONAIRE_SUPABASE_QUESTIONS.length}.`
+    );
+    return {
+        local: localItems.length,
+        remoteBefore: remoteItems.length,
+        added: missing.length,
+        remoteAfter: MILLIONAIRE_SUPABASE_QUESTIONS.length
+    };
+}
+
+window.syncMillionaireMissingLocalToSupabase = syncMillionaireMissingLocalToSupabase;
 function loadMillionaireCustomQuestions() {
     try {
         const raw = localStorage.getItem(MILLIONAIRE_CUSTOM_STORAGE_KEY);
@@ -2899,6 +2950,30 @@ function loadMillionaireCustomQuestions() {
 
 function saveMillionaireCustomQuestions(items) {
     localStorage.setItem(MILLIONAIRE_CUSTOM_STORAGE_KEY, JSON.stringify(items || []));
+}
+
+// ============================================================
+// BƯỚC 151.49.3F.17B.9
+// Chuyển một câu hỏi trong giao diện sang cấu trúc bảng Supabase.
+// Chỉ dùng cho thao tác Thêm / Sửa; các thao tác khác chưa thay đổi ở bước này.
+// ============================================================
+function mapMillionaireQuestionToSupabase(item) {
+    const correctAnswer = ['A', 'B', 'C', 'D'][Number(item?.c)] || 'A';
+
+    return {
+        grade: String(item?.grade || 'all'),
+        subject: String(item?.subject || '').trim(),
+        topic: String(item?.topic || '').trim(),
+        difficulty: ['easy', 'medium', 'hard'].includes(item?.difficulty) ? item.difficulty : 'easy',
+        question: String(item?.q || '').trim(),
+        answer_a: String(item?.a?.[0] || '').trim(),
+        answer_b: String(item?.a?.[1] || '').trim(),
+        answer_c: String(item?.a?.[2] || '').trim(),
+        answer_d: String(item?.a?.[3] || '').trim(),
+        correct_answer: correctAnswer,
+        active: true,
+        updated_at: new Date().toISOString()
+    };
 }
 
 function getAllMillionaireQuestions() {
@@ -3027,6 +3102,131 @@ function shuffleMillionaireArray(arr) {
     return copy;
 }
 
+// ============================================================
+// BƯỚC 151.49.3F.19 - HẠN CHẾ LẶP CÂU GIỮA CÁC VÁN
+// Lịch sử chỉ là trạng thái chơi nên lưu localStorage trên từng thiết bị,
+// hoàn toàn không sửa/xóa dữ liệu ngân hàng câu hỏi trên Supabase.
+// ============================================================
+function millionaireQuestionHistoryKey(item, source = MILLIONAIRE_STATE.questionSource || 'custom') {
+    const normalizedSource = source === 'default' ? 'default' : 'custom';
+    const id = String(item?.id || '').trim();
+    if (id) return `${normalizedSource}|id:${id}`;
+
+    // Bộ câu hỏi mẫu không có UUID: dùng nội dung ổn định làm khóa dự phòng.
+    return [
+        normalizedSource,
+        String(item?.grade || '').trim(),
+        String(item?.subject || '').trim(),
+        String(item?.topic || '').trim(),
+        String(item?.difficulty || '').trim(),
+        String(item?.q || '').trim()
+    ].join('|');
+}
+
+function loadMillionaireQuestionHistory() {
+    try {
+        const raw = localStorage.getItem(GAME_STATE_STORAGE_KEYS.millionaireQuestionHistory);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return new Set(Array.isArray(parsed) ? parsed.filter(Boolean).map(String) : []);
+    } catch (err) {
+        console.warn('[151.49.3F.19] Không đọc được lịch sử câu hỏi:', err);
+        return new Set();
+    }
+}
+
+function saveMillionaireQuestionHistory(historySet) {
+    try {
+        localStorage.setItem(
+            GAME_STATE_STORAGE_KEYS.millionaireQuestionHistory,
+            JSON.stringify([...historySet])
+        );
+    } catch (err) {
+        console.warn('[151.49.3F.19] Không lưu được lịch sử câu hỏi:', err);
+    }
+}
+
+function markMillionaireQuestionsUsed(items, source = MILLIONAIRE_STATE.questionSource || 'custom') {
+    if (!Array.isArray(items) || !items.length) return;
+    const history = loadMillionaireQuestionHistory();
+    items.forEach(item => history.add(millionaireQuestionHistoryKey(item, item?.source || source)));
+    saveMillionaireQuestionHistory(history);
+}
+
+function millionaireGetHistoryStatsForCurrentSelection() {
+    const state = MILLIONAIRE_STATE;
+    const grade = state.selectedGrade || 'all';
+    const subject = state.selectedSubject || 'all';
+    const topic = state.selectedTopic || 'all';
+    const source = state.questionSource || 'custom';
+    const history = loadMillionaireQuestionHistory();
+    const exact = getMillionaireQuestionsBySource(source).filter(item => {
+        const gradeOk = grade === 'all' || item.grade === grade;
+        const subjectOk = subject === 'all' || item.subject === subject;
+        const topicOk = topic === 'all' || item.topic === topic;
+        return gradeOk && subjectOk && topicOk;
+    });
+    const used = exact.filter(item => history.has(millionaireQuestionHistoryKey(item, source))).length;
+    return { total: exact.length, used, unused: Math.max(0, exact.length - used) };
+}
+
+function millionaireResetQuestionHistory() {
+    const stats = millionaireGetHistoryStatsForCurrentSelection();
+    if (!confirm(`Đặt lại lịch sử câu hỏi đã chơi trên thiết bị này?\n\nHiện bộ lọc đang chọn có ${stats.used}/${stats.total} câu đã được ghi nhận.\nNgân hàng câu hỏi trên Supabase sẽ không bị xóa hoặc thay đổi.`)) {
+        return;
+    }
+    try {
+        localStorage.removeItem(GAME_STATE_STORAGE_KEYS.millionaireQuestionHistory);
+    } catch (err) {}
+    MILLIONAIRE_STATE.message = 'Đã đặt lại lịch sử câu hỏi. Tất cả câu có thể được chọn lại từ đầu.';
+    refreshMillionaire();
+}
+
+function millionaireSelectSmartByDifficulty(pool, targetCount) {
+    const target = Math.min(Math.max(0, Number(targetCount) || 0), pool.length);
+    if (!target) return [];
+
+    const byDifficulty = {
+        easy: shuffleMillionaireArray(pool.filter(x => x.difficulty === 'easy')),
+        medium: shuffleMillionaireArray(pool.filter(x => x.difficulty === 'medium')),
+        hard: shuffleMillionaireArray(pool.filter(x => x.difficulty === 'hard'))
+    };
+    const difficultyOrder = ['easy', 'medium', 'hard'];
+    const desiredCounts = {
+        easy: Math.ceil(target / 3),
+        medium: Math.floor(target / 3),
+        hard: target - Math.ceil(target / 3) - Math.floor(target / 3)
+    };
+    const selectedByDifficulty = { easy: [], medium: [], hard: [] };
+
+    difficultyOrder.forEach(level => {
+        const take = Math.min(desiredCounts[level], byDifficulty[level].length);
+        selectedByDifficulty[level].push(...byDifficulty[level].splice(0, take));
+    });
+
+    let remaining = target - difficultyOrder.reduce(
+        (sum, level) => sum + selectedByDifficulty[level].length, 0
+    );
+    while (remaining > 0) {
+        const availableLevels = difficultyOrder
+            .filter(level => byDifficulty[level].length > 0)
+            .sort((a, b) => byDifficulty[b].length - byDifficulty[a].length);
+        if (!availableLevels.length) break;
+        for (const level of availableLevels) {
+            if (remaining <= 0) break;
+            if (byDifficulty[level].length) {
+                selectedByDifficulty[level].push(byDifficulty[level].shift());
+                remaining--;
+            }
+        }
+    }
+
+    return [
+        ...selectedByDifficulty.easy,
+        ...selectedByDifficulty.medium,
+        ...selectedByDifficulty.hard
+    ];
+}
+
 function getMillionaireSubjectsForGrade(grade) {
     // BƯỚC 151.40: luôn hiển thị đúng 13 môn của hệ thống,
     // không suy ra danh sách môn từ số câu hỏi đang có.
@@ -3103,22 +3303,34 @@ function createMillionaireQuestionSet() {
         return gradeOk && subjectOk && topicOk;
     });
 
-    const byDifficulty = {
-        easy: shuffleMillionaireArray(exact.filter(x => x.difficulty === 'easy')),
-        medium: shuffleMillionaireArray(exact.filter(x => x.difficulty === 'medium')),
-        hard: shuffleMillionaireArray(exact.filter(x => x.difficulty === 'hard'))
-    };
+    // BƯỚC 151.49.3F.19:
+    // 1) Ưu tiên tuyệt đối các câu chưa xuất hiện ở những ván trước trên thiết bị này.
+    // 2) Chỉ lấy lại câu cũ khi số câu chưa chơi không đủ cho ván hiện tại.
+    // 3) Trong mỗi nhóm vẫn giữ lộ trình Dễ -> Trung bình -> Khó của BƯỚC 18.
+    const targetCount = Math.min(15, exact.length);
+    const history = loadMillionaireQuestionHistory();
+    const unused = exact.filter(item => !history.has(millionaireQuestionHistoryKey(item, questionSource)));
+    const used = exact.filter(item => history.has(millionaireQuestionHistoryKey(item, questionSource)));
 
-    // BƯỚC 151.49.3F.12A: Không bắt buộc đủ 15 câu.
-    // Dùng toàn bộ câu đúng bộ lọc nếu <=15; nếu nhiều hơn thì lấy tối đa 15,
-    // luân phiên các mức độ để lượt chơi đa dạng.
-    const selected = [];
-    const pools = [byDifficulty.easy, byDifficulty.medium, byDifficulty.hard];
-    let cursor = 0;
-    while (selected.length < Math.min(15, exact.length) && pools.some(pool => pool.length)) {
-        const pool = pools[cursor % pools.length];
-        if (pool.length) selected.push(pool.shift());
-        cursor++;
+    let selected = [];
+    let reusedCount = 0;
+
+    if (unused.length >= targetCount) {
+        selected = millionaireSelectSmartByDifficulty(unused, targetCount);
+    } else {
+        // Chọn hết các câu chưa chơi trước.
+        const freshSelected = millionaireSelectSmartByDifficulty(unused, unused.length);
+        const needOld = targetCount - freshSelected.length;
+        const oldSelected = millionaireSelectSmartByDifficulty(used, needOld);
+        reusedCount = oldSelected.length;
+
+        // Gộp rồi sắp lại theo độ khó để tiến trình câu hỏi vẫn tăng dần.
+        const combined = [...freshSelected, ...oldSelected];
+        selected = [
+            ...shuffleMillionaireArray(combined.filter(x => x.difficulty === 'easy')),
+            ...shuffleMillionaireArray(combined.filter(x => x.difficulty === 'medium')),
+            ...shuffleMillionaireArray(combined.filter(x => x.difficulty === 'hard'))
+        ];
     }
 
     state.bankInfo = {
@@ -3133,6 +3345,17 @@ function createMillionaireQuestionSet() {
             easy: exact.filter(x => x.difficulty === 'easy').length,
             medium: exact.filter(x => x.difficulty === 'medium').length,
             hard: exact.filter(x => x.difficulty === 'hard').length
+        },
+        selectedCounts: {
+            easy: selected.filter(x => x.difficulty === 'easy').length,
+            medium: selected.filter(x => x.difficulty === 'medium').length,
+            hard: selected.filter(x => x.difficulty === 'hard').length
+        },
+        history: {
+            usedBefore: used.length,
+            unusedBefore: unused.length,
+            freshSelected: selected.length - reusedCount,
+            reusedSelected: reusedCount
         }
     };
 
@@ -3148,7 +3371,6 @@ function createMillionaireQuestionSet() {
         source: questionSource
     }));
 }
-
 function millionaireOpenQuestionManager() {
     MILLIONAIRE_STATE.managerOpen = true;
     MILLIONAIRE_STATE.editingQuestionId = null;
@@ -3167,23 +3389,51 @@ function millionaireEditQuestion(id) {
     refreshMillionaire();
 }
 
-function millionaireDeleteQuestion(id) {
-    const items = loadMillionaireCustomQuestions();
+// ============================================================
+// BƯỚC 151.49.3F.17B.10
+// Xóa 1 câu hỏi trực tiếp trên Supabase để mọi thiết bị đồng bộ.
+// Chỉ xóa câu hỏi tự thêm; ngân hàng mặc định trong mã nguồn không bị tác động.
+// ============================================================
+async function millionaireDeleteQuestion(id) {
+    const items = getMillionaireQuestionsBySource('custom');
     const target = items.find(q => q.id === id);
     if (!target) return;
 
-    if (!confirm(`Xóa câu hỏi:\n${target.q}\n\nThao tác này chỉ xóa câu hỏi tự thêm trên trình duyệt này.`)) return;
+    if (!confirm(`Xóa câu hỏi:\n${target.q}\n\nCâu hỏi sẽ bị xóa khỏi ngân hàng dùng chung trên mọi thiết bị.`)) return;
 
-    saveMillionaireCustomQuestions(items.filter(q => q.id !== id));
-    MILLIONAIRE_STATE.selectedQuestionIds = (MILLIONAIRE_STATE.selectedQuestionIds || []).filter(qid => qid !== id);
-    if (MILLIONAIRE_STATE.editingQuestionId === id) {
-        MILLIONAIRE_STATE.editingQuestionId = null;
+    try {
+        const { data, error } = await supabase
+            .from('app3_millionaire_questions')
+            .delete()
+            .eq('id', id)
+            .select('id');
+
+        if (error) throw error;
+        if (!Array.isArray(data) || !data.length) {
+            throw new Error('Không tìm thấy câu hỏi trên Supabase hoặc bạn không có quyền xóa.');
+        }
+
+        MILLIONAIRE_SUPABASE_QUESTIONS = MILLIONAIRE_SUPABASE_QUESTIONS.filter(q => q.id !== id);
+        millionaireSupabaseQuestionsLoaded = true;
+        MILLIONAIRE_STATE.selectedQuestionIds = (MILLIONAIRE_STATE.selectedQuestionIds || []).filter(qid => qid !== id);
+
+        if (MILLIONAIRE_STATE.editingQuestionId === id) {
+            MILLIONAIRE_STATE.editingQuestionId = null;
+        }
+
+        MILLIONAIRE_STATE.message = 'Đã xóa câu hỏi khỏi Supabase.';
+        refreshMillionaire();
+        console.log('[151.49.3F.17B.10] Đã xóa câu hỏi trên Supabase:', id);
+    } catch (error) {
+        console.error('[151.49.3F.17B.10] Lỗi xóa câu hỏi trên Supabase:', error);
+        alert(
+            'Không thể xóa câu hỏi trên Supabase. Câu hỏi hiện tại vẫn được giữ nguyên.\n\n' +
+            (error?.message || String(error))
+        );
     }
-    MILLIONAIRE_STATE.message = 'Đã xóa câu hỏi tự thêm.';
-    refreshMillionaire();
 }
 
-function millionaireSaveQuestion() {
+async function millionaireSaveQuestion() {
     const get = id => document.getElementById(id);
     const existingId = MILLIONAIRE_STATE.editingQuestionId;
 
@@ -3203,25 +3453,68 @@ function millionaireSaveQuestion() {
         c: Number(get('mqCorrect')?.value ?? 0)
     });
 
-    const error = validateMillionaireQuestion(item);
-    if (error) {
-        alert(error);
+    const validationError = validateMillionaireQuestion(item);
+    if (validationError) {
+        alert(validationError);
         return;
     }
 
-    const items = loadMillionaireCustomQuestions();
-    if (existingId) {
-        const idx = items.findIndex(q => q.id === existingId);
-        if (idx >= 0) items[idx] = item;
-        else items.push(item);
-    } else {
-        items.push(item);
-    }
+    try {
+        const row = mapMillionaireQuestionToSupabase(item);
+        let savedRow = null;
 
-    saveMillionaireCustomQuestions(items);
-    MILLIONAIRE_STATE.editingQuestionId = null;
-    MILLIONAIRE_STATE.message = existingId ? 'Đã cập nhật câu hỏi.' : 'Đã thêm câu hỏi mới.';
-    refreshMillionaire();
+        if (existingId) {
+            // SỬA: cập nhật đúng câu hỏi đang có trên Supabase.
+            const { data, error } = await supabase
+                .from('app3_millionaire_questions')
+                .update(row)
+                .eq('id', existingId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            savedRow = data;
+        } else {
+            // THÊM: để Supabase tự tạo UUID cho câu hỏi mới.
+            const { data, error } = await supabase
+                .from('app3_millionaire_questions')
+                .insert(row)
+                .select()
+                .single();
+
+            if (error) throw error;
+            savedRow = data;
+        }
+
+        const savedItem = mapMillionaireQuestionFromSupabase(savedRow);
+
+        // Cập nhật ngay bộ nhớ đệm để giao diện không cần chờ tải lại trang.
+        if (existingId) {
+            const idx = MILLIONAIRE_SUPABASE_QUESTIONS.findIndex(q => q.id === existingId);
+            if (idx >= 0) MILLIONAIRE_SUPABASE_QUESTIONS[idx] = savedItem;
+            else MILLIONAIRE_SUPABASE_QUESTIONS.push(savedItem);
+        } else {
+            MILLIONAIRE_SUPABASE_QUESTIONS.push(savedItem);
+        }
+        millionaireSupabaseQuestionsLoaded = true;
+
+        MILLIONAIRE_STATE.editingQuestionId = null;
+        MILLIONAIRE_STATE.message = existingId
+            ? 'Đã cập nhật câu hỏi trên Supabase.'
+            : 'Đã thêm câu hỏi mới lên Supabase.';
+
+        refreshMillionaire();
+        console.log(
+            `[151.49.3F.17B.9] ${existingId ? 'Đã cập nhật' : 'Đã thêm'} câu hỏi trên Supabase:`,
+            savedItem.id
+        );
+    } catch (error) {
+        console.error('[151.49.3F.17B.9] Lỗi lưu câu hỏi lên Supabase:', error);
+        alert(
+            'Không thể lưu câu hỏi lên Supabase. Dữ liệu cũ vẫn được giữ nguyên.\n\n' +
+            (error?.message || String(error))
+        );
+    }
 }
 
 function millionaireResetQuestionForm() {
@@ -3371,21 +3664,22 @@ async function millionaireImportExcelQuestions(event) {
             throw new Error('Thiếu cột bắt buộc trong file Excel.');
         }
 
-        const custom = loadMillionaireCustomQuestions();
+        // BƯỚC 151.49.3F.17B.10A:
+        // Nhập Excel phải đối chiếu và ghi trực tiếp với ngân hàng Supabase dùng chung.
+        // Không dùng localStorage làm nguồn chính nữa, nếu không thiết bị khác sẽ không thấy câu vừa nhập.
+        const custom = millionaireSupabaseQuestionsLoaded
+            ? [...MILLIONAIRE_SUPABASE_QUESTIONS]
+            : await loadMillionaireQuestionsFromSupabase();
         const defaultQuestions = MILLIONAIRE_QUESTION_BANK;
 
-        // BƯỚC 151.49.3F.16A: Nhập lại Excel có thể CẬP NHẬT câu tự thêm đã tồn tại.
-        // Khóa nhận diện vẫn là Khối + Môn + Câu hỏi để file đã xuất trước đây vẫn dùng được.
-        // Nếu khóa trùng câu mặc định: bỏ qua, tuyệt đối không sửa ngân hàng mặc định.
-        // Nếu khóa trùng câu tự thêm: giữ nguyên id và cập nhật Chủ đề/Mức độ/đáp án... từ Excel.
         const defaultKeys = new Set(defaultQuestions.map(makeMillionaireDuplicateKey));
         const workingCustom = custom.map(item => ({ ...item, a: Array.isArray(item.a) ? [...item.a] : [] }));
         const customIndexByKey = new Map();
         workingCustom.forEach((item, index) => customIndexByKey.set(makeMillionaireDuplicateKey(item), index));
 
         const imported = [];
+        const updatedItems = [];
         const errors = [];
-        let updated = 0;
         let duplicates = 0;
 
         for (let r = headerIndex + 1; r < rows.length; r++) {
@@ -3423,13 +3717,11 @@ async function millionaireImportExcelQuestions(event) {
 
             const key = makeMillionaireDuplicateKey(item);
 
-            // Câu mặc định chỉ được đọc, không cập nhật từ Excel.
             if (defaultKeys.has(key)) {
                 duplicates++;
                 continue;
             }
 
-            // Câu tự thêm đã có: cập nhật dữ liệu từ Excel nhưng giữ nguyên id.
             if (customIndexByKey.has(key)) {
                 const index = customIndexByKey.get(key);
                 const existing = workingCustom[index];
@@ -3447,25 +3739,44 @@ async function millionaireImportExcelQuestions(event) {
                     duplicates++;
                 } else {
                     workingCustom[index] = updatedItem;
-                    updated++;
+                    updatedItems.push(updatedItem);
                 }
                 continue;
             }
 
-            // Câu hoàn toàn mới.
             customIndexByKey.set(key, workingCustom.length);
             workingCustom.push(item);
             imported.push(item);
         }
 
-        if (imported.length || updated) {
-            saveMillionaireCustomQuestions(workingCustom);
+        // Ghi các câu cập nhật lên Supabase, giữ nguyên UUID hiện có.
+        for (const item of updatedItems) {
+            const { error } = await supabase
+                .from('app3_millionaire_questions')
+                .update(mapMillionaireQuestionToSupabase(item))
+                .eq('id', item.id);
+            if (error) throw error;
+        }
+
+        // Ghi các câu mới lên Supabase và để database tự sinh UUID.
+        if (imported.length) {
+            const { error } = await supabase
+                .from('app3_millionaire_questions')
+                .insert(imported.map(mapMillionaireQuestionToSupabase));
+            if (error) throw error;
+        }
+
+        if (imported.length || updatedItems.length) {
+            // Tải lại nguồn chuẩn từ Supabase để danh sách/thống kê cập nhật ngay.
+            await loadMillionaireQuestionsFromSupabase();
+            // Giữ một bản local dự phòng trên thiết bị hiện tại, nhưng không dùng làm nguồn chính.
+            saveMillionaireCustomQuestions(MILLIONAIRE_SUPABASE_QUESTIONS);
         }
 
         MILLIONAIRE_STATE.managerOpen = true;
         MILLIONAIRE_STATE.editingQuestionId = null;
-        MILLIONAIRE_STATE.message = (imported.length || updated)
-            ? `Excel: thêm ${imported.length}, cập nhật ${updated} câu hỏi.`
+        MILLIONAIRE_STATE.message = (imported.length || updatedItems.length)
+            ? `Excel: thêm ${imported.length}, cập nhật ${updatedItems.length} câu hỏi trên Supabase.`
             : 'Không có câu hỏi mới hoặc thay đổi cần cập nhật.';
         refreshMillionaire();
 
@@ -3477,7 +3788,7 @@ async function millionaireImportExcelQuestions(event) {
         alert(
             `Kết quả nhập Excel:\n` +
             `- Thêm mới: ${imported.length}\n` +
-            `- Cập nhật: ${updated}\n` +
+            `- Cập nhật: ${updatedItems.length}\n` +
             `- Trùng không đổi / câu mặc định, bỏ qua: ${duplicates}\n` +
             `- Lỗi, bỏ qua: ${errors.length}` +
             errorText
@@ -3485,12 +3796,11 @@ async function millionaireImportExcelQuestions(event) {
 
     } catch (err) {
         console.error('Lỗi nhập câu hỏi Excel:', err);
-        alert('Không thể nhập Excel: ' + (err?.message || err));
+        alert('Không thể nhập Excel lên Supabase: ' + (err?.message || err));
     } finally {
         if (event?.target) event.target.value = '';
     }
 }
-
 
 function millionaireDifficultyLabel(value) {
     if (value === 'easy') return 'Dễ';
@@ -3732,7 +4042,7 @@ function parseMillionaireAIText(rawText) {
     return [];
 }
 
-function importMillionaireQuestionsFromPastedAI() {
+async function importMillionaireQuestionsFromPastedAI() {
     const textarea = document.getElementById('millionaireAIPasteBox');
     const rawText = textarea?.value || '';
 
@@ -3752,88 +4062,106 @@ function importMillionaireQuestionsFromPastedAI() {
         return;
     }
 
-    const custom = loadMillionaireCustomQuestions();
-    const duplicateKeys = new Set(
-        [...MILLIONAIRE_QUESTION_BANK, ...custom].map(makeMillionaireDuplicateKey)
-    );
+    try {
+        // BƯỚC 151.49.3F.17B.10A:
+        // Dán từ AI cũng phải đối chiếu và ghi trực tiếp lên Supabase.
+        const custom = millionaireSupabaseQuestionsLoaded
+            ? [...MILLIONAIRE_SUPABASE_QUESTIONS]
+            : await loadMillionaireQuestionsFromSupabase();
+        const duplicateKeys = new Set(
+            [...MILLIONAIRE_QUESTION_BANK, ...custom].map(makeMillionaireDuplicateKey)
+        );
 
-    const imported = [];
-    const errors = [];
-    let duplicates = 0;
+        const imported = [];
+        const errors = [];
+        let duplicates = 0;
 
-    for (const record of parsed) {
-        const normalized = normalizeMillionaireQuestionInput(record.item);
-        const problems = [];
+        for (const record of parsed) {
+            const normalized = normalizeMillionaireQuestionInput(record.item);
+            const problems = [];
 
-        if (!normalized.grade) problems.push('Khối không hợp lệ');
-        if (!normalized.subject) problems.push('Thiếu môn');
-        if (!normalized.topic) problems.push('Thiếu chủ đề');
-        if (!normalized.difficulty) problems.push('Mức độ không hợp lệ');
-        if (!normalized.q) problems.push('Thiếu câu hỏi');
-        if (normalized.a.some(v => !String(v).trim())) problems.push('Thiếu đáp án A/B/C/D');
-        if (![0,1,2,3].includes(Number(normalized.c))) problems.push('Đáp án đúng không hợp lệ');
+            if (!normalized.grade) problems.push('Khối không hợp lệ');
+            if (!normalized.subject) problems.push('Thiếu môn');
+            if (!normalized.topic) problems.push('Thiếu chủ đề');
+            if (!normalized.difficulty) problems.push('Mức độ không hợp lệ');
+            if (!normalized.q) problems.push('Thiếu câu hỏi');
+            if (normalized.a.some(v => !String(v).trim())) problems.push('Thiếu đáp án A/B/C/D');
+            if (![0,1,2,3].includes(Number(normalized.c))) problems.push('Đáp án đúng không hợp lệ');
 
-        if (problems.length) {
-            errors.push({
-                sourceLine: record.sourceLine,
-                q: normalized.q || '(trống)',
-                message: problems.join(', ')
-            });
-            continue;
-        }
-
-        const key = makeMillionaireDuplicateKey(normalized);
-        if (duplicateKeys.has(key)) {
-            duplicates++;
-            continue;
-        }
-
-        duplicateKeys.add(key);
-        imported.push(normalized);
-    }
-
-    // BƯỚC 151.49.3F.12A: Cân bằng vị trí đáp án đúng A/B/C/D.
-    // Nếu AI vô tình dồn đáp án đúng vào A hoặc B, hệ thống tự hoán đổi vị trí
-    // nhưng giữ nguyên nội dung đúng/sai của từng câu.
-    if (imported.length) {
-        const targetPositions = [];
-        for (let i = 0; i < imported.length; i++) targetPositions.push(i % 4);
-        shuffleMillionaireArray(targetPositions);
-        imported.forEach((item, idx) => {
-            const current = Number(item.c);
-            const target = targetPositions[idx];
-            if (current !== target && [0,1,2,3].includes(current)) {
-                const answers = [...item.a];
-                [answers[current], answers[target]] = [answers[target], answers[current]];
-                item.a = answers;
-                item.c = target;
+            if (problems.length) {
+                errors.push({
+                    sourceLine: record.sourceLine,
+                    q: normalized.q || '(trống)',
+                    message: problems.join(', ')
+                });
+                continue;
             }
-        });
-        saveMillionaireCustomQuestions([...custom, ...imported]);
+
+            const key = makeMillionaireDuplicateKey(normalized);
+            if (duplicateKeys.has(key)) {
+                duplicates++;
+                continue;
+            }
+
+            duplicateKeys.add(key);
+            imported.push(normalized);
+        }
+
+        // Giữ nguyên cơ chế cân bằng vị trí đáp án đúng A/B/C/D đã đạt trước đây.
+        if (imported.length) {
+            const targetPositions = [];
+            for (let i = 0; i < imported.length; i++) targetPositions.push(i % 4);
+            shuffleMillionaireArray(targetPositions);
+            imported.forEach((item, idx) => {
+                const current = Number(item.c);
+                const target = targetPositions[idx];
+                if (current !== target && [0,1,2,3].includes(current)) {
+                    const answers = [...item.a];
+                    [answers[current], answers[target]] = [answers[target], answers[current]];
+                    item.a = answers;
+                    item.c = target;
+                }
+            });
+
+            const { error } = await supabase
+                .from('app3_millionaire_questions')
+                .insert(imported.map(mapMillionaireQuestionToSupabase));
+            if (error) throw error;
+
+            await loadMillionaireQuestionsFromSupabase();
+            saveMillionaireCustomQuestions(MILLIONAIRE_SUPABASE_QUESTIONS);
+        }
+
+        MILLIONAIRE_STATE.managerOpen = true;
+        MILLIONAIRE_STATE.editingQuestionId = null;
+        MILLIONAIRE_STATE.message = imported.length
+            ? `Đã nhập ${imported.length} câu hỏi từ AI lên Supabase.`
+            : 'Không có câu hỏi mới được nhập.';
+        refreshMillionaire();
+
+        const errorText = errors.length
+            ? '\n\nLỗi:\n' + errors.slice(0, 12).map(e => `- Mục ${e.sourceLine}: ${e.message}`).join('\n') +
+              (errors.length > 12 ? `\n... và ${errors.length - 12} lỗi khác.` : '')
+            : '';
+
+        alert(
+            `Kết quả dán từ AI:\n` +
+            `- Thêm mới: ${imported.length}\n` +
+            `- Trùng, bỏ qua: ${duplicates}\n` +
+            `- Lỗi, bỏ qua: ${errors.length}` +
+            errorText
+        );
+
+        const newBox = document.getElementById('millionaireAIPasteBox');
+        if (newBox && imported.length) newBox.value = '';
+
+    } catch (error) {
+        console.error('[151.49.3F.17B.10A] Lỗi dán câu hỏi AI lên Supabase:', error);
+        alert(
+            'Không thể lưu câu hỏi AI lên Supabase. Dữ liệu hiện có vẫn được giữ nguyên.\n\n' +
+            (error?.message || String(error))
+        );
     }
-
-    MILLIONAIRE_STATE.managerOpen = true;
-    MILLIONAIRE_STATE.editingQuestionId = null;
-    MILLIONAIRE_STATE.message = imported.length
-        ? `Đã nhập ${imported.length} câu hỏi được dán từ AI.`
-        : 'Không có câu hỏi mới được nhập.';
-    refreshMillionaire();
-
-    const errorText = errors.length
-        ? '\n\nLỗi:\n' + errors.slice(0, 12).map(e => `- Mục ${e.sourceLine}: ${e.message}`).join('\n') +
-          (errors.length > 12 ? `\n... và ${errors.length - 12} lỗi khác.` : '')
-        : '';
-
-    alert(
-        `Kết quả dán từ AI:\n` +
-        `- Thêm mới: ${imported.length}\n` +
-        `- Trùng, bỏ qua: ${duplicates}\n` +
-        `- Lỗi, bỏ qua: ${errors.length}` +
-        errorText
-    );
-
-    const newBox = document.getElementById('millionaireAIPasteBox');
-    if (newBox && imported.length) newBox.value = '';
 }
 
 function getMillionaireAIPromptData() {
@@ -3943,7 +4271,8 @@ function millionaireRefreshQuestionSelectionUI() {
     if (!panel) return;
 
     const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
-    const customCount = loadMillionaireCustomQuestions().length;
+    // BƯỚC 151.49.3F.17B.8B: số lượng phải theo nguồn dùng chung Supabase khi đã tải xong.
+    const customCount = getMillionaireQuestionsBySource('custom').length;
 
     const countStrong = panel.querySelector('.millionaire-bulk-right > span strong');
     if (countStrong) countStrong.textContent = String(selected.size);
@@ -3965,7 +4294,8 @@ function millionaireToggleQuestionSelection(id, checked) {
 
 function millionaireSelectAllCustomQuestions(checked = true) {
     if (checked) {
-        MILLIONAIRE_STATE.selectedQuestionIds = loadMillionaireCustomQuestions().map(q => q.id);
+        // BƯỚC 151.49.3F.17B.8B: chọn các câu đang hiển thị từ nguồn dùng chung.
+        MILLIONAIRE_STATE.selectedQuestionIds = getMillionaireQuestionsBySource('custom').map(q => q.id);
     } else {
         MILLIONAIRE_STATE.selectedQuestionIds = [];
     }
@@ -3978,14 +4308,15 @@ function millionaireSelectAllCustomQuestions(checked = true) {
     millionaireRefreshQuestionSelectionUI();
 }
 
-function millionaireDeleteSelectedQuestions() {
+// BƯỚC 151.49.3F.17B.10: Xóa hàng loạt trên Supabase.
+async function millionaireDeleteSelectedQuestions() {
     const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
     if (!selected.size) {
         alert('Bạn chưa chọn câu hỏi nào để xóa.');
         return;
     }
 
-    const items = loadMillionaireCustomQuestions();
+    const items = getMillionaireQuestionsBySource('custom');
     const targets = items.filter(q => selected.has(q.id));
 
     if (!targets.length) {
@@ -3996,24 +4327,51 @@ function millionaireDeleteSelectedQuestions() {
 
     const ok = confirm(
         `Bạn có chắc muốn xóa ${targets.length} câu hỏi đã chọn?\n\n` +
-        `Chỉ các câu hỏi tự thêm / nhập Excel / dán từ AI bị xóa.`
+        `Các câu này sẽ bị xóa khỏi ngân hàng dùng chung trên mọi thiết bị.\n` +
+        `Các câu hỏi mặc định của hệ thống không bị ảnh hưởng.`
     );
     if (!ok) return;
 
-    const remaining = items.filter(q => !selected.has(q.id));
-    saveMillionaireCustomQuestions(remaining);
+    try {
+        const targetIds = targets.map(q => q.id);
+        const { data, error } = await supabase
+            .from('app3_millionaire_questions')
+            .delete()
+            .in('id', targetIds)
+            .select('id');
 
-    if (MILLIONAIRE_STATE.editingQuestionId && selected.has(MILLIONAIRE_STATE.editingQuestionId)) {
-        MILLIONAIRE_STATE.editingQuestionId = null;
+        if (error) throw error;
+
+        const deletedIds = new Set((data || []).map(row => row.id));
+        if (!deletedIds.size) {
+            throw new Error('Không xóa được câu hỏi nào trên Supabase hoặc bạn không có quyền xóa.');
+        }
+
+        MILLIONAIRE_SUPABASE_QUESTIONS = MILLIONAIRE_SUPABASE_QUESTIONS.filter(q => !deletedIds.has(q.id));
+        millionaireSupabaseQuestionsLoaded = true;
+
+        if (MILLIONAIRE_STATE.editingQuestionId && deletedIds.has(MILLIONAIRE_STATE.editingQuestionId)) {
+            MILLIONAIRE_STATE.editingQuestionId = null;
+        }
+
+        MILLIONAIRE_STATE.selectedQuestionIds = [];
+        MILLIONAIRE_STATE.message = deletedIds.size === targets.length
+            ? `Đã xóa ${deletedIds.size} câu hỏi đã chọn khỏi Supabase.`
+            : `Đã xóa ${deletedIds.size}/${targets.length} câu hỏi. Hãy tải lại danh sách để kiểm tra.`;
+        refreshMillionaire();
+        console.log(`[151.49.3F.17B.10] Đã xóa ${deletedIds.size}/${targets.length} câu hỏi đã chọn trên Supabase.`);
+    } catch (error) {
+        console.error('[151.49.3F.17B.10] Lỗi xóa các câu đã chọn trên Supabase:', error);
+        alert(
+            'Không thể xóa các câu hỏi đã chọn trên Supabase. Dữ liệu hiện tại vẫn được giữ nguyên.\n\n' +
+            (error?.message || String(error))
+        );
     }
-
-    MILLIONAIRE_STATE.selectedQuestionIds = [];
-    MILLIONAIRE_STATE.message = `Đã xóa ${targets.length} câu hỏi đã chọn.`;
-    refreshMillionaire();
 }
 
-function millionaireDeleteAllCustomQuestions() {
-    const items = loadMillionaireCustomQuestions();
+// BƯỚC 151.49.3F.17B.10: Xóa toàn bộ câu hỏi tự thêm đang có trong ngân hàng dùng chung.
+async function millionaireDeleteAllCustomQuestions() {
+    const items = getMillionaireQuestionsBySource('custom');
     if (!items.length) {
         alert('Hiện không có câu hỏi tự thêm để xóa.');
         return;
@@ -4021,15 +4379,42 @@ function millionaireDeleteAllCustomQuestions() {
 
     const ok = confirm(
         `Xóa toàn bộ ${items.length} câu hỏi tự thêm?\n\n` +
-        `Các câu hỏi mặc định của hệ thống sẽ được giữ nguyên.`
+        `Các câu hỏi này sẽ bị xóa khỏi ngân hàng dùng chung trên mọi thiết bị.\n` +
+        `59 câu hỏi mặc định của hệ thống sẽ được giữ nguyên.`
     );
     if (!ok) return;
 
-    saveMillionaireCustomQuestions([]);
-    MILLIONAIRE_STATE.selectedQuestionIds = [];
-    MILLIONAIRE_STATE.editingQuestionId = null;
-    MILLIONAIRE_STATE.message = `Đã xóa toàn bộ ${items.length} câu hỏi tự thêm.`;
-    refreshMillionaire();
+    try {
+        const targetIds = items.map(q => q.id);
+        const { data, error } = await supabase
+            .from('app3_millionaire_questions')
+            .delete()
+            .in('id', targetIds)
+            .select('id');
+
+        if (error) throw error;
+
+        const deletedIds = new Set((data || []).map(row => row.id));
+        if (!deletedIds.size) {
+            throw new Error('Không xóa được câu hỏi nào trên Supabase hoặc bạn không có quyền xóa.');
+        }
+
+        MILLIONAIRE_SUPABASE_QUESTIONS = MILLIONAIRE_SUPABASE_QUESTIONS.filter(q => !deletedIds.has(q.id));
+        millionaireSupabaseQuestionsLoaded = true;
+        MILLIONAIRE_STATE.selectedQuestionIds = [];
+        MILLIONAIRE_STATE.editingQuestionId = null;
+        MILLIONAIRE_STATE.message = deletedIds.size === items.length
+            ? `Đã xóa toàn bộ ${deletedIds.size} câu hỏi tự thêm khỏi Supabase.`
+            : `Đã xóa ${deletedIds.size}/${items.length} câu hỏi. Hãy tải lại danh sách để kiểm tra.`;
+        refreshMillionaire();
+        console.log(`[151.49.3F.17B.10] Đã xóa ${deletedIds.size}/${items.length} câu hỏi tự thêm trên Supabase.`);
+    } catch (error) {
+        console.error('[151.49.3F.17B.10] Lỗi xóa toàn bộ câu hỏi trên Supabase:', error);
+        alert(
+            'Không thể xóa toàn bộ câu hỏi trên Supabase. Dữ liệu hiện tại vẫn được giữ nguyên.\n\n' +
+            (error?.message || String(error))
+        );
+    }
 }
 
 function renderMillionaireQuestionManager() {
@@ -4275,10 +4660,12 @@ D: ...
 
 function renderMillionaireBankSelector() {
     const state = MILLIONAIRE_STATE;
-    const customCount = loadMillionaireCustomQuestions().length;
+    // BƯỚC 151.49.3F.17B.8B: thống kê câu đã thêm theo Supabase, có localStorage làm dự phòng.
+    const customCount = getMillionaireQuestionsBySource('custom').length;
     const defaultCount = MILLIONAIRE_QUESTION_BANK.length;
     const subjects = getMillionaireSubjectsForGrade(state.selectedGrade);
     const topics = getMillionaireTopicsForSelection(state.selectedGrade, state.selectedSubject);
+    const historyStats = millionaireGetHistoryStatsForCurrentSelection();
 
     const subjectOptions = ['all', ...subjects]
         .map(value => `<option value="${escapeHtml(value)}" ${state.selectedSubject === value ? 'selected' : ''}>${value === 'all' ? 'Tất cả 13 môn' : escapeHtml(value)}</option>`)
@@ -4325,7 +4712,9 @@ function renderMillionaireBankSelector() {
             <div class="millionaire-bank-note">
                 <strong>Hai nguồn câu hỏi được tách hoàn toàn.</strong>
                 Khi chọn <strong>Câu hỏi đã thêm</strong>, trò chơi tuyệt đối không lấy câu hỏi mẫu có sẵn; kể cả khi dùng quyền <strong>Đổi câu</strong>.
-                Mỗi lượt dùng số câu phù hợp bộ lọc (tối đa 15 câu).
+                Mỗi lượt dùng số câu phù hợp bộ lọc (tối đa 15 câu).<br>
+                <strong>Lịch sử trên thiết bị này:</strong> đã dùng ${historyStats.used}/${historyStats.total} câu trong bộ lọc hiện tại; còn ${historyStats.unused} câu chưa dùng.
+                Ván mới sẽ ưu tiên câu chưa dùng và chỉ lặp lại khi không còn đủ câu mới.
             </div>
         </div>
     `;
@@ -4555,15 +4944,68 @@ function millionaireMCSupported() {
     return typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
 }
 
+// BƯỚC 151.49.3F.17B.11 - Ưu tiên giọng đọc tiếng Việt miền Nam.
+// Web Speech API phụ thuộc bộ giọng có sẵn trên từng thiết bị/trình duyệt.
+// Nếu thiết bị có giọng được nhận diện là miền Nam, hệ thống ưu tiên giọng đó;
+// nếu không có thì tự động dùng giọng tiếng Việt tốt nhất đang có để trò chơi vẫn hoạt động.
+const MILLIONAIRE_SOUTHERN_VOICE_HINTS = [
+    /hoai\s*my/i,
+    /hoài\s*my/i,
+    /southern/i,
+    /south\s*vietnam/i,
+    /south\s*vietnamese/i,
+    /mi[eề]n\s*nam/i,
+    /sai\s*gon/i,
+    /sài\s*gòn/i
+];
+
+function millionaireMCIsSouthernVoice(voice) {
+    const text = `${voice?.name || ''} ${voice?.voiceURI || ''}`;
+    return MILLIONAIRE_SOUTHERN_VOICE_HINTS.some(pattern => pattern.test(text));
+}
+
 function millionaireMCFindVietnameseVoice() {
     if (!millionaireMCSupported()) return null;
+
     const voices = window.speechSynthesis.getVoices() || [];
-    millionaireMCVoice = voices.find(v => /^vi-VN$/i.test(v.lang))
-        || voices.find(v => /^vi/i.test(v.lang))
-        || voices.find(v => /Vietnam/i.test(v.name))
+    const vietnameseVoices = voices.filter(v =>
+        /^vi(?:-|$)/i.test(String(v.lang || '')) || /Vietnam/i.test(String(v.name || ''))
+    );
+
+    // Ưu tiên 1: giọng tiếng Việt có dấu hiệu miền Nam.
+    millionaireMCVoice = vietnameseVoices.find(millionaireMCIsSouthernVoice)
+        // Ưu tiên 2: giọng vi-VN chuẩn của thiết bị.
+        || vietnameseVoices.find(v => /^vi-VN$/i.test(String(v.lang || '')))
+        // Ưu tiên 3: bất kỳ giọng tiếng Việt nào còn lại.
+        || vietnameseVoices[0]
         || null;
+
+    if (millionaireMCVoice) {
+        console.log(
+            `[MILLIONAIRE MC] Giọng đang dùng: ${millionaireMCVoice.name} (${millionaireMCVoice.lang})` +
+            `${millionaireMCIsSouthernVoice(millionaireMCVoice) ? ' - ưu tiên miền Nam' : ' - giọng Việt dự phòng'}`
+        );
+    }
+
     return millionaireMCVoice;
 }
+
+// Công cụ kiểm tra nhanh các giọng tiếng Việt mà thiết bị hiện có.
+// Chỉ phục vụ kiểm tra; không ảnh hưởng trò chơi.
+function millionaireMCListVietnameseVoices() {
+    if (!millionaireMCSupported()) return [];
+    return (window.speechSynthesis.getVoices() || [])
+        .filter(v => /^vi(?:-|$)/i.test(String(v.lang || '')) || /Vietnam/i.test(String(v.name || '')))
+        .map(v => ({
+            name: v.name,
+            lang: v.lang,
+            voiceURI: v.voiceURI,
+            localService: v.localService,
+            southernPreferred: millionaireMCIsSouthernVoice(v)
+        }));
+}
+
+window.millionaireMCListVietnameseVoices = millionaireMCListVietnameseVoices;
 
 function millionaireMCStop() {
     if (!millionaireMCSupported()) return;
@@ -4826,6 +5268,9 @@ function renderMillionaire() {
                 <div class="millionaire-welcome-actions">
                     <button class="btn millionaire-manager-open-btn" onclick="millionaireOpenQuestionManager()">
                         <i class="fas fa-list-check"></i> Quản lý câu hỏi
+                    </button>
+                    <button class="btn" onclick="millionaireResetQuestionHistory()" title="Cho phép toàn bộ câu hỏi được chọn lại từ đầu trên thiết bị này">
+                        <i class="fas fa-rotate-left"></i> Đặt lại lịch sử câu hỏi
                     </button>
                 </div>
                 ${renderMillionaireQuestionManager()}
@@ -5093,6 +5538,10 @@ function millionaireStart() {
         return;
     }
 
+    // BƯỚC 151.49.3F.19: ghi nhận toàn bộ câu đã được đưa vào ván này.
+    // Ghi sau khi xác nhận ván hợp lệ để không tạo lịch sử giả khi bộ lọc rỗng.
+    markMillionaireQuestionsUsed(MILLIONAIRE_STATE.questions, questionSource);
+
     MILLIONAIRE_STATE.started = true;
     MILLIONAIRE_STATE.phase = 'question';
     MILLIONAIRE_STATE.message = `Bộ câu hỏi có ${MILLIONAIRE_STATE.questions.length} câu. Chọn đáp án đúng.`;
@@ -5353,7 +5802,11 @@ function millionaireUseSwitch() {
         return;
     }
 
-    const pick = available[Math.floor(Math.random() * available.length)];
+    // BƯỚC 151.49.3F.19: quyền Đổi câu cũng ưu tiên câu chưa từng dùng.
+    const history = loadMillionaireQuestionHistory();
+    const neverUsed = available.filter(item => !history.has(millionaireQuestionHistoryKey(item, source)));
+    const switchPool = neverUsed.length ? neverUsed : available;
+    const pick = switchPool[Math.floor(Math.random() * switchPool.length)];
     state.questions[state.level] = {
         q: pick.q,
         a: [...pick.a],
@@ -5365,6 +5818,7 @@ function millionaireUseSwitch() {
         id: pick.id || null,
         source
     };
+    markMillionaireQuestionsUsed([state.questions[state.level]], source);
     state.hiddenAnswers = [];
     state.audienceResult = null;
     state.selectedIndex = null;
@@ -5458,6 +5912,7 @@ window.millionaireSetGrade = millionaireSetGrade;
 window.millionaireSetSubject = millionaireSetSubject;
 window.millionaireSetTopic = millionaireSetTopic;
 window.millionaireSetQuestionSource = millionaireSetQuestionSource;
+window.millionaireResetQuestionHistory = millionaireResetQuestionHistory;
 window.millionaireOpenQuestionManager = millionaireOpenQuestionManager;
 window.millionaireCloseQuestionManager = millionaireCloseQuestionManager;
 window.millionaireSaveQuestion = millionaireSaveQuestion;
