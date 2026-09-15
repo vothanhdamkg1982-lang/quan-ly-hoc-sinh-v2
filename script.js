@@ -12814,6 +12814,7 @@ async function loadUserRolePanel(){
                     <td style="white-space:nowrap">
                         <button id="assignmentBtn_${r.user_id}" class="btn btn-secondary btn-sm" onclick="toggleAssignmentPanel('${r.user_id}')" ${scope !== 'assigned' ? 'disabled' : ''}><i class="fas fa-chalkboard-teacher"></i> Phân công</button>
                         <button class="btn btn-primary btn-sm" onclick="saveUserRole('${r.user_id}')"><i class="fas fa-save"></i> Lưu</button>
+                        ${r.user_id !== user.id ? `<button id="deleteUserBtn_${r.user_id}" class="btn btn-danger btn-sm" onclick="deleteSystemUser('${r.user_id}', '${escapeRoleHtml(r.email || '')}')" title="Xóa tài khoản không còn sử dụng"><i class="fas fa-trash-alt"></i> Xóa</button>` : ''}
                     </td>
                 </tr>
                 <tr id="assignmentRow_${r.user_id}" style="display:none">
@@ -12973,6 +12974,57 @@ async function createTeacherAccount(event) {
         if (button) {
             button.disabled = false;
             button.innerHTML = originalHtml || '<i class="fas fa-user-plus"></i> Tạo tài khoản';
+        }
+    }
+}
+
+async function deleteSystemUser(userId, email) {
+    if (!isAdmin()) {
+        showToast('Chỉ Admin được xóa tài khoản.', 'warning');
+        return;
+    }
+
+    if (!userId || userId === APP_STATE.currentUserId) {
+        showToast('Không thể xóa tài khoản Admin đang đăng nhập.', 'warning');
+        return;
+    }
+
+    const safeEmail = String(email || '').trim();
+    const confirmed = window.confirm(
+        `Bạn có chắc muốn XÓA tài khoản này?\n\n${safeEmail || userId}\n\n` +
+        'Tài khoản đăng nhập, phân quyền và các phân công Môn – Lớp của tài khoản này sẽ bị xóa.\n' +
+        'Dữ liệu học sinh, điểm, điểm danh và dữ liệu nghiệp vụ khác không bị xóa.'
+    );
+    if (!confirmed) return;
+
+    const button = document.getElementById(`deleteUserBtn_${userId}`);
+    const originalHtml = button?.innerHTML;
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xóa...';
+    }
+
+    try {
+        const { data, error } = await supabase.functions.invoke('app3-delete-user', {
+            body: { user_id: userId }
+        });
+
+        if (error) throw error;
+        if (!data?.ok) throw new Error(data?.error || 'Không xóa được tài khoản.');
+
+        showToast(`Đã xóa tài khoản ${safeEmail || ''} thành công!`, 'success', 2400);
+        await loadUserRolePanel();
+    } catch (err) {
+        console.error('DELETE SYSTEM USER ERROR:', err);
+        let message = err?.message || String(err);
+        if (/Failed to send a request|FunctionsHttpError|404/i.test(message)) {
+            message = 'Chưa triển khai hàm Supabase app3-delete-user hoặc hàm đang lỗi.';
+        }
+        showToast('Lỗi xóa tài khoản: ' + message, 'error', 4000);
+    } finally {
+        if (button && document.body.contains(button)) {
+            button.disabled = false;
+            button.innerHTML = originalHtml || '<i class="fas fa-trash-alt"></i> Xóa';
         }
     }
 }
@@ -14313,6 +14365,7 @@ window.editStudent = editStudent;
     window.mergeBackupData = mergeBackupData;
     window.fullRestoreBackupData = fullRestoreBackupData;
     window.saveUserRole = saveUserRole;
+    window.deleteSystemUser = deleteSystemUser;
     window.toggleAssignmentPanel = toggleAssignmentPanel;
     window.handleAccessScopeChange = handleAccessScopeChange;
     window.setAllAssignments = setAllAssignments;
