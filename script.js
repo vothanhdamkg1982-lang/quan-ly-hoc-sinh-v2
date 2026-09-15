@@ -4035,7 +4035,7 @@ function millionaireDeleteAllCustomQuestions() {
 function renderMillionaireQuestionManager() {
     if (!MILLIONAIRE_STATE.managerOpen) return '';
 
-    const custom = loadMillionaireCustomQuestions();
+    const custom = getMillionaireQuestionsBySource('custom');
     const editing = custom.find(q => q.id === MILLIONAIRE_STATE.editingQuestionId) || null;
     const form = editing || {
         grade: MILLIONAIRE_STATE.selectedGrade !== 'all' ? MILLIONAIRE_STATE.selectedGrade : 'all',
