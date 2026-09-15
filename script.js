@@ -2901,6 +2901,30 @@ function saveMillionaireCustomQuestions(items) {
     localStorage.setItem(MILLIONAIRE_CUSTOM_STORAGE_KEY, JSON.stringify(items || []));
 }
 
+// ============================================================
+// BƯỚC 151.49.3F.17B.9
+// Chuyển một câu hỏi trong giao diện sang cấu trúc bảng Supabase.
+// Chỉ dùng cho thao tác Thêm / Sửa; các thao tác khác chưa thay đổi ở bước này.
+// ============================================================
+function mapMillionaireQuestionToSupabase(item) {
+    const correctAnswer = ['A', 'B', 'C', 'D'][Number(item?.c)] || 'A';
+
+    return {
+        grade: String(item?.grade || 'all'),
+        subject: String(item?.subject || '').trim(),
+        topic: String(item?.topic || '').trim(),
+        difficulty: ['easy', 'medium', 'hard'].includes(item?.difficulty) ? item.difficulty : 'easy',
+        question: String(item?.q || '').trim(),
+        answer_a: String(item?.a?.[0] || '').trim(),
+        answer_b: String(item?.a?.[1] || '').trim(),
+        answer_c: String(item?.a?.[2] || '').trim(),
+        answer_d: String(item?.a?.[3] || '').trim(),
+        correct_answer: correctAnswer,
+        active: true,
+        updated_at: new Date().toISOString()
+    };
+}
+
 function getAllMillionaireQuestions() {
     return [...MILLIONAIRE_QUESTION_BANK, ...loadMillionaireCustomQuestions()];
 }
@@ -3183,7 +3207,7 @@ function millionaireDeleteQuestion(id) {
     refreshMillionaire();
 }
 
-function millionaireSaveQuestion() {
+async function millionaireSaveQuestion() {
     const get = id => document.getElementById(id);
     const existingId = MILLIONAIRE_STATE.editingQuestionId;
 
@@ -3203,25 +3227,68 @@ function millionaireSaveQuestion() {
         c: Number(get('mqCorrect')?.value ?? 0)
     });
 
-    const error = validateMillionaireQuestion(item);
-    if (error) {
-        alert(error);
+    const validationError = validateMillionaireQuestion(item);
+    if (validationError) {
+        alert(validationError);
         return;
     }
 
-    const items = loadMillionaireCustomQuestions();
-    if (existingId) {
-        const idx = items.findIndex(q => q.id === existingId);
-        if (idx >= 0) items[idx] = item;
-        else items.push(item);
-    } else {
-        items.push(item);
-    }
+    try {
+        const row = mapMillionaireQuestionToSupabase(item);
+        let savedRow = null;
 
-    saveMillionaireCustomQuestions(items);
-    MILLIONAIRE_STATE.editingQuestionId = null;
-    MILLIONAIRE_STATE.message = existingId ? 'Đã cập nhật câu hỏi.' : 'Đã thêm câu hỏi mới.';
-    refreshMillionaire();
+        if (existingId) {
+            // SỬA: cập nhật đúng câu hỏi đang có trên Supabase.
+            const { data, error } = await supabase
+                .from('app3_millionaire_questions')
+                .update(row)
+                .eq('id', existingId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            savedRow = data;
+        } else {
+            // THÊM: để Supabase tự tạo UUID cho câu hỏi mới.
+            const { data, error } = await supabase
+                .from('app3_millionaire_questions')
+                .insert(row)
+                .select()
+                .single();
+
+            if (error) throw error;
+            savedRow = data;
+        }
+
+        const savedItem = mapMillionaireQuestionFromSupabase(savedRow);
+
+        // Cập nhật ngay bộ nhớ đệm để giao diện không cần chờ tải lại trang.
+        if (existingId) {
+            const idx = MILLIONAIRE_SUPABASE_QUESTIONS.findIndex(q => q.id === existingId);
+            if (idx >= 0) MILLIONAIRE_SUPABASE_QUESTIONS[idx] = savedItem;
+            else MILLIONAIRE_SUPABASE_QUESTIONS.push(savedItem);
+        } else {
+            MILLIONAIRE_SUPABASE_QUESTIONS.push(savedItem);
+        }
+        millionaireSupabaseQuestionsLoaded = true;
+
+        MILLIONAIRE_STATE.editingQuestionId = null;
+        MILLIONAIRE_STATE.message = existingId
+            ? 'Đã cập nhật câu hỏi trên Supabase.'
+            : 'Đã thêm câu hỏi mới lên Supabase.';
+
+        refreshMillionaire();
+        console.log(
+            `[151.49.3F.17B.9] ${existingId ? 'Đã cập nhật' : 'Đã thêm'} câu hỏi trên Supabase:`,
+            savedItem.id
+        );
+    } catch (error) {
+        console.error('[151.49.3F.17B.9] Lỗi lưu câu hỏi lên Supabase:', error);
+        alert(
+            'Không thể lưu câu hỏi lên Supabase. Dữ liệu cũ vẫn được giữ nguyên.\n\n' +
+            (error?.message || String(error))
+        );
+    }
 }
 
 function millionaireResetQuestionForm() {
@@ -3943,7 +4010,8 @@ function millionaireRefreshQuestionSelectionUI() {
     if (!panel) return;
 
     const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
-    const customCount = loadMillionaireCustomQuestions().length;
+    // BƯỚC 151.49.3F.17B.8B: số lượng phải theo nguồn dùng chung Supabase khi đã tải xong.
+    const customCount = getMillionaireQuestionsBySource('custom').length;
 
     const countStrong = panel.querySelector('.millionaire-bulk-right > span strong');
     if (countStrong) countStrong.textContent = String(selected.size);
@@ -3965,7 +4033,8 @@ function millionaireToggleQuestionSelection(id, checked) {
 
 function millionaireSelectAllCustomQuestions(checked = true) {
     if (checked) {
-        MILLIONAIRE_STATE.selectedQuestionIds = loadMillionaireCustomQuestions().map(q => q.id);
+        // BƯỚC 151.49.3F.17B.8B: chọn các câu đang hiển thị từ nguồn dùng chung.
+        MILLIONAIRE_STATE.selectedQuestionIds = getMillionaireQuestionsBySource('custom').map(q => q.id);
     } else {
         MILLIONAIRE_STATE.selectedQuestionIds = [];
     }
@@ -4275,7 +4344,8 @@ D: ...
 
 function renderMillionaireBankSelector() {
     const state = MILLIONAIRE_STATE;
-    const customCount = loadMillionaireCustomQuestions().length;
+    // BƯỚC 151.49.3F.17B.8B: thống kê câu đã thêm theo Supabase, có localStorage làm dự phòng.
+    const customCount = getMillionaireQuestionsBySource('custom').length;
     const defaultCount = MILLIONAIRE_QUESTION_BANK.length;
     const subjects = getMillionaireSubjectsForGrade(state.selectedGrade);
     const topics = getMillionaireTopicsForSelection(state.selectedGrade, state.selectedSubject);
