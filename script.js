@@ -3943,7 +3943,8 @@ function millionaireRefreshQuestionSelectionUI() {
     if (!panel) return;
 
     const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
-    const customCount = loadMillionaireCustomQuestions().length;
+    // BƯỚC 151.49.3F.17B.8B: số lượng phải theo nguồn dùng chung Supabase khi đã tải xong.
+    const customCount = getMillionaireQuestionsBySource('custom').length;
 
     const countStrong = panel.querySelector('.millionaire-bulk-right > span strong');
     if (countStrong) countStrong.textContent = String(selected.size);
@@ -3965,7 +3966,8 @@ function millionaireToggleQuestionSelection(id, checked) {
 
 function millionaireSelectAllCustomQuestions(checked = true) {
     if (checked) {
-        MILLIONAIRE_STATE.selectedQuestionIds = loadMillionaireCustomQuestions().map(q => q.id);
+        // BƯỚC 151.49.3F.17B.8B: chọn các câu đang hiển thị từ nguồn dùng chung.
+        MILLIONAIRE_STATE.selectedQuestionIds = getMillionaireQuestionsBySource('custom').map(q => q.id);
     } else {
         MILLIONAIRE_STATE.selectedQuestionIds = [];
     }
@@ -4275,7 +4277,8 @@ D: ...
 
 function renderMillionaireBankSelector() {
     const state = MILLIONAIRE_STATE;
-    const customCount = loadMillionaireCustomQuestions().length;
+    // BƯỚC 151.49.3F.17B.8B: thống kê câu đã thêm theo Supabase, có localStorage làm dự phòng.
+    const customCount = getMillionaireQuestionsBySource('custom').length;
     const defaultCount = MILLIONAIRE_QUESTION_BANK.length;
     const subjects = getMillionaireSubjectsForGrade(state.selectedGrade);
     const topics = getMillionaireTopicsForSelection(state.selectedGrade, state.selectedSubject);
