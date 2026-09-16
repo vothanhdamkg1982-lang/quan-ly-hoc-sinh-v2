@@ -6660,6 +6660,264 @@ window.imageCallerNext = imageCallerNext;
 window.imageCallerResetRound = imageCallerResetRound;
 window.imageCallerEndSession = imageCallerEndSession;
 
+// ============================================================
+// BƯỚC 153.4 - TRẮC NGHIỆM HÌNH ẢNH: HIỂN THỊ 1 CÂU HỎI THẬT
+// Module này chỉ đọc dữ liệu đã có từ app3_millionaire_questions.
+// Không thay đổi logic, trạng thái hoặc giao diện Ai là triệu phú.
+// ============================================================
+const IMAGE_QUIZ_STATE = {
+    questions: [],
+    grade: '',
+    subject: '',
+    topic: '',
+    currentQuestion: null
+};
+
+function imageQuizUniqueValues(items, field) {
+    return [...new Set(items.map(item => String(item?.[field] || '').trim()).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+}
+
+function imageQuizSetOptions(select, values, placeholder, labelPrefix = '') {
+    if (!select) return;
+    select.innerHTML = `<option value="">${placeholder}</option>` + values.map(value => {
+        const safeValue = escapeHtml(value);
+        return `<option value="${safeValue}">${labelPrefix}${safeValue}</option>`;
+    }).join('');
+    select.disabled = values.length === 0;
+}
+
+function imageQuizUpdateInfo() {
+    const info = document.getElementById('imageQuizBankInfo');
+    if (!info) return;
+
+    const { questions, grade, subject, topic } = IMAGE_QUIZ_STATE;
+    if (!questions.length) {
+        info.textContent = 'Chưa có câu hỏi đang hoạt động trong ngân hàng dùng chung.';
+        return;
+    }
+
+    let filtered = questions;
+    if (grade) filtered = filtered.filter(item => item.grade === grade);
+    if (subject) filtered = filtered.filter(item => item.subject === subject);
+    if (topic) filtered = filtered.filter(item => item.topic === topic);
+
+    if (!grade) {
+        info.textContent = `Đã kết nối ngân hàng dùng chung: ${questions.length} câu hỏi. Chọn khối để tiếp tục.`;
+    } else if (!subject) {
+        info.textContent = `Khối ${grade}: ${filtered.length} câu hỏi. Chọn môn học để tiếp tục.`;
+    } else if (!topic) {
+        info.textContent = `${subject} - Khối ${grade}: ${filtered.length} câu hỏi. Chọn chủ đề để tiếp tục.`;
+    } else {
+        info.textContent = `${subject} - Khối ${grade} - ${topic}: ${filtered.length} câu hỏi sẵn sàng.`;
+    }
+}
+
+function imageQuizGetFilteredQuestions() {
+    const { questions, grade, subject, topic } = IMAGE_QUIZ_STATE;
+    if (!grade || !subject || !topic) return [];
+    return questions.filter(item =>
+        item.grade === grade && item.subject === subject && item.topic === topic
+    );
+}
+
+function imageQuizBindStartButton() {
+    const button = document.getElementById('imageQuizStartBtn');
+    if (!button) return;
+
+    // BƯỚC 153.4.3: gắn listener trực tiếp bằng addEventListener và đánh dấu
+    // để không bị gắn trùng khi module được khởi tạo lại.
+    if (button.dataset.imageQuizBound === '1') return;
+    button.dataset.imageQuizBound = '1';
+    button.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        imageQuizStart();
+    });
+}
+
+function imageQuizUpdateStartButton() {
+    const button = document.getElementById('imageQuizStartBtn');
+    if (!button) return;
+    imageQuizBindStartButton();
+    const hasQuestions = imageQuizGetFilteredQuestions().length > 0;
+    button.disabled = !hasQuestions;
+    button.style.display = hasQuestions ? 'inline-flex' : 'none';
+}
+
+function imageQuizResetQuestionView() {
+    IMAGE_QUIZ_STATE.currentQuestion = null;
+    const title = document.getElementById('imageQuizQuestionTitle');
+    const info = document.getElementById('imageQuizBankInfo');
+    if (title) title.textContent = 'Trắc nghiệm bằng hình ảnh';
+
+    const answerMap = [
+        ['A', 'Đáp án A'], ['B', 'Đáp án B'], ['C', 'Đáp án C'], ['D', 'Đáp án D']
+    ];
+    answerMap.forEach(([letter, fallback]) => {
+        const span = document.getElementById(`imageQuizAnswer${letter}`);
+        if (span) span.textContent = fallback;
+    });
+
+    if (info) imageQuizUpdateInfo();
+    imageQuizUpdateStartButton();
+}
+
+function imageQuizStart() {
+    const pool = imageQuizGetFilteredQuestions();
+    if (!pool.length) {
+        imageQuizUpdateInfo();
+        return;
+    }
+
+    // BƯỚC 153.4.8: object câu hỏi dùng chung có dạng q + a[0..3] + c.
+    // c là chỉ số đáp án đúng, chỉ lưu lại để dùng ở bước chấm đáp án sau; chưa hiển thị ở bước này.
+    const question = pool[Math.floor(Math.random() * pool.length)];
+    IMAGE_QUIZ_STATE.currentQuestion = question;
+
+    const stage = document.querySelector('.image-quiz-page .image-quiz-stage');
+    if (!stage) return;
+
+    const questionText = String(question.q || 'Câu hỏi');
+    const answerList = Array.isArray(question.a) ? question.a : [];
+    const answers = {
+        A: String(answerList[0] ?? ''),
+        B: String(answerList[1] ?? ''),
+        C: String(answerList[2] ?? ''),
+        D: String(answerList[3] ?? '')
+    };
+
+    stage.innerHTML = `
+        <div class="image-quiz-placeholder">
+            <div class="image-quiz-placeholder-icon"><i class="fas fa-image"></i></div>
+            <h3 id="imageQuizQuestionTitle"></h3>
+            <p id="imageQuizBankInfo"></p>
+        </div>
+        <div class="image-quiz-answers" aria-label="Khu vực đáp án">
+            <button type="button" disabled><strong>A</strong><span id="imageQuizAnswerA"></span></button>
+            <button type="button" disabled><strong>B</strong><span id="imageQuizAnswerB"></span></button>
+            <button type="button" disabled><strong>C</strong><span id="imageQuizAnswerC"></span></button>
+            <button type="button" disabled><strong>D</strong><span id="imageQuizAnswerD"></span></button>
+        </div>`;
+
+    const title = stage.querySelector('#imageQuizQuestionTitle');
+    const info = stage.querySelector('#imageQuizBankInfo');
+    if (title) title.textContent = questionText;
+    if (info) info.textContent = `${IMAGE_QUIZ_STATE.subject} - Khối ${IMAGE_QUIZ_STATE.grade} - ${IMAGE_QUIZ_STATE.topic}`;
+
+    Object.entries(answers).forEach(([letter, value]) => {
+        const span = stage.querySelector(`#imageQuizAnswer${letter}`);
+        if (span) span.textContent = value;
+    });
+}
+
+function imageQuizHandleGradeChange(value) {
+    IMAGE_QUIZ_STATE.grade = value || '';
+    IMAGE_QUIZ_STATE.subject = '';
+    IMAGE_QUIZ_STATE.topic = '';
+    IMAGE_QUIZ_STATE.currentQuestion = null;
+
+    const subjectSelect = document.getElementById('imageQuizSubjectSelect');
+    const topicSelect = document.getElementById('imageQuizTopicSelect');
+    const questions = IMAGE_QUIZ_STATE.grade
+        ? IMAGE_QUIZ_STATE.questions.filter(item => item.grade === IMAGE_QUIZ_STATE.grade)
+        : [];
+
+    imageQuizSetOptions(subjectSelect, imageQuizUniqueValues(questions, 'subject'), '-- Chọn môn học --');
+    imageQuizSetOptions(topicSelect, [], '-- Chọn chủ đề --');
+    imageQuizResetQuestionView();
+}
+
+function imageQuizHandleSubjectChange(value) {
+    IMAGE_QUIZ_STATE.subject = value || '';
+    IMAGE_QUIZ_STATE.topic = '';
+    IMAGE_QUIZ_STATE.currentQuestion = null;
+
+    const topicSelect = document.getElementById('imageQuizTopicSelect');
+    const questions = IMAGE_QUIZ_STATE.subject
+        ? IMAGE_QUIZ_STATE.questions.filter(item =>
+            item.grade === IMAGE_QUIZ_STATE.grade && item.subject === IMAGE_QUIZ_STATE.subject
+        )
+        : [];
+
+    imageQuizSetOptions(topicSelect, imageQuizUniqueValues(questions, 'topic'), '-- Chọn chủ đề --');
+    imageQuizResetQuestionView();
+}
+
+function imageQuizHandleTopicChange(value) {
+    IMAGE_QUIZ_STATE.topic = value || '';
+    imageQuizResetQuestionView();
+}
+
+async function initImageQuiz() {
+    const gradeSelect = document.getElementById('imageQuizGradeSelect');
+    const subjectSelect = document.getElementById('imageQuizSubjectSelect');
+    const topicSelect = document.getElementById('imageQuizTopicSelect');
+    if (!gradeSelect || !subjectSelect || !topicSelect) return;
+
+    imageQuizBindStartButton();
+    imageQuizSetOptions(gradeSelect, [], 'Đang tải...');
+    imageQuizSetOptions(subjectSelect, [], '-- Chọn môn học --');
+    imageQuizSetOptions(topicSelect, [], '-- Chọn chủ đề --');
+
+    const questions = millionaireSupabaseQuestionsLoaded
+        ? [...MILLIONAIRE_SUPABASE_QUESTIONS]
+        : await loadMillionaireQuestionsFromSupabase();
+
+    // Chỉ lấy khối cụ thể cho module học sinh; câu grade='all' không đưa vào bộ lọc Khối.
+    IMAGE_QUIZ_STATE.questions = (questions || []).filter(item => item && item.grade && item.grade !== 'all');
+    IMAGE_QUIZ_STATE.grade = '';
+    IMAGE_QUIZ_STATE.subject = '';
+    IMAGE_QUIZ_STATE.topic = '';
+    IMAGE_QUIZ_STATE.currentQuestion = null;
+
+    imageQuizSetOptions(
+        gradeSelect,
+        imageQuizUniqueValues(IMAGE_QUIZ_STATE.questions, 'grade'),
+        '-- Chọn khối --',
+        'Khối '
+    );
+    imageQuizUpdateInfo();
+}
+
+window.imageQuizHandleGradeChange = imageQuizHandleGradeChange;
+window.imageQuizHandleSubjectChange = imageQuizHandleSubjectChange;
+window.imageQuizHandleTopicChange = imageQuizHandleTopicChange;
+window.imageQuizStart = imageQuizStart;
+
+function renderImageQuiz() {
+    return `
+        <section class="image-quiz-page">
+            <div class="image-quiz-toolbar">
+                <div class="image-quiz-heading">
+                    <div class="image-quiz-heading-icon"><i class="fas fa-images"></i></div>
+                    <div><h2>Trắc nghiệm hình ảnh</h2><p>Chọn bộ câu hỏi để bắt đầu.</p></div>
+                </div>
+                <div class="image-quiz-filters">
+                    <label class="image-quiz-field"><span>Khối</span><select id="imageQuizGradeSelect" onchange="imageQuizHandleGradeChange(this.value)" disabled><option>Đang tải...</option></select></label>
+                    <label class="image-quiz-field"><span>Môn học</span><select id="imageQuizSubjectSelect" onchange="imageQuizHandleSubjectChange(this.value)" disabled><option>-- Chọn môn học --</option></select></label>
+                    <label class="image-quiz-field"><span>Chủ đề</span><select id="imageQuizTopicSelect" onchange="imageQuizHandleTopicChange(this.value)" disabled><option>-- Chọn chủ đề --</option></select></label>
+                </div>
+            </div>
+            <div class="image-quiz-stage">
+                <div class="image-quiz-placeholder">
+                    <div class="image-quiz-placeholder-icon"><i class="fas fa-image"></i></div>
+                    <h3 id="imageQuizQuestionTitle">Trắc nghiệm bằng hình ảnh</h3>
+                    <p id="imageQuizBankInfo">Đang kết nối ngân hàng câu hỏi dùng chung...</p>
+                    <div style="margin-top:18px;display:flex;justify-content:center;">
+                        <button id="imageQuizStartBtn" type="button" class="btn btn-primary" disabled style="display:none;min-width:150px;min-height:46px;justify-content:center;font-weight:800;font-size:15px;"><i class="fas fa-play"></i> Bắt đầu</button>
+                    </div>
+                </div>
+                <div class="image-quiz-answers" aria-label="Khu vực đáp án">
+                    <button type="button" disabled><strong>A</strong><span id="imageQuizAnswerA">Đáp án A</span></button>
+                    <button type="button" disabled><strong>B</strong><span id="imageQuizAnswerB">Đáp án B</span></button>
+                    <button type="button" disabled><strong>C</strong><span id="imageQuizAnswerC">Đáp án C</span></button>
+                    <button type="button" disabled><strong>D</strong><span id="imageQuizAnswerD">Đáp án D</span></button>
+                </div>
+            </div>
+        </section>`;
+}
+
 function renderImageCaller() {
     return `
         <section class="image-caller-page">
@@ -6754,6 +7012,7 @@ function renderPage(page) {
         case 'public-content': container.innerHTML = renderPublicContentManager(); break;
         case 'wheel': container.innerHTML = renderWheel(); break;
         case 'image-caller': container.innerHTML = renderImageCaller(); break;
+        case 'image-quiz': container.innerHTML = renderImageQuiz(); break;
         case 'millionaire': container.innerHTML = renderMillionaire(); break;
         default: container.innerHTML = '<p>Trang không tồn tại.</p>';
     }
@@ -6769,6 +7028,7 @@ function renderPage(page) {
         if (page === 'statistics') initStatCharts();
         if (page === 'wheel') initWheel();
         if (page === 'image-caller') initImageCaller();
+        if (page === 'image-quiz') initImageQuiz();
         if (page === 'millionaire') initMillionaire();
         applyViewerReadOnlyUI();
         if (isViewer() && page === 'attendance') {
@@ -6794,6 +7054,7 @@ function getPageTitle(page) {
         'public-content': 'Nội dung website công khai',
         wheel: 'Vòng quay may mắn',
         'image-caller': 'Gọi tên bằng hình ảnh',
+        'image-quiz': 'Trắc nghiệm hình ảnh',
         millionaire: 'Ai là triệu phú'
     };
     return titles[page] || page;
