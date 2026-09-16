@@ -11351,3 +11351,29 @@ tbody tr:hover td{
         font-size: 19px !important;
     }
 }
+
+
+/* ============================================================
+   BƯỚC 152.1 - KHUNG MODULE GỌI TÊN BẰNG HÌNH ẢNH
+   Chỉ tác động các class image-caller-* để không ảnh hưởng module cũ.
+   ============================================================ */
+.image-caller-page { display:flex; flex-direction:column; gap:18px; min-height:calc(100vh - 150px); }
+.image-caller-toolbar, .image-caller-stage, .image-caller-side-card, .image-caller-stats { background:var(--bg-card,#fff); border:1px solid var(--border,#e5e7eb); border-radius:18px; box-shadow:0 8px 24px rgba(15,23,42,.06); }
+.image-caller-toolbar { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:18px 20px; }
+.image-caller-heading { display:flex; align-items:center; gap:14px; }
+.image-caller-heading-icon { width:48px; height:48px; border-radius:14px; display:grid; place-items:center; background:rgba(37,99,235,.1); color:var(--primary,#2563eb); font-size:22px; }
+.image-caller-heading h2 { margin:0 0 4px; font-size:20px; } .image-caller-heading p { margin:0; color:var(--text-muted,#64748b); font-size:13px; }
+.image-caller-filters { display:flex; gap:12px; flex-wrap:wrap; } .image-caller-field { display:flex; flex-direction:column; gap:6px; min-width:160px; }
+.image-caller-field span { font-size:12px; font-weight:700; color:var(--text-muted,#64748b); } .image-caller-field select { min-height:40px; padding:8px 34px 8px 11px; border:1px solid var(--border,#dbe2ea); border-radius:10px; background:var(--bg-card,#fff); color:var(--text-main,#1f2937); }
+.image-caller-layout { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(280px,.7fr); gap:18px; flex:1; }
+.image-caller-stage { min-height:520px; padding:28px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+.image-caller-photo-frame { width:min(300px,62vw); aspect-ratio:3/4; padding:8px; border-radius:24px; background:linear-gradient(145deg,rgba(37,99,235,.14),rgba(14,165,233,.06)); border:2px dashed rgba(37,99,235,.35); }
+.image-caller-photo { width:100%; height:100%; object-fit:cover; border-radius:17px; background:#eef2f7; } .image-caller-student-info { margin-top:18px; }
+.image-caller-status { display:inline-block; padding:5px 11px; border-radius:999px; background:rgba(16,185,129,.12); color:#047857; font-size:12px; font-weight:800; }
+.image-caller-student-info h3 { margin:10px 0 5px; font-size:26px; } .image-caller-student-info p { margin:0; color:var(--text-muted,#64748b); }
+.image-caller-actions { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:22px; } .image-caller-actions .btn { min-width:145px; }
+.image-caller-side { display:flex; flex-direction:column; gap:14px; } .image-caller-side-card { padding:18px; flex:1; min-height:330px; } .image-caller-side-title { font-weight:800; display:flex; align-items:center; gap:8px; }
+.image-caller-empty { min-height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; color:var(--text-muted,#64748b); } .image-caller-empty > i { font-size:44px; opacity:.45; } .image-caller-empty strong { color:var(--text-main,#1f2937); } .image-caller-empty span { max-width:240px; font-size:13px; line-height:1.5; }
+.image-caller-stats { display:grid; grid-template-columns:repeat(3,1fr); overflow:hidden; } .image-caller-stats > div { padding:15px 8px; text-align:center; border-right:1px solid var(--border,#e5e7eb); } .image-caller-stats > div:last-child { border-right:0; } .image-caller-stats strong { display:block; font-size:22px; color:var(--primary,#2563eb); } .image-caller-stats span { display:block; margin-top:3px; font-size:11px; color:var(--text-muted,#64748b); }
+@media (max-width:900px) { .image-caller-toolbar { align-items:stretch; flex-direction:column; } .image-caller-filters { width:100%; } .image-caller-field { flex:1 1 180px; } .image-caller-layout { grid-template-columns:1fr; } .image-caller-stage { min-height:auto; padding:22px 14px; } }
+@media (max-width:560px) { .image-caller-page { gap:12px; } .image-caller-toolbar { padding:14px; border-radius:14px; } .image-caller-heading-icon { width:42px; height:42px; } .image-caller-heading h2 { font-size:18px; } .image-caller-heading p { font-size:12px; } .image-caller-field { flex-basis:100%; } .image-caller-photo-frame { width:min(245px,72vw); } .image-caller-student-info h3 { font-size:22px; } .image-caller-actions { width:100%; } .image-caller-actions .btn { flex:1 1 100%; } .image-caller-side-card { min-height:260px; } .image-caller-empty { min-height:190px; } }

@@ -6006,6 +6006,695 @@ window.goHome = goHome;
 // 4. RENDER PAGES
 // ============================================================
 
+// ============================================================
+// BƯỚC 152.1 -> 152.5 - MODULE GỌI TÊN BẰNG HÌNH ẢNH
+// 152.5: Gọi tiếp không trùng; đánh dấu học sinh đã gọi;
+// cập nhật Tổng / Đã gọi / Còn lại và cho phép Đặt lại vòng gọi.
+// ============================================================
+const IMAGE_CALLER_STATE = {
+    classId: '',
+    students: [],
+    isSpinning: false,
+    motionTimer: null,
+    finishTimer: null,
+    winner: null,
+    calledKeys: new Set(),
+    audioContext: null,
+    spinSound: null
+};
+
+function getImageCallerClasses() {
+    return [...(APP_STATE.classes || [])].sort((a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''), 'vi', { numeric: true })
+    );
+}
+
+function getImageCallerClassGrade(cls) {
+    return String(cls?.grade ?? String(cls?.name || '').match(/[1-5]/)?.[0] ?? '');
+}
+
+function imageCallerInjectMotionStyles() {
+    if (document.getElementById('imageCallerMotionStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'imageCallerMotionStyles';
+    style.textContent = `
+        .image-caller-stage{position:relative;overflow:hidden;min-height:560px}
+        .image-caller-arena{position:relative;width:100%;height:390px;min-height:390px;border-radius:24px;overflow:hidden;
+            background:radial-gradient(circle at 50% 45%,rgba(59,130,246,.18),rgba(14,165,233,.06) 45%,rgba(15,23,42,.02) 75%);
+            border:1px solid rgba(96,165,250,.18)}
+        .image-caller-arena::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.28;
+            background-image:radial-gradient(circle,rgba(96,165,250,.35) 1px,transparent 1px);background-size:28px 28px}
+        .image-caller-bubble{position:absolute;left:0;top:0;width:92px;height:92px;border-radius:50%;padding:4px;
+            background:linear-gradient(135deg,#60a5fa,#22d3ee,#a78bfa);box-shadow:0 10px 28px rgba(0,0,0,.22);
+            will-change:transform;transition:transform .32s cubic-bezier(.2,.75,.25,1),opacity .35s,filter .35s}
+        .image-caller-bubble img{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover;background:#e5e7eb;border:3px solid rgba(255,255,255,.92)}
+        .image-caller-bubble.is-moving{transition:transform .18s linear}
+        .image-caller-bubble.is-called{opacity:.18;filter:grayscale(1);box-shadow:none}
+        .image-caller-bubble.is-dimmed{opacity:.08;filter:blur(2px);transform:scale(.55)!important}
+        .image-caller-bubble.is-winner{z-index:20;width:240px;height:240px;padding:7px;opacity:1;filter:none;
+            box-shadow:0 0 0 7px rgba(250,204,21,.22),0 20px 55px rgba(0,0,0,.38)}
+        .image-caller-result{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:86px;padding-top:12px;text-align:center}
+        .image-caller-result .image-caller-status{display:inline-flex;align-items:center;justify-content:center}
+        .image-caller-result h3{margin:3px 0 0;font-size:clamp(24px,3vw,38px);line-height:1.12}
+        .image-caller-result p{margin:0;opacity:.78}
+        .image-caller-countdown{position:absolute;right:16px;top:14px;z-index:30;display:none;min-width:74px;padding:8px 12px;border-radius:999px;
+            background:rgba(15,23,42,.76);color:#fff;font-weight:800;text-align:center;backdrop-filter:blur(6px)}
+        .image-caller-countdown.show{display:block}
+        .image-caller-empty-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;opacity:.72}
+        @media(max-width:760px){.image-caller-arena{height:330px;min-height:330px}.image-caller-bubble{width:72px;height:72px}.image-caller-bubble.is-winner{width:190px;height:190px}.image-caller-stage{min-height:500px}}
+    `;
+    document.head.appendChild(style);
+}
+
+function imageCallerClearTimers() {
+    if (IMAGE_CALLER_STATE.motionTimer) clearInterval(IMAGE_CALLER_STATE.motionTimer);
+    if (IMAGE_CALLER_STATE.finishTimer) clearTimeout(IMAGE_CALLER_STATE.finishTimer);
+    IMAGE_CALLER_STATE.motionTimer = null;
+    IMAGE_CALLER_STATE.finishTimer = null;
+    IMAGE_CALLER_STATE.isSpinning = false;
+}
+
+function initImageCaller() {
+    imageCallerInjectMotionStyles();
+    imageCallerClearTimers();
+
+    const gradeSelect = document.getElementById('imageCallerGradeSelect');
+    const classSelect = document.getElementById('imageCallerClassSelect');
+    if (!gradeSelect || !classSelect) return;
+
+    const classes = getImageCallerClasses();
+    const availableGrades = new Set(classes.map(getImageCallerClassGrade).filter(Boolean));
+
+    [...gradeSelect.options].forEach(option => {
+        if (!option.value) return;
+        option.disabled = !availableGrades.has(option.value);
+    });
+
+    gradeSelect.addEventListener('change', () => imageCallerHandleGradeChange(gradeSelect.value));
+    classSelect.addEventListener('change', () => imageCallerHandleClassChange(classSelect.value));
+
+    // BƯỚC 152.7: nếu đang có phiên gọi tên, khôi phục đúng lớp và tiến độ
+    // khi giáo viên chuyển module rồi quay lại. Không xóa calledKeys ở đây.
+    if (IMAGE_CALLER_STATE.classId && IMAGE_CALLER_STATE.students.length) {
+        imageCallerRestoreSession();
+    }
+}
+
+function imageCallerHandleGradeChange(grade) {
+    const classSelect = document.getElementById('imageCallerClassSelect');
+    if (!classSelect) return;
+
+    imageCallerClearTimers();
+    classSelect.innerHTML = '<option value="">-- Chọn lớp --</option>';
+
+    if (!grade) {
+        classSelect.disabled = true;
+        imageCallerHandleClassChange('');
+        return;
+    }
+
+    const classes = getImageCallerClasses().filter(cls => getImageCallerClassGrade(cls) === String(grade));
+    classes.forEach(cls => {
+        const option = document.createElement('option');
+        option.value = cls.id;
+        option.textContent = cls.name || 'Lớp chưa đặt tên';
+        classSelect.appendChild(option);
+    });
+
+    classSelect.disabled = classes.length === 0;
+    imageCallerHandleClassChange('');
+}
+
+function getImageCallerStudents(classId) {
+    if (!classId) return [];
+
+    const cls = getImageCallerClasses().find(item => item.id === classId);
+    let students = (APP_STATE.students || []).filter(student => student.class_id === classId);
+
+    if (students.length === 0 && cls) {
+        students = (APP_STATE.students || []).filter(student =>
+            student.class === cls.name || student.class_code === cls.name
+        );
+    }
+
+    const uniqueStudents = [];
+    const seen = new Set();
+    students.forEach(student => {
+        const key = String(student.db_uuid || student.id || '').trim();
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        uniqueStudents.push(student);
+    });
+
+    return uniqueStudents.sort((a, b) =>
+        String(a.fullName || '').localeCompare(String(b.fullName || ''), 'vi')
+    );
+}
+
+function imageCallerStudentKey(student) {
+    return String(student?.db_uuid || student?.id || student?.student_code || student?.fullName || '').trim();
+}
+
+function renderImageCallerStudentList(students = []) {
+    const list = document.getElementById('imageCallerStudentList');
+    if (!list) return;
+
+    if (students.length === 0) {
+        list.innerHTML = `<div class="image-caller-empty"><i class="fas fa-user-slash"></i><strong>Chưa có học sinh</strong><span>Lớp này hiện chưa có học sinh trong dữ liệu.</span></div>`;
+        return;
+    }
+
+    list.innerHTML = students.map((student, index) => {
+        const key = imageCallerStudentKey(student);
+        const called = IMAGE_CALLER_STATE.calledKeys.has(key);
+        return `
+        <div class="student-item${called ? ' image-caller-student-called' : ''}">
+            <span class="badge">${called ? '✓' : index + 1}</span>
+            <span class="student-name">${escapeHtml(student.fullName || 'Chưa có họ tên')}</span>
+        </div>`;
+    }).join('');
+}
+
+function updateImageCallerStats(total = IMAGE_CALLER_STATE.students.length) {
+    const called = IMAGE_CALLER_STATE.calledKeys.size;
+    const remaining = Math.max(0, total - called);
+    const totalEl = document.getElementById('imageCallerTotalCount');
+    const calledEl = document.getElementById('imageCallerCalledCount');
+    const remainingEl = document.getElementById('imageCallerRemainingCount');
+    if (totalEl) totalEl.textContent = String(total);
+    if (calledEl) calledEl.textContent = String(called);
+    if (remainingEl) remainingEl.textContent = String(remaining);
+}
+
+function imageCallerGetRemainingIndexes() {
+    const indexes = [];
+    IMAGE_CALLER_STATE.students.forEach((student, index) => {
+        if (!IMAGE_CALLER_STATE.calledKeys.has(imageCallerStudentKey(student))) indexes.push(index);
+    });
+    return indexes;
+}
+
+function imageCallerSetActionState(hasStudents = IMAGE_CALLER_STATE.students.length > 0) {
+    const randomBtn = document.getElementById('imageCallerRandomBtn');
+    const nextBtn = document.getElementById('imageCallerNextBtn');
+    const resetBtn = document.getElementById('imageCallerResetBtn');
+    const endBtn = document.getElementById('imageCallerEndBtn');
+    const gradeSelect = document.getElementById('imageCallerGradeSelect');
+    const classSelect = document.getElementById('imageCallerClassSelect');
+    const called = IMAGE_CALLER_STATE.calledKeys.size;
+    const remaining = imageCallerGetRemainingIndexes().length;
+    const spinning = IMAGE_CALLER_STATE.isSpinning;
+    const activeSession = called > 0;
+
+    if (randomBtn) randomBtn.disabled = !hasStudents || spinning || called > 0 || remaining === 0;
+    if (nextBtn) nextBtn.disabled = !hasStudents || spinning || called === 0 || remaining === 0;
+    if (resetBtn) resetBtn.disabled = !hasStudents || spinning || called === 0;
+    if (endBtn) endBtn.disabled = !hasStudents || spinning;
+
+    // Khi đã bắt đầu gọi tên, khóa Khối/Lớp để phiên chỉ kết thúc bằng nút Kết thúc gọi tên.
+    if (gradeSelect) gradeSelect.disabled = spinning || activeSession;
+    if (classSelect) classSelect.disabled = spinning || activeSession;
+}
+
+function imageCallerPlayTone(frequency = 520, duration = 0.06, volume = 0.035) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        if (!IMAGE_CALLER_STATE.audioContext) IMAGE_CALLER_STATE.audioContext = new AudioCtx();
+        const ctx = IMAGE_CALLER_STATE.audioContext;
+        if (ctx.state === 'suspended') ctx.resume();
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(volume, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start();
+        oscillator.stop(ctx.currentTime + duration);
+    } catch (error) {
+        console.warn('[152.6] Không phát được âm thanh:', error);
+    }
+}
+
+function imageCallerStartSpinSound(duration = 10000) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        if (!IMAGE_CALLER_STATE.audioContext) IMAGE_CALLER_STATE.audioContext = new AudioCtx();
+        const ctx = IMAGE_CALLER_STATE.audioContext;
+        if (ctx.state === 'suspended') ctx.resume();
+        imageCallerStopSpinSound();
+
+        const startedAt = performance.now();
+        const soundState = { timer: null, stopped: false };
+        IMAGE_CALLER_STATE.spinSound = soundState;
+
+        const playClick = () => {
+            if (soundState.stopped || IMAGE_CALLER_STATE.spinSound !== soundState) return;
+            const elapsed = performance.now() - startedAt;
+            const progress = Math.min(1, elapsed / duration);
+            if (progress >= 1) return;
+
+            // Click ngắn kiểu vòng quay/game show, không tạo tiếng ù liên tục.
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(progress < 0.72 ? 980 : 820, ctx.currentTime);
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.225, ctx.currentTime + 0.004); // 152.6.3: tăng âm lượng click chuyển động x5
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.035);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.04);
+
+            // 7 giây đầu nhanh; 3 giây cuối chậm dần để tạo cảm giác sắp dừng.
+            let delay = 105;
+            if (progress > 0.70) {
+                const slow = (progress - 0.70) / 0.30;
+                delay = 120 + Math.round(520 * slow * slow);
+            }
+            soundState.timer = setTimeout(playClick, delay);
+        };
+
+        playClick();
+    } catch (error) {
+        console.warn('[152.6.2] Không khởi động được âm thanh vòng quay:', error);
+    }
+}
+
+function imageCallerStopSpinSound() {
+    const sound = IMAGE_CALLER_STATE.spinSound;
+    if (!sound) return;
+    sound.stopped = true;
+    if (sound.timer) clearTimeout(sound.timer);
+    IMAGE_CALLER_STATE.spinSound = null;
+}
+
+function imageCallerSpeakWinner(student, className = '') {
+    if (!('speechSynthesis' in window) || !student) return;
+    try {
+        window.speechSynthesis.cancel();
+        const fullName = String(student.fullName || '').trim();
+        if (!fullName) return;
+        const utterance = new SpeechSynthesisUtterance(fullName);
+        utterance.lang = 'vi-VN';
+        utterance.rate = 0.88;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        const voices = window.speechSynthesis.getVoices();
+        const viVoice = voices.find(voice => String(voice.lang || '').toLowerCase().startsWith('vi'));
+        if (viVoice) utterance.voice = viVoice;
+        window.speechSynthesis.speak(utterance);
+    } catch (error) {
+        console.warn('[152.6] Không đọc được tên học sinh:', error);
+    }
+}
+
+function imageCallerGetArenaSize() {
+    const arena = document.getElementById('imageCallerArena');
+    if (!arena) return { width: 700, height: 390 };
+    return { width: Math.max(260, arena.clientWidth), height: Math.max(260, arena.clientHeight) };
+}
+
+function imageCallerRandomPosition(bubbleSize = 92) {
+    const { width, height } = imageCallerGetArenaSize();
+    const pad = 12;
+    return {
+        x: pad + Math.random() * Math.max(1, width - bubbleSize - pad * 2),
+        y: pad + Math.random() * Math.max(1, height - bubbleSize - pad * 2)
+    };
+}
+
+function imageCallerRenderBubbles(students = []) {
+    const arena = document.getElementById('imageCallerArena');
+    if (!arena) return;
+
+    if (!students.length) {
+        arena.innerHTML = '<div class="image-caller-empty-stage">Chọn một lớp có học sinh để hiển thị ảnh.</div><div id="imageCallerCountdown" class="image-caller-countdown"></div>';
+        return;
+    }
+
+    arena.innerHTML = `<div id="imageCallerCountdown" class="image-caller-countdown"></div>` + students.map((student, index) => {
+        const avatar = (student.avatar && typeof student.avatar === 'string') ? student.avatar : DEFAULT_AVATAR;
+        return `<div class="image-caller-bubble" data-image-caller-index="${index}" title="${escapeHtml(student.fullName || '')}"><img src="${avatar}" alt="${escapeHtml(student.fullName || 'Học sinh')}" onerror="this.src='${DEFAULT_AVATAR}'"></div>`;
+    }).join('');
+
+    requestAnimationFrame(() => {
+        arena.querySelectorAll('.image-caller-bubble').forEach(bubble => {
+            const size = bubble.offsetWidth || 92;
+            const pos = imageCallerRandomPosition(size);
+            bubble.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+        });
+    });
+}
+
+async function imageCallerPrepareStudentImages(students) {
+    imageCallerRenderBubbles(students); // Hiện ngay avatar mặc định/ảnh đã cache.
+    try {
+        await loadStudentAvatars(students);
+    } catch (error) {
+        console.warn('[152.4R] Không tải đủ ảnh học sinh:', error);
+    }
+
+    if (IMAGE_CALLER_STATE.students !== students || IMAGE_CALLER_STATE.isSpinning) return;
+    const arena = document.getElementById('imageCallerArena');
+    if (!arena) return;
+    arena.querySelectorAll('.image-caller-bubble').forEach((bubble, index) => {
+        const img = bubble.querySelector('img');
+        const student = students[index];
+        if (img && student) img.src = student.avatar || DEFAULT_AVATAR;
+    });
+}
+
+function imageCallerMoveBubbles() {
+    const arena = document.getElementById('imageCallerArena');
+    if (!arena) return;
+    arena.querySelectorAll('.image-caller-bubble').forEach((bubble, index) => {
+        const student = IMAGE_CALLER_STATE.students[index];
+        if (bubble.classList.contains('is-winner')) return;
+        const size = bubble.offsetWidth || 92;
+        const pos = imageCallerRandomPosition(size);
+        bubble.classList.add('is-moving');
+        bubble.style.transform = `translate(${pos.x}px, ${pos.y}px) rotate(${Math.round(Math.random()*24-12)}deg)`;
+    });
+}
+
+function imageCallerRevealWinner(winnerIndex) {
+    const arena = document.getElementById('imageCallerArena');
+    const winner = IMAGE_CALLER_STATE.students[winnerIndex];
+    if (!arena || !winner) return;
+
+    const bubbles = [...arena.querySelectorAll('.image-caller-bubble')];
+    const winnerBubble = bubbles[winnerIndex];
+    bubbles.forEach((bubble, index) => {
+        bubble.classList.remove('is-moving');
+        if (index !== winnerIndex) bubble.classList.add('is-dimmed');
+    });
+
+    if (winnerBubble) {
+        winnerBubble.classList.add('is-winner');
+        const { width, height } = imageCallerGetArenaSize();
+        const winnerSize = window.innerWidth <= 760 ? 190 : 240;
+        const x = Math.max(8, (width - winnerSize) / 2);
+        const y = Math.max(8, (height - winnerSize) / 2);
+        winnerBubble.style.transform = `translate(${x}px, ${y}px) scale(1)`;
+    }
+
+    const cls = getImageCallerClasses().find(item => item.id === IMAGE_CALLER_STATE.classId);
+    const status = document.querySelector('.image-caller-status');
+    const title = document.querySelector('.image-caller-result h3');
+    const description = document.querySelector('.image-caller-result p');
+    if (status) status.textContent = '🎉 Học sinh được gọi';
+    if (title) title.textContent = winner.fullName || 'Chưa có họ tên';
+    if (description) description.textContent = cls?.name ? `Lớp ${cls.name}` : 'Học sinh được chọn ngẫu nhiên';
+
+    // BƯỚC 152.6.2: chime ngắn công bố kết quả, sau đó mới đọc tên.
+    imageCallerPlayTone(659, 0.10, 0.055);
+    setTimeout(() => imageCallerPlayTone(880, 0.12, 0.06), 105);
+    setTimeout(() => imageCallerPlayTone(1175, 0.22, 0.065), 225);
+    setTimeout(() => imageCallerSpeakWinner(winner), 620);
+
+    IMAGE_CALLER_STATE.winner = winner;
+    IMAGE_CALLER_STATE.calledKeys.add(imageCallerStudentKey(winner));
+    IMAGE_CALLER_STATE.isSpinning = false;
+
+    renderImageCallerStudentList(IMAGE_CALLER_STATE.students);
+    updateImageCallerStats();
+
+    const remaining = imageCallerGetRemainingIndexes().length;
+    if (remaining === 0 && description) {
+        description.textContent = 'Đã gọi hết học sinh trong lớp. Bấm “Đặt lại” để bắt đầu vòng mới.';
+    }
+
+    imageCallerSetActionState(true);
+}
+
+function imageCallerStartRandom() {
+    if (IMAGE_CALLER_STATE.isSpinning || !IMAGE_CALLER_STATE.students.length) return;
+
+    const remainingIndexes = imageCallerGetRemainingIndexes();
+    if (!remainingIndexes.length) {
+        alert('Đã gọi hết học sinh trong lớp. Hãy bấm “Đặt lại” để bắt đầu vòng mới.');
+        imageCallerSetActionState(true);
+        return;
+    }
+
+    const winnerIndex = remainingIndexes[Math.floor(Math.random() * remainingIndexes.length)];
+    const arena = document.getElementById('imageCallerArena');
+    const countdown = document.getElementById('imageCallerCountdown');
+    if (!arena) return;
+
+    IMAGE_CALLER_STATE.isSpinning = true;
+    IMAGE_CALLER_STATE.winner = null;
+    imageCallerSetActionState(true);
+
+    const status = document.querySelector('.image-caller-status');
+    const title = document.querySelector('.image-caller-result h3');
+    const description = document.querySelector('.image-caller-result p');
+    if (status) status.textContent = 'Đang quay...';
+    if (title) title.textContent = 'Ai sẽ được gọi?';
+    if (description) description.textContent = `Còn ${remainingIndexes.length} học sinh chưa được gọi...`;
+
+    arena.querySelectorAll('.image-caller-bubble').forEach((bubble, index) => {
+        bubble.classList.remove('is-dimmed', 'is-winner', 'is-moving');
+        // Học sinh đã gọi vẫn tham gia hiệu ứng chuyển động bình thường,
+        // nhưng vẫn bị loại khỏi danh sách có thể được chọn lại.
+        bubble.classList.remove('is-called');
+    });
+
+    const startedAt = Date.now();
+    const duration = 10000;
+    if (countdown) countdown.classList.add('show');
+
+    // BƯỚC 152.6.1: âm thanh chuyển động liên tục, bắt đầu ngay từ thao tác bấm của người dùng.
+    imageCallerStartSpinSound(duration);
+    imageCallerMoveBubbles();
+    IMAGE_CALLER_STATE.motionTimer = setInterval(() => {
+        const elapsed = Date.now() - startedAt;
+        const remain = Math.max(0, Math.ceil((duration - elapsed) / 1000));
+        if (countdown) countdown.textContent = `${remain}s`;
+        imageCallerMoveBubbles();
+    }, 220);
+
+    IMAGE_CALLER_STATE.finishTimer = setTimeout(() => {
+        if (IMAGE_CALLER_STATE.motionTimer) clearInterval(IMAGE_CALLER_STATE.motionTimer);
+        IMAGE_CALLER_STATE.motionTimer = null;
+        imageCallerStopSpinSound();
+        if (countdown) {
+            countdown.textContent = 'Kết quả!';
+            setTimeout(() => countdown.classList.remove('show'), 900);
+        }
+        imageCallerRevealWinner(winnerIndex);
+    }, duration);
+}
+
+function imageCallerNext() {
+    imageCallerStartRandom();
+}
+
+function imageCallerResetRound() {
+    if (IMAGE_CALLER_STATE.isSpinning || !IMAGE_CALLER_STATE.students.length) return;
+
+    IMAGE_CALLER_STATE.calledKeys.clear();
+    IMAGE_CALLER_STATE.winner = null;
+
+    const status = document.querySelector('.image-caller-status');
+    const title = document.querySelector('.image-caller-result h3');
+    const description = document.querySelector('.image-caller-result p');
+    const cls = getImageCallerClasses().find(item => item.id === IMAGE_CALLER_STATE.classId);
+
+    if (status) status.textContent = 'Sẵn sàng';
+    if (title) title.textContent = cls?.name || 'Lớp đã chọn';
+    if (description) description.textContent = `${IMAGE_CALLER_STATE.students.length} học sinh đã sẵn sàng. Bấm “Gọi ngẫu nhiên” để bắt đầu.`;
+
+    renderImageCallerStudentList(IMAGE_CALLER_STATE.students);
+    updateImageCallerStats();
+    imageCallerRenderBubbles(IMAGE_CALLER_STATE.students);
+    imageCallerPrepareStudentImages(IMAGE_CALLER_STATE.students);
+    imageCallerSetActionState(true);
+}
+
+function imageCallerRestoreSession() {
+    const cls = getImageCallerClasses().find(item => item.id === IMAGE_CALLER_STATE.classId);
+    if (!cls || !IMAGE_CALLER_STATE.students.length) return;
+
+    const gradeSelect = document.getElementById('imageCallerGradeSelect');
+    const classSelect = document.getElementById('imageCallerClassSelect');
+    const grade = getImageCallerClassGrade(cls);
+
+    if (gradeSelect) gradeSelect.value = grade;
+    if (classSelect) {
+        const classes = getImageCallerClasses().filter(item => getImageCallerClassGrade(item) === String(grade));
+        classSelect.innerHTML = '<option value="">-- Chọn lớp --</option>' + classes.map(item =>
+            `<option value="${escapeHtml(String(item.id))}">${escapeHtml(item.name || 'Lớp chưa đặt tên')}</option>`
+        ).join('');
+        classSelect.value = IMAGE_CALLER_STATE.classId;
+    }
+
+    renderImageCallerStudentList(IMAGE_CALLER_STATE.students);
+    updateImageCallerStats();
+    imageCallerPrepareStudentImages(IMAGE_CALLER_STATE.students).then(() => {
+        if (!IMAGE_CALLER_STATE.winner || APP_STATE.currentPage !== 'image-caller') return;
+        const winnerIndex = IMAGE_CALLER_STATE.students.findIndex(student =>
+            imageCallerStudentKey(student) === imageCallerStudentKey(IMAGE_CALLER_STATE.winner)
+        );
+        const arena = document.getElementById('imageCallerArena');
+        if (!arena || winnerIndex < 0) return;
+        const bubbles = [...arena.querySelectorAll('.image-caller-bubble')];
+        const winnerBubble = bubbles[winnerIndex];
+        bubbles.forEach((bubble, index) => {
+            if (index !== winnerIndex) bubble.classList.add('is-dimmed');
+        });
+        if (winnerBubble) {
+            winnerBubble.classList.add('is-winner');
+            const { width, height } = imageCallerGetArenaSize();
+            const winnerSize = window.innerWidth <= 760 ? 190 : 240;
+            winnerBubble.style.transform = `translate(${Math.max(8, (width - winnerSize) / 2)}px, ${Math.max(8, (height - winnerSize) / 2)}px) scale(1)`;
+        }
+    });
+
+    const status = document.querySelector('.image-caller-status');
+    const title = document.querySelector('.image-caller-result h3');
+    const description = document.querySelector('.image-caller-result p');
+    const remaining = imageCallerGetRemainingIndexes().length;
+    if (IMAGE_CALLER_STATE.winner) {
+        if (status) status.textContent = '🎉 Học sinh được gọi';
+        if (title) title.textContent = IMAGE_CALLER_STATE.winner.fullName || 'Chưa có họ tên';
+        if (description) description.textContent = remaining > 0 ? `Lớp ${cls.name}` : 'Đã gọi hết học sinh trong lớp.';
+    } else {
+        if (status) status.textContent = 'Đã chọn lớp';
+        if (title) title.textContent = cls.name || 'Lớp đã chọn';
+        if (description) description.textContent = `${IMAGE_CALLER_STATE.students.length} học sinh đã sẵn sàng. Bấm “Gọi ngẫu nhiên” để bắt đầu.`;
+    }
+    imageCallerSetActionState(true);
+}
+
+function imageCallerEndSession() {
+    if (IMAGE_CALLER_STATE.isSpinning) return;
+    if (!IMAGE_CALLER_STATE.classId) return;
+    if (!confirm('Kết thúc phiên gọi tên hiện tại? Danh sách học sinh đã gọi trong phiên này sẽ được xóa.')) return;
+
+    imageCallerClearTimers();
+    imageCallerStopSpinSound();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+    IMAGE_CALLER_STATE.classId = '';
+    IMAGE_CALLER_STATE.students = [];
+    IMAGE_CALLER_STATE.winner = null;
+    IMAGE_CALLER_STATE.calledKeys.clear();
+
+    const gradeSelect = document.getElementById('imageCallerGradeSelect');
+    const classSelect = document.getElementById('imageCallerClassSelect');
+    if (gradeSelect) {
+        gradeSelect.value = '';
+        gradeSelect.disabled = false;
+    }
+    if (classSelect) {
+        classSelect.innerHTML = '<option value="">-- Chọn lớp --</option>';
+        classSelect.value = '';
+        classSelect.disabled = true;
+    }
+
+    const status = document.querySelector('.image-caller-status');
+    const title = document.querySelector('.image-caller-result h3');
+    const description = document.querySelector('.image-caller-result p');
+    if (status) status.textContent = 'Sẵn sàng';
+    if (title) title.textContent = 'Chưa chọn lớp';
+    if (description) description.textContent = 'Chọn lớp để hiển thị hình ảnh học sinh.';
+    resetImageCallerStudentList();
+}
+
+function resetImageCallerStudentList() {
+    const list = document.getElementById('imageCallerStudentList');
+    if (list) list.innerHTML = `<div class="image-caller-empty"><i class="fas fa-image"></i><strong>Chưa có danh sách</strong><span>Chọn khối và lớp để nạp danh sách học sinh.</span></div>`;
+    updateImageCallerStats(0);
+    IMAGE_CALLER_STATE.classId = '';
+    IMAGE_CALLER_STATE.students = [];
+    IMAGE_CALLER_STATE.winner = null;
+    IMAGE_CALLER_STATE.calledKeys.clear();
+    imageCallerRenderBubbles([]);
+    imageCallerSetActionState(false);
+}
+
+function imageCallerHandleClassChange(classId) {
+    imageCallerClearTimers();
+    const status = document.querySelector('.image-caller-status');
+    const title = document.querySelector('.image-caller-result h3');
+    const description = document.querySelector('.image-caller-result p');
+    if (!status || !title || !description) return;
+
+    if (!classId) {
+        status.textContent = 'Sẵn sàng';
+        title.textContent = 'Chưa chọn lớp';
+        description.textContent = 'Chọn lớp để hiển thị hình ảnh học sinh.';
+        resetImageCallerStudentList();
+        return;
+    }
+
+    const cls = getImageCallerClasses().find(item => item.id === classId);
+    const students = getImageCallerStudents(classId);
+    IMAGE_CALLER_STATE.classId = classId;
+    IMAGE_CALLER_STATE.students = students;
+    IMAGE_CALLER_STATE.winner = null;
+    IMAGE_CALLER_STATE.calledKeys.clear();
+
+    status.textContent = 'Đã chọn lớp';
+    title.textContent = cls?.name || 'Lớp đã chọn';
+    description.textContent = students.length > 0
+        ? `${students.length} học sinh đã sẵn sàng. Bấm “Gọi ngẫu nhiên” để bắt đầu.`
+        : 'Lớp này hiện chưa có học sinh trong dữ liệu.';
+
+    renderImageCallerStudentList(students);
+    updateImageCallerStats(students.length);
+    imageCallerSetActionState(students.length > 0);
+    imageCallerPrepareStudentImages(students);
+}
+
+window.imageCallerHandleGradeChange = imageCallerHandleGradeChange;
+window.imageCallerHandleClassChange = imageCallerHandleClassChange;
+window.imageCallerStartRandom = imageCallerStartRandom;
+window.imageCallerNext = imageCallerNext;
+window.imageCallerResetRound = imageCallerResetRound;
+window.imageCallerEndSession = imageCallerEndSession;
+
+function renderImageCaller() {
+    return `
+        <section class="image-caller-page">
+            <div class="image-caller-toolbar">
+                <div class="image-caller-heading">
+                    <div class="image-caller-heading-icon"><i class="fas fa-id-card"></i></div>
+                    <div><h2>Gọi tên bằng hình ảnh</h2><p>Ảnh học sinh chuyển động khoảng 10 giây rồi chọn ngẫu nhiên một em.</p></div>
+                </div>
+                <div class="image-caller-filters">
+                    <label class="image-caller-field"><span>Khối</span><select id="imageCallerGradeSelect" aria-label="Chọn khối">
+                        <option value="">-- Chọn khối --</option><option value="1">Khối 1</option><option value="2">Khối 2</option><option value="3">Khối 3</option><option value="4">Khối 4</option><option value="5">Khối 5</option>
+                    </select></label>
+                    <label class="image-caller-field"><span>Lớp</span><select id="imageCallerClassSelect" aria-label="Chọn lớp" disabled><option value="">-- Chọn lớp --</option></select></label>
+                </div>
+            </div>
+            <div class="image-caller-layout">
+                <div class="image-caller-stage">
+                    <div id="imageCallerArena" class="image-caller-arena"><div class="image-caller-empty-stage">Chọn khối và lớp để hiển thị hình ảnh học sinh.</div><div id="imageCallerCountdown" class="image-caller-countdown"></div></div>
+                    <div class="image-caller-result"><span class="image-caller-status">Sẵn sàng</span><h3>Chưa chọn lớp</h3><p>Chọn lớp để hiển thị hình ảnh học sinh.</p></div>
+                    <div class="image-caller-actions">
+                        <button id="imageCallerRandomBtn" type="button" class="btn btn-primary" onclick="imageCallerStartRandom()" disabled><i class="fas fa-shuffle"></i> Gọi ngẫu nhiên</button>
+                        <button id="imageCallerNextBtn" type="button" class="btn btn-secondary" onclick="imageCallerNext()" disabled><i class="fas fa-forward-step"></i> Gọi tiếp</button>
+                        <button id="imageCallerResetBtn" type="button" class="btn btn-secondary" onclick="imageCallerResetRound()" disabled><i class="fas fa-rotate-left"></i> Đặt lại</button>
+                        <button id="imageCallerEndBtn" type="button" class="btn btn-danger" onclick="imageCallerEndSession()" disabled><i class="fas fa-stop"></i> Kết thúc gọi tên</button>
+                    </div>
+                </div>
+                <aside class="image-caller-side">
+                    <div class="image-caller-side-card"><div class="image-caller-side-title"><i class="fas fa-users"></i> Danh sách gọi tên</div><div class="student-list-scroll" id="imageCallerStudentList"><div class="image-caller-empty"><i class="fas fa-image"></i><strong>Chưa có danh sách</strong><span>Chọn khối và lớp để nạp danh sách học sinh.</span></div></div></div>
+                    <div class="image-caller-stats"><div><strong id="imageCallerTotalCount">0</strong><span>Tổng học sinh</span></div><div><strong id="imageCallerCalledCount">0</strong><span>Đã gọi</span></div><div><strong id="imageCallerRemainingCount">0</strong><span>Còn lại</span></div></div>
+                </aside>
+            </div>
+        </section>
+    `;
+}
+
 function renderPage(page) {
     const previousPage = APP_STATE.currentPage;
 
@@ -6015,6 +6704,13 @@ function renderPage(page) {
     // - Nếu Vòng quay đang quay, không cho rời trang giữa animation để tránh mất kết quả.
     if (previousPage === 'wheel' && page !== 'wheel' && WHEEL_STATE.isSpinning) {
         showToast('Vòng quay đang chạy. Vui lòng chờ kết quả trước khi chuyển module.', 'warning', 2200);
+        return;
+    }
+
+    // BƯỚC 152.7: không rời module giữa lúc ảnh đang quay để tránh mất kết quả.
+    // Sau khi có kết quả, giáo viên có thể chuyển module bình thường và phiên vẫn được giữ.
+    if (previousPage === 'image-caller' && page !== 'image-caller' && IMAGE_CALLER_STATE.isSpinning) {
+        showToast('Đang gọi tên. Vui lòng chờ kết quả trước khi chuyển module.', 'warning', 2200);
         return;
     }
 
@@ -6057,6 +6753,7 @@ function renderPage(page) {
         case 'settings': container.innerHTML = renderSettings(); break;
         case 'public-content': container.innerHTML = renderPublicContentManager(); break;
         case 'wheel': container.innerHTML = renderWheel(); break;
+        case 'image-caller': container.innerHTML = renderImageCaller(); break;
         case 'millionaire': container.innerHTML = renderMillionaire(); break;
         default: container.innerHTML = '<p>Trang không tồn tại.</p>';
     }
@@ -6071,6 +6768,7 @@ function renderPage(page) {
         if (page === 'search') initSearch();
         if (page === 'statistics') initStatCharts();
         if (page === 'wheel') initWheel();
+        if (page === 'image-caller') initImageCaller();
         if (page === 'millionaire') initMillionaire();
         applyViewerReadOnlyUI();
         if (isViewer() && page === 'attendance') {
@@ -6095,6 +6793,7 @@ function getPageTitle(page) {
         settings: 'Cài đặt',
         'public-content': 'Nội dung website công khai',
         wheel: 'Vòng quay may mắn',
+        'image-caller': 'Gọi tên bằng hình ảnh',
         millionaire: 'Ai là triệu phú'
     };
     return titles[page] || page;
