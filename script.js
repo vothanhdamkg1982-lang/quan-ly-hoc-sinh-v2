@@ -3374,7 +3374,6 @@ function createMillionaireQuestionSet() {
         source: questionSource
     }));
 }
-<<<<<<< HEAD
 // ============================================================
 // BƯỚC 151.49.3F.20E
 // Đồng bộ giao diện Quản lý câu hỏi với RLS Supabase.
@@ -3391,8 +3390,6 @@ function millionaireCanManageQuestion(item) {
     return !!item?.createdBy && item.createdBy === APP_STATE.currentUserId;
 }
 
-=======
->>>>>>> 06be923749f5cf15a18cba9479661654badeabff
 function millionaireOpenQuestionManager() {
     MILLIONAIRE_STATE.managerOpen = true;
     MILLIONAIRE_STATE.editingQuestionId = null;
@@ -3465,13 +3462,10 @@ async function millionaireDeleteQuestion(id) {
 }
 
 async function millionaireSaveQuestion() {
-<<<<<<< HEAD
     if (!millionaireCanCreateQuestion()) {
         alert('Tài khoản chỉ xem không có quyền thêm hoặc sửa câu hỏi.');
         return;
     }
-=======
->>>>>>> 06be923749f5cf15a18cba9479661654badeabff
     const get = id => document.getElementById(id);
     const existingId = MILLIONAIRE_STATE.editingQuestionId;
     if (existingId) {
@@ -4340,13 +4334,9 @@ function millionaireToggleQuestionSelection(id, checked) {
 function millionaireSelectAllCustomQuestions(checked = true) {
     if (checked) {
         // BƯỚC 151.49.3F.17B.8B: chọn các câu đang hiển thị từ nguồn dùng chung.
-<<<<<<< HEAD
         MILLIONAIRE_STATE.selectedQuestionIds = getMillionaireQuestionsBySource('custom')
             .filter(millionaireCanManageQuestion)
             .map(q => q.id);
-=======
-        MILLIONAIRE_STATE.selectedQuestionIds = getMillionaireQuestionsBySource('custom').map(q => q.id);
->>>>>>> 06be923749f5cf15a18cba9479661654badeabff
     } else {
         MILLIONAIRE_STATE.selectedQuestionIds = [];
     }
@@ -4368,11 +4358,7 @@ async function millionaireDeleteSelectedQuestions() {
     }
 
     const items = getMillionaireQuestionsBySource('custom');
-<<<<<<< HEAD
     const targets = items.filter(q => selected.has(q.id) && millionaireCanManageQuestion(q));
-=======
-    const targets = items.filter(q => selected.has(q.id));
->>>>>>> 06be923749f5cf15a18cba9479661654badeabff
 
     if (!targets.length) {
         MILLIONAIRE_STATE.selectedQuestionIds = [];
@@ -4426,13 +4412,10 @@ async function millionaireDeleteSelectedQuestions() {
 
 // BƯỚC 151.49.3F.17B.10: Xóa toàn bộ câu hỏi tự thêm đang có trong ngân hàng dùng chung.
 async function millionaireDeleteAllCustomQuestions() {
-<<<<<<< HEAD
     if (!isAdmin()) {
         alert('Chỉ Admin mới được xóa toàn bộ ngân hàng câu hỏi tự thêm.');
         return;
     }
-=======
->>>>>>> 06be923749f5cf15a18cba9479661654badeabff
     const items = getMillionaireQuestionsBySource('custom');
     if (!items.length) {
         alert('Hiện không có câu hỏi tự thêm để xóa.');
