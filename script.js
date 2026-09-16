@@ -2839,7 +2839,8 @@ function mapMillionaireQuestionFromSupabase(row) {
             row.answer_d || ''
         ],
         c: correctMap[String(row.correct_answer || 'A').toUpperCase()] ?? 0,
-        createdBy: row.created_by || null
+        createdBy: row.created_by || null,
+        imageUrl: row.image_url || ''
     });
 }
 
@@ -2859,6 +2860,7 @@ async function loadMillionaireQuestionsFromSupabase() {
                 answer_c,
                 answer_d,
                 correct_answer,
+                image_url,
                 active,
                 created_by,
                 created_at
@@ -2973,6 +2975,7 @@ function mapMillionaireQuestionToSupabase(item) {
         answer_c: String(item?.a?.[2] || '').trim(),
         answer_d: String(item?.a?.[3] || '').trim(),
         correct_answer: correctAnswer,
+        image_url: String(item?.imageUrl || '').trim() || null,
         active: true,
         updated_at: new Date().toISOString()
     };
@@ -3001,6 +3004,7 @@ function normalizeMillionaireQuestionInput(item) {
         a: answers,
         c: Number.isInteger(Number(item?.c)) ? Number(item.c) : 0,
         createdBy: item?.createdBy || item?.created_by || null,
+        imageUrl: String(item?.imageUrl || item?.image_url || '').trim(),
         custom: true
     };
 }
@@ -3461,6 +3465,130 @@ async function millionaireDeleteQuestion(id) {
     }
 }
 
+function millionairePreviewQuestionImage(value) {
+    const wrap = document.getElementById('mqImagePreviewWrap');
+    const img = document.getElementById('mqImagePreview');
+    if (!wrap || !img) return;
+
+    const url = String(value || '').trim();
+    if (!url) {
+        wrap.style.display = 'none';
+        img.removeAttribute('src');
+        return;
+    }
+
+    wrap.style.display = 'block';
+    img.style.display = 'inline-block';
+    img.src = url;
+}
+window.millionairePreviewQuestionImage = millionairePreviewQuestionImage;
+
+// BƯỚC 153.9.5C: tải ảnh câu hỏi trực tiếp lên Supabase Storage.
+async function millionaireUploadQuestionImage(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+        alert('Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.');
+        input.value = '';
+        return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+        alert('Ảnh câu hỏi không được lớn hơn 5 MB.');
+        input.value = '';
+        return;
+    }
+
+    const button = document.getElementById('mqImageUploadButton');
+    const urlInput = document.getElementById('mqImageUrl');
+    if (button) {
+        button.disabled = true;
+        button.textContent = '⏳ Đang tải ảnh...';
+    }
+
+    try {
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        const unique = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))
+            .replace(/[^a-zA-Z0-9-]/g, '');
+        const path = `questions/${Date.now()}-${unique}.${ext}`;
+
+        const { error } = await supabase.storage
+            .from('question-images')
+            .upload(path, file, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: file.type
+            });
+        if (error) throw error;
+
+        const { data } = supabase.storage.from('question-images').getPublicUrl(path);
+        const publicUrl = String(data?.publicUrl || '').trim();
+        if (!publicUrl) throw new Error('Không lấy được URL công khai của ảnh.');
+
+        if (urlInput) urlInput.value = publicUrl;
+        millionairePreviewQuestionImage(publicUrl);
+        showToast('Đã tải ảnh câu hỏi lên Storage.', 'success', 2200);
+    } catch (error) {
+        console.error('[153.9.5C] Lỗi tải ảnh câu hỏi:', error);
+        alert('Không thể tải ảnh câu hỏi lên Supabase Storage.\n\n' + (error?.message || String(error)));
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = '📁 Chọn ảnh từ máy';
+        }
+        input.value = '';
+    }
+}
+window.millionaireUploadQuestionImage = millionaireUploadQuestionImage;
+
+function millionaireClearQuestionImage() {
+    const urlInput = document.getElementById('mqImageUrl');
+    const fileInput = document.getElementById('mqImageFile');
+    if (urlInput) urlInput.value = '';
+    if (fileInput) fileInput.value = '';
+    millionairePreviewQuestionImage('');
+}
+window.millionaireClearQuestionImage = millionaireClearQuestionImage;
+
+// BƯỚC 153.9.5D: chỉ nhận diện URL công khai thuộc bucket question-images.
+// URL ngoài hoặc URL không đúng bucket sẽ không bao giờ bị xóa khỏi Storage.
+function millionaireQuestionImageStoragePath(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return '';
+    try {
+        const parsed = new URL(raw, window.location.href);
+        const marker = '/storage/v1/object/public/question-images/';
+        const index = parsed.pathname.indexOf(marker);
+        if (index < 0) return '';
+        const encodedPath = parsed.pathname.slice(index + marker.length);
+        if (!encodedPath) return '';
+        return decodeURIComponent(encodedPath);
+    } catch (_) {
+        return '';
+    }
+}
+
+async function millionaireDeleteOldQuestionImageAfterSave(oldUrl, newUrl) {
+    const oldPath = millionaireQuestionImageStoragePath(oldUrl);
+    if (!oldPath) return;
+
+    const newPath = millionaireQuestionImageStoragePath(newUrl);
+    // Vẫn đang dùng chính file cũ thì tuyệt đối không xóa.
+    if (newPath && newPath === oldPath) return;
+
+    try {
+        const { error } = await supabase.storage
+            .from('question-images')
+            .remove([oldPath]);
+        if (error) throw error;
+        console.log('[153.9.5D] Đã xóa ảnh câu hỏi cũ khỏi Storage:', oldPath);
+    } catch (error) {
+        // Câu hỏi đã lưu thành công nên lỗi dọn file không được làm hỏng dữ liệu vừa lưu.
+        console.warn('[153.9.5D] Không thể xóa ảnh cũ khỏi Storage:', error);
+    }
+}
+
 async function millionaireSaveQuestion() {
     if (!millionaireCanCreateQuestion()) {
         alert('Tài khoản chỉ xem không có quyền thêm hoặc sửa câu hỏi.');
@@ -3468,12 +3596,15 @@ async function millionaireSaveQuestion() {
     }
     const get = id => document.getElementById(id);
     const existingId = MILLIONAIRE_STATE.editingQuestionId;
+    let existingItem = null;
+    let oldImageUrl = '';
     if (existingId) {
-        const existingItem = getMillionaireQuestionsBySource('custom').find(q => q.id === existingId);
+        existingItem = getMillionaireQuestionsBySource('custom').find(q => q.id === existingId);
         if (!existingItem || !millionaireCanManageQuestion(existingItem)) {
             alert('Bạn chỉ có thể sửa câu hỏi do chính mình tạo.');
             return;
         }
+        oldImageUrl = String(existingItem.imageUrl || existingItem.image_url || '').trim();
     }
 
     const item = normalizeMillionaireQuestionInput({
@@ -3489,7 +3620,8 @@ async function millionaireSaveQuestion() {
             get('mqA2')?.value || '',
             get('mqA3')?.value || ''
         ],
-        c: Number(get('mqCorrect')?.value ?? 0)
+        c: Number(get('mqCorrect')?.value ?? 0),
+        imageUrl: get('mqImageUrl')?.value || ''
     });
 
     const validationError = validateMillionaireQuestion(item);
@@ -3526,6 +3658,12 @@ async function millionaireSaveQuestion() {
         }
 
         const savedItem = mapMillionaireQuestionFromSupabase(savedRow);
+
+        // Chỉ dọn ảnh cũ SAU KHI bản ghi câu hỏi đã lưu thành công.
+        // Nếu lưu thất bại, đoạn này không chạy nên ảnh cũ được giữ nguyên.
+        if (existingId) {
+            await millionaireDeleteOldQuestionImageAfterSave(oldImageUrl, savedItem.imageUrl || savedItem.image_url || '');
+        }
 
         // Cập nhật ngay bộ nhớ đệm để giao diện không cần chờ tải lại trang.
         if (existingId) {
@@ -4477,7 +4615,8 @@ function renderMillionaireQuestionManager() {
         difficulty: 'easy',
         q: '',
         a: ['', '', '', ''],
-        c: 0
+        c: 0,
+        imageUrl: ''
     };
 
     const selectedIds = new Set((MILLIONAIRE_STATE.selectedQuestionIds || []).filter(id => manageableIds.has(id)));
@@ -4568,6 +4707,26 @@ function renderMillionaireQuestionManager() {
                     <span>Câu hỏi</span>
                     <textarea id="mqQuestion" rows="2" placeholder="Nhập nội dung câu hỏi">${escapeHtml(form.q || '')}</textarea>
                 </label>
+
+                <label class="millionaire-manager-wide">
+                    <span>Hình ảnh câu hỏi (URL)</span>
+                    <input id="mqImageUrl" type="url" value="${escapeHtml(form.imageUrl || '')}"
+                        placeholder="URL sẽ tự điền sau khi tải ảnh, hoặc có thể dán URL ảnh"
+                        oninput="millionairePreviewQuestionImage(this.value)">
+                </label>
+                <div class="millionaire-manager-wide" style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 10px;">
+                    <input id="mqImageFile" type="file" accept="image/jpeg,image/png,image/webp" style="display:none;"
+                        onchange="millionaireUploadQuestionImage(this)">
+                    <button id="mqImageUploadButton" type="button" class="btn btn-secondary"
+                        onclick="document.getElementById('mqImageFile')?.click()">📁 Chọn ảnh từ máy</button>
+                    <button type="button" class="btn btn-secondary" onclick="millionaireClearQuestionImage()">🗑️ Bỏ ảnh</button>
+                    <span style="align-self:center; font-size:12px; opacity:.72;">JPG, PNG, WebP · tối đa 5 MB</span>
+                </div>
+                <div id="mqImagePreviewWrap" style="${form.imageUrl ? '' : 'display:none;'} margin:8px 0 14px; text-align:center;">
+                    <img id="mqImagePreview" src="${escapeHtml(form.imageUrl || '')}" alt="Xem trước hình ảnh câu hỏi"
+                        style="max-width:100%; max-height:260px; object-fit:contain; border-radius:12px; border:1px solid var(--border-color, #d1d5db);"
+                        onerror="this.style.display='none'" onload="this.style.display='inline-block'">
+                </div>
 
                 <div class="millionaire-manager-answer-grid">
                     ${['A','B','C','D'].map((label, idx) => `
@@ -6671,7 +6830,8 @@ const IMAGE_QUIZ_STATE = {
     subject: '',
     topic: '',
     currentQuestion: null,
-    usedQuestionIds: new Set()
+    usedQuestionIds: new Set(),
+    stats: { total: 0, answered: 0, correct: 0, wrong: 0 }
 };
 
 function imageQuizUniqueValues(items, field) {
@@ -6749,6 +6909,7 @@ function imageQuizUpdateStartButton() {
 function imageQuizResetQuestionView() {
     IMAGE_QUIZ_STATE.currentQuestion = null;
     IMAGE_QUIZ_STATE.usedQuestionIds.clear();
+    imageQuizResetStats(0);
     const title = document.getElementById('imageQuizQuestionTitle');
     const info = document.getElementById('imageQuizBankInfo');
     if (title) title.textContent = 'Trắc nghiệm bằng hình ảnh';
@@ -6763,6 +6924,70 @@ function imageQuizResetQuestionView() {
 
     if (info) imageQuizUpdateInfo();
     imageQuizUpdateStartButton();
+}
+
+function imageQuizResetStats(total = 0) {
+    IMAGE_QUIZ_STATE.stats = { total, answered: 0, correct: 0, wrong: 0 };
+}
+
+function imageQuizStatsHtml() {
+    const stats = IMAGE_QUIZ_STATE.stats || { total: 0, answered: 0, correct: 0, wrong: 0 };
+    const remaining = Math.max(0, Number(stats.total || 0) - Number(stats.answered || 0));
+    return `
+        <div class="image-quiz-stats" style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:0 0 22px;">
+            <span style="padding:8px 13px;border:1px solid rgba(148,163,184,.25);border-radius:999px;"><b>Tổng câu:</b> ${stats.total}</span>
+            <span style="padding:8px 13px;border:1px solid rgba(148,163,184,.25);border-radius:999px;"><b>Đã trả lời:</b> ${stats.answered}</span>
+            <span style="padding:8px 13px;border:1px solid rgba(34,197,94,.45);border-radius:999px;"><b>Đúng:</b> ${stats.correct}</span>
+            <span style="padding:8px 13px;border:1px solid rgba(239,68,68,.45);border-radius:999px;"><b>Sai:</b> ${stats.wrong}</span>
+            <span style="padding:8px 13px;border:1px solid rgba(59,130,246,.45);border-radius:999px;"><b>Còn lại:</b> ${remaining}</span>
+        </div>`;
+}
+
+function imageQuizProgressHtml() {
+    const stats = IMAGE_QUIZ_STATE.stats || { total: 0 };
+    const total = Number(stats.total || 0);
+    const current = total > 0 ? Math.min(IMAGE_QUIZ_STATE.usedQuestionIds.size, total) : 0;
+    return `<div class="image-quiz-progress" style="text-align:center;margin:-8px 0 18px;font-weight:800;font-size:16px;">Câu ${current} / ${total}</div>`;
+}
+
+function imageQuizShowResult() {
+    const stage = document.querySelector('.image-quiz-page .image-quiz-stage');
+    if (!stage) return;
+    const stats = IMAGE_QUIZ_STATE.stats || { total: 0, answered: 0, correct: 0, wrong: 0 };
+    const total = Number(stats.total || 0);
+    const correct = Number(stats.correct || 0);
+    const wrong = Number(stats.wrong || 0);
+    const percent = total > 0 ? Math.round((correct / total) * 100) : 0;
+    IMAGE_QUIZ_STATE.currentQuestion = null;
+    stage.innerHTML = `
+        ${imageQuizStatsHtml()}
+        ${imageQuizProgressHtml()}
+        <div class="image-quiz-placeholder">
+            <div class="image-quiz-placeholder-icon"><i class="fas fa-trophy"></i></div>
+            <h3>Hoàn thành lượt trắc nghiệm</h3>
+            <p>${escapeHtml(IMAGE_QUIZ_STATE.subject)} - Khối ${escapeHtml(IMAGE_QUIZ_STATE.grade)} - ${escapeHtml(IMAGE_QUIZ_STATE.topic)}</p>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin:4px 0 22px;">
+            <span style="padding:10px 16px;border:1px solid rgba(148,163,184,.25);border-radius:12px;"><b>Tổng câu:</b> ${total}</span>
+            <span style="padding:10px 16px;border:1px solid rgba(34,197,94,.45);border-radius:12px;"><b>Số đúng:</b> ${correct}</span>
+            <span style="padding:10px 16px;border:1px solid rgba(239,68,68,.45);border-radius:12px;"><b>Số sai:</b> ${wrong}</span>
+            <span style="padding:10px 16px;border:1px solid rgba(59,130,246,.45);border-radius:12px;"><b>Tỷ lệ đúng:</b> ${percent}%</span>
+        </div>
+        <div style="display:flex;justify-content:center;">
+            <button id="imageQuizRetryBtn" type="button" class="btn btn-primary" style="min-width:160px;min-height:44px;justify-content:center;font-weight:800;"><i class="fas fa-redo"></i> Làm lại</button>
+        </div>`;
+    const retryButton = stage.querySelector('#imageQuizRetryBtn');
+    if (retryButton) retryButton.addEventListener('click', imageQuizStart);
+}
+
+function imageQuizUpdateStatsView() {
+    const stage = document.querySelector('.image-quiz-page .image-quiz-stage');
+    if (!stage) return;
+    const current = stage.querySelector('.image-quiz-stats');
+    if (!current) return;
+    const holder = document.createElement('div');
+    holder.innerHTML = imageQuizStatsHtml().trim();
+    current.replaceWith(holder.firstElementChild);
 }
 
 function imageQuizPlayResultSound(isCorrect) {
@@ -6799,6 +7024,12 @@ function imageQuizHandleAnswer(selectedIndex, button) {
     const correctIndex = Number(question.c);
     if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) return;
 
+    const isCorrect = selectedIndex === correctIndex;
+    IMAGE_QUIZ_STATE.stats.answered += 1;
+    if (isCorrect) IMAGE_QUIZ_STATE.stats.correct += 1;
+    else IMAGE_QUIZ_STATE.stats.wrong += 1;
+    imageQuizUpdateStatsView();
+
     stage.dataset.answered = '1';
     const buttons = Array.from(stage.querySelectorAll('.image-quiz-answers button'));
     buttons.forEach(btn => {
@@ -6807,7 +7038,7 @@ function imageQuizHandleAnswer(selectedIndex, button) {
     });
 
     const correctButton = buttons[correctIndex];
-    if (selectedIndex === correctIndex) {
+    if (isCorrect) {
         button.style.borderColor = '#22c55e';
         button.style.background = 'rgba(34, 197, 94, 0.16)';
         const strong = button.querySelector('strong');
@@ -6837,8 +7068,11 @@ function imageQuizHandleAnswer(selectedIndex, button) {
     nextButton.type = 'button';
     nextButton.className = 'btn btn-primary';
     nextButton.style.cssText = 'min-width:170px;min-height:44px;justify-content:center;font-weight:800;';
-    nextButton.innerHTML = 'Câu tiếp theo <i class=\"fas fa-arrow-right\"></i>';
-    nextButton.addEventListener('click', imageQuizNext);
+    const isLastAnswered = Number(IMAGE_QUIZ_STATE.stats.answered || 0) >= Number(IMAGE_QUIZ_STATE.stats.total || 0);
+    nextButton.innerHTML = isLastAnswered
+        ? '<i class="fas fa-flag-checkered"></i> Xem kết quả'
+        : 'Câu tiếp theo <i class="fas fa-arrow-right"></i>';
+    nextButton.addEventListener('click', isLastAnswered ? imageQuizShowResult : imageQuizNext);
     nextWrap.appendChild(nextButton);
     stage.appendChild(nextWrap);
 }
@@ -6863,9 +7097,17 @@ function imageQuizRenderQuestion(question) {
         D: String(answerList[3] ?? '')
     };
 
+    const imageUrl = String(question.imageUrl || question.image_url || '').trim();
+    const imageHtml = imageUrl
+        ? `<div class="image-quiz-question-image" style="display:flex;justify-content:center;margin:0 auto 22px;">
+               <img src="${escapeHtml(imageUrl)}" alt="Hình ảnh câu hỏi" style="display:block;max-width:min(520px,90%);max-height:300px;width:auto;height:auto;object-fit:contain;border-radius:14px;" loading="eager">
+           </div>`
+        : '';
+
     stage.innerHTML = `
+        ${imageQuizStatsHtml()}
         <div class="image-quiz-placeholder">
-            <div class="image-quiz-placeholder-icon"><i class="fas fa-image"></i></div>
+            ${imageHtml || '<div class="image-quiz-placeholder-icon"><i class="fas fa-image"></i></div>'}
             <h3 id="imageQuizQuestionTitle"></h3>
             <p id="imageQuizBankInfo"></p>
         </div>
@@ -6900,16 +7142,7 @@ function imageQuizNext() {
 
     const remaining = pool.filter((question, index) => !IMAGE_QUIZ_STATE.usedQuestionIds.has(imageQuizQuestionKey(question, index)));
     if (!remaining.length) {
-        const stage = document.querySelector('.image-quiz-page .image-quiz-stage');
-        if (stage) {
-            stage.innerHTML = `
-                <div class="image-quiz-placeholder">
-                    <div class="image-quiz-placeholder-icon"><i class="fas fa-check-circle"></i></div>
-                    <h3>Đã hoàn thành bộ câu hỏi</h3>
-                    <p>${escapeHtml(IMAGE_QUIZ_STATE.subject)} - Khối ${escapeHtml(IMAGE_QUIZ_STATE.grade)} - ${escapeHtml(IMAGE_QUIZ_STATE.topic)}</p>
-                </div>`;
-        }
-        IMAGE_QUIZ_STATE.currentQuestion = null;
+        imageQuizShowResult();
         return;
     }
 
@@ -6928,6 +7161,7 @@ function imageQuizStart() {
 
     // BƯỚC 153.6: bắt đầu một lượt mới và ghi nhận câu đầu tiên đã xuất hiện.
     IMAGE_QUIZ_STATE.usedQuestionIds.clear();
+    imageQuizResetStats(pool.length);
     const question = pool[Math.floor(Math.random() * pool.length)];
     const poolIndex = pool.indexOf(question);
     IMAGE_QUIZ_STATE.usedQuestionIds.add(imageQuizQuestionKey(question, poolIndex));
@@ -6993,6 +7227,7 @@ async function initImageQuiz() {
     IMAGE_QUIZ_STATE.subject = '';
     IMAGE_QUIZ_STATE.topic = '';
     IMAGE_QUIZ_STATE.currentQuestion = null;
+    imageQuizResetStats(0);
 
     imageQuizSetOptions(
         gradeSelect,
