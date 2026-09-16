@@ -6670,7 +6670,8 @@ const IMAGE_QUIZ_STATE = {
     grade: '',
     subject: '',
     topic: '',
-    currentQuestion: null
+    currentQuestion: null,
+    usedQuestionIds: new Set()
 };
 
 function imageQuizUniqueValues(items, field) {
@@ -6747,6 +6748,7 @@ function imageQuizUpdateStartButton() {
 
 function imageQuizResetQuestionView() {
     IMAGE_QUIZ_STATE.currentQuestion = null;
+    IMAGE_QUIZ_STATE.usedQuestionIds.clear();
     const title = document.getElementById('imageQuizQuestionTitle');
     const info = document.getElementById('imageQuizBankInfo');
     if (title) title.textContent = 'Trắc nghiệm bằng hình ảnh';
@@ -6828,18 +6830,25 @@ function imageQuizHandleAnswer(selectedIndex, button) {
         }
         imageQuizPlayResultSound(false);
     }
+
+    const nextWrap = document.createElement('div');
+    nextWrap.style.cssText = 'display:flex;justify-content:center;margin-top:20px;';
+    const nextButton = document.createElement('button');
+    nextButton.type = 'button';
+    nextButton.className = 'btn btn-primary';
+    nextButton.style.cssText = 'min-width:170px;min-height:44px;justify-content:center;font-weight:800;';
+    nextButton.innerHTML = 'Câu tiếp theo <i class=\"fas fa-arrow-right\"></i>';
+    nextButton.addEventListener('click', imageQuizNext);
+    nextWrap.appendChild(nextButton);
+    stage.appendChild(nextWrap);
 }
 
-function imageQuizStart() {
-    const pool = imageQuizGetFilteredQuestions();
-    if (!pool.length) {
-        imageQuizUpdateInfo();
-        return;
-    }
+function imageQuizQuestionKey(question, index = 0) {
+    if (question && question.id != null && String(question.id).trim()) return `id:${question.id}`;
+    return `fallback:${question?.grade || ''}|${question?.subject || ''}|${question?.topic || ''}|${question?.q || ''}|${index}`;
+}
 
-    // BƯỚC 153.4.8: object câu hỏi dùng chung có dạng q + a[0..3] + c.
-    // c là chỉ số đáp án đúng, chỉ lưu lại để dùng ở bước chấm đáp án sau; chưa hiển thị ở bước này.
-    const question = pool[Math.floor(Math.random() * pool.length)];
+function imageQuizRenderQuestion(question) {
     IMAGE_QUIZ_STATE.currentQuestion = question;
 
     const stage = document.querySelector('.image-quiz-page .image-quiz-stage');
@@ -6883,6 +6892,46 @@ function imageQuizStart() {
         button.style.cursor = 'pointer';
         button.addEventListener('click', () => imageQuizHandleAnswer(index, button));
     });
+}
+
+function imageQuizNext() {
+    const pool = imageQuizGetFilteredQuestions();
+    if (!pool.length) return;
+
+    const remaining = pool.filter((question, index) => !IMAGE_QUIZ_STATE.usedQuestionIds.has(imageQuizQuestionKey(question, index)));
+    if (!remaining.length) {
+        const stage = document.querySelector('.image-quiz-page .image-quiz-stage');
+        if (stage) {
+            stage.innerHTML = `
+                <div class="image-quiz-placeholder">
+                    <div class="image-quiz-placeholder-icon"><i class="fas fa-check-circle"></i></div>
+                    <h3>Đã hoàn thành bộ câu hỏi</h3>
+                    <p>${escapeHtml(IMAGE_QUIZ_STATE.subject)} - Khối ${escapeHtml(IMAGE_QUIZ_STATE.grade)} - ${escapeHtml(IMAGE_QUIZ_STATE.topic)}</p>
+                </div>`;
+        }
+        IMAGE_QUIZ_STATE.currentQuestion = null;
+        return;
+    }
+
+    const question = remaining[Math.floor(Math.random() * remaining.length)];
+    const poolIndex = pool.indexOf(question);
+    IMAGE_QUIZ_STATE.usedQuestionIds.add(imageQuizQuestionKey(question, poolIndex));
+    imageQuizRenderQuestion(question);
+}
+
+function imageQuizStart() {
+    const pool = imageQuizGetFilteredQuestions();
+    if (!pool.length) {
+        imageQuizUpdateInfo();
+        return;
+    }
+
+    // BƯỚC 153.6: bắt đầu một lượt mới và ghi nhận câu đầu tiên đã xuất hiện.
+    IMAGE_QUIZ_STATE.usedQuestionIds.clear();
+    const question = pool[Math.floor(Math.random() * pool.length)];
+    const poolIndex = pool.indexOf(question);
+    IMAGE_QUIZ_STATE.usedQuestionIds.add(imageQuizQuestionKey(question, poolIndex));
+    imageQuizRenderQuestion(question);
 }
 
 function imageQuizHandleGradeChange(value) {
