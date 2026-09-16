@@ -6763,6 +6763,73 @@ function imageQuizResetQuestionView() {
     imageQuizUpdateStartButton();
 }
 
+function imageQuizPlayResultSound(isCorrect) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+        const notes = isCorrect ? [660, 880] : [220, 165];
+        notes.forEach((freq, index) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + index * 0.12);
+            gain.gain.setValueAtTime(0.0001, now + index * 0.12);
+            gain.gain.exponentialRampToValueAtTime(0.16, now + index * 0.12 + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.12 + 0.18);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + index * 0.12);
+            osc.stop(now + index * 0.12 + 0.2);
+        });
+        setTimeout(() => { try { ctx.close(); } catch (_) {} }, 700);
+    } catch (_) {}
+}
+
+function imageQuizHandleAnswer(selectedIndex, button) {
+    const question = IMAGE_QUIZ_STATE.currentQuestion;
+    if (!question || !button) return;
+
+    const stage = document.querySelector('.image-quiz-page .image-quiz-stage');
+    if (!stage || stage.dataset.answered === '1') return;
+
+    const correctIndex = Number(question.c);
+    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) return;
+
+    stage.dataset.answered = '1';
+    const buttons = Array.from(stage.querySelectorAll('.image-quiz-answers button'));
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.style.cursor = 'default';
+    });
+
+    const correctButton = buttons[correctIndex];
+    if (selectedIndex === correctIndex) {
+        button.style.borderColor = '#22c55e';
+        button.style.background = 'rgba(34, 197, 94, 0.16)';
+        const strong = button.querySelector('strong');
+        if (strong) strong.textContent = '✓';
+        button.setAttribute('aria-label', 'Chính xác');
+        imageQuizPlayResultSound(true);
+    } else {
+        button.style.borderColor = '#ef4444';
+        button.style.background = 'rgba(239, 68, 68, 0.16)';
+        const selectedStrong = button.querySelector('strong');
+        if (selectedStrong) selectedStrong.textContent = '✕';
+        button.setAttribute('aria-label', 'Chưa chính xác');
+
+        if (correctButton) {
+            correctButton.style.borderColor = '#22c55e';
+            correctButton.style.background = 'rgba(34, 197, 94, 0.16)';
+            const correctStrong = correctButton.querySelector('strong');
+            if (correctStrong) correctStrong.textContent = '✓';
+            correctButton.setAttribute('aria-label', 'Đáp án đúng');
+        }
+        imageQuizPlayResultSound(false);
+    }
+}
+
 function imageQuizStart() {
     const pool = imageQuizGetFilteredQuestions();
     if (!pool.length) {
@@ -6794,10 +6861,10 @@ function imageQuizStart() {
             <p id="imageQuizBankInfo"></p>
         </div>
         <div class="image-quiz-answers" aria-label="Khu vực đáp án">
-            <button type="button" disabled><strong>A</strong><span id="imageQuizAnswerA"></span></button>
-            <button type="button" disabled><strong>B</strong><span id="imageQuizAnswerB"></span></button>
-            <button type="button" disabled><strong>C</strong><span id="imageQuizAnswerC"></span></button>
-            <button type="button" disabled><strong>D</strong><span id="imageQuizAnswerD"></span></button>
+            <button type="button" data-answer-index="0"><strong>A</strong><span id="imageQuizAnswerA"></span></button>
+            <button type="button" data-answer-index="1"><strong>B</strong><span id="imageQuizAnswerB"></span></button>
+            <button type="button" data-answer-index="2"><strong>C</strong><span id="imageQuizAnswerC"></span></button>
+            <button type="button" data-answer-index="3"><strong>D</strong><span id="imageQuizAnswerD"></span></button>
         </div>`;
 
     const title = stage.querySelector('#imageQuizQuestionTitle');
@@ -6808,6 +6875,13 @@ function imageQuizStart() {
     Object.entries(answers).forEach(([letter, value]) => {
         const span = stage.querySelector(`#imageQuizAnswer${letter}`);
         if (span) span.textContent = value;
+    });
+
+    stage.dataset.answered = '0';
+    stage.querySelectorAll('.image-quiz-answers button').forEach((button, index) => {
+        button.disabled = false;
+        button.style.cursor = 'pointer';
+        button.addEventListener('click', () => imageQuizHandleAnswer(index, button));
     });
 }
 
