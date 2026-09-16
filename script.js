@@ -34,7 +34,9 @@ const WHEEL_STATE = {
     ctx: null,
     rotation: 0,
     audioEnabled: true,
-    winnerId: null
+    winnerId: null,
+    totalClassStudents: 0,
+    absentTodayCount: 0
 };
 
 // ============================================================
@@ -274,6 +276,7 @@ function renderWheel() {
                 </div>
 
                 <div class="wheel-stat-box stat-total"><i class="fas fa-user"></i><span>Tổng:<strong id="wheelStudentCount">0</strong></span></div>
+                <div class="wheel-stat-box stat-absent"><i class="fas fa-user-times"></i><span>Vắng:<strong id="wheelAbsentCount">0</strong></span></div>
                 <div class="wheel-stat-box stat-called"><i class="fas fa-check-circle"></i><span>Đã gọi:<strong id="wheelCalledCount">0</strong></span></div>
                 <div class="wheel-stat-box stat-left"><i class="far fa-clock"></i><span>Còn lại:<strong id="wheelRemainingCount">0</strong></span></div>
 
@@ -410,11 +413,9 @@ function initWheel() {
     // Chỉ tải lớp lần đầu. Nếu đã có participants thì khôi phục nguyên trạng
     // called/enabled/currentWinner/rotation thay vì gọi loadWheelStudents() làm reset.
     if (WHEEL_STATE.selectedClassId) {
-        if (Array.isArray(WHEEL_STATE.participants) && WHEEL_STATE.participants.length > 0) {
-            restoreWheelUIFromState();
-        } else {
-            loadWheelStudents(WHEEL_STATE.selectedClassId);
-        }
+        // BƯỚC 161.3-R2: mỗi lần quay lại Vòng quay phải đối chiếu lại Điểm danh,
+        // nhưng vẫn bảo toàn trạng thái called/enabled của những học sinh còn có mặt.
+        loadWheelStudents(WHEEL_STATE.selectedClassId, true);
     } else {
         drawWheel();
         updateWheelStats();
@@ -446,6 +447,8 @@ function onWheelClassChange() {
         WHEEL_STATE.selectedStudents = [];
         WHEEL_STATE.currentWinner = null;
         WHEEL_STATE.winnerId = null;
+        WHEEL_STATE.totalClassStudents = 0;
+        WHEEL_STATE.absentTodayCount = 0;
         document.getElementById('wheelResult').style.display = 'none';
         document.querySelector('.wheel-result-panel')?.classList.remove('has-winner');
         updateWheelStats();
@@ -465,26 +468,25 @@ function onWheelClassChange() {
     loadWheelStudents(classId);
 }
 
-function loadWheelStudents(classId) {
-    const classObj = (APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes).find(c => c.id === classId);
+async function loadWheelStudents(classId, preserveSession = false) {
+    const classObj = (APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes).find(c => String(c.id) === String(classId));
     if (!classObj) {
         showToast('Không tìm thấy lớp!', 'error');
         return;
     }
-    
-    let students = APP_STATE.students.filter(s => s.class_id === classId);
-    
+
+    let students = APP_STATE.students.filter(s => String(s.class_id) === String(classId));
     if (students.length === 0) {
         students = APP_STATE.students.filter(s => s.class === classObj.name || s.class_code === classObj.name);
     }
-    
+
     if (students.length === 0) {
         WHEEL_STATE.participants = [];
         WHEEL_STATE.remainingStudents = [];
         WHEEL_STATE.selectedStudents = [];
         WHEEL_STATE.currentWinner = null;
         WHEEL_STATE.winnerId = null;
-        document.getElementById('wheelResult').style.display = 'none';
+        document.getElementById('wheelResult')?.style && (document.getElementById('wheelResult').style.display = 'none');
         document.querySelector('.wheel-result-panel')?.classList.remove('has-winner');
         showToast('Lớp này chưa có học sinh.', 'warning');
         updateWheelStats();
@@ -492,38 +494,100 @@ function loadWheelStudents(classId) {
         drawWheel();
         return;
     }
-    
-    // Loại bỏ trùng và sắp xếp
+
+    // BƯỚC 161.3-R2: dùng đúng ngày mặc định của module Điểm danh.
+    // renderAttendance() cũng dùng UTC ISO theo cách này, vì vậy Vòng quay phải dùng
+    // cùng một khóa ngày để không lệch 1 ngày ở múi giờ Việt Nam vào buổi sáng sớm.
+    const attendanceDate = new Date().toISOString().split('T')[0];
+    let absentStudentUuids = new Set();
+
+    try {
+        const { data: attendanceRows, error: attendanceError } = await supabase
+            .from('app3_attendance')
+            .select('student_id,status')
+            .eq('class_id', classObj.id)
+            .eq('attendance_date', attendanceDate);
+
+        if (attendanceError) throw attendanceError;
+
+        absentStudentUuids = new Set(
+            (attendanceRows || [])
+                .filter(row => ['Vắng', 'Phép', 'Không phép'].includes(String(row.status || '').trim()))
+                .map(row => String(row.student_id || ''))
+                .filter(Boolean)
+        );
+    } catch (err) {
+        console.warn('Không đồng bộ được điểm danh cho Vòng quay:', err);
+        // Không làm hỏng Vòng quay nếu Supabase tạm lỗi: giữ danh sách hiện có.
+        if (preserveSession && Array.isArray(WHEEL_STATE.participants) && WHEEL_STATE.participants.length) {
+            restoreWheelUIFromState();
+            return;
+        }
+    }
+
+    // BƯỚC 161.3-R3: Tổng = sĩ số gốc của lớp; Vắng = số học sinh bị loại do điểm danh.
+    // Hai số này độc lập với participants để Tổng không giảm từ 9 xuống 8 khi có 1 em vắng.
+    const uniqueClassIds = new Set();
+    students.forEach(student => {
+        const displayId = String(student.id || '');
+        if (displayId) uniqueClassIds.add(displayId);
+    });
+    WHEEL_STATE.totalClassStudents = uniqueClassIds.size;
+    WHEEL_STATE.absentTodayCount = students.filter(s => absentStudentUuids.has(String(s.db_uuid || ''))).length;
+
+    // Loại trùng học sinh theo mã hiển thị, sau đó LOẠI HẲN học sinh vắng khỏi
+    // participants. student.db_uuid chính là app3_students.id mà Điểm danh lưu vào student_id.
     const uniqueStudents = [];
     const seenIds = new Set();
-    students.forEach(s => {
-        if (!seenIds.has(s.id)) {
-            seenIds.add(s.id);
-            uniqueStudents.push(s);
-        }
+    students.forEach(student => {
+        const displayId = String(student.id || '');
+        const uuid = String(student.db_uuid || '');
+        if (!displayId || seenIds.has(displayId) || absentStudentUuids.has(uuid)) return;
+        seenIds.add(displayId);
+        uniqueStudents.push(student);
     });
-    uniqueStudents.sort((a, b) => a.fullName.localeCompare(b.fullName, 'vi'));
-    
-    WHEEL_STATE.participants = uniqueStudents.map(s => ({
-        ...s,
-        called: false,
-        enabled: true
-    }));
-    
+    uniqueStudents.sort((a, b) => String(a.fullName || '').localeCompare(String(b.fullName || ''), 'vi'));
+
+    const oldById = new Map(
+        (preserveSession ? (WHEEL_STATE.participants || []) : []).map(item => [String(item.id), item])
+    );
+
+    WHEEL_STATE.participants = uniqueStudents.map(student => {
+        const old = oldById.get(String(student.id));
+        return {
+            ...student,
+            called: old ? !!old.called : false,
+            enabled: old ? old.enabled !== false : true
+        };
+    });
+
+    // Nếu người thắng của phiên vừa được đánh dấu vắng, không tiếp tục hiển thị em đó.
+    if (WHEEL_STATE.currentWinner) {
+        const winnerStillPresent = WHEEL_STATE.participants.some(s => String(s.id) === String(WHEEL_STATE.currentWinner.id));
+        if (!winnerStillPresent) {
+            WHEEL_STATE.currentWinner = null;
+            WHEEL_STATE.winnerId = null;
+        }
+    }
+
     WHEEL_STATE.remainingStudents = WHEEL_STATE.participants.filter(s => s.enabled !== false && !s.called);
-    WHEEL_STATE.selectedStudents = [];
-    WHEEL_STATE.currentWinner = null;
-    WHEEL_STATE.winnerId = null;
-    document.getElementById('wheelResult').style.display = 'none';
-        document.querySelector('.wheel-result-panel')?.classList.remove('has-winner');
-    
+    if (!preserveSession) WHEEL_STATE.selectedStudents = [];
+
+    const resultEl = document.getElementById('wheelResult');
+    if (resultEl && !WHEEL_STATE.currentWinner) resultEl.style.display = 'none';
+    document.querySelector('.wheel-result-panel')?.classList.toggle('has-winner', !!WHEEL_STATE.currentWinner);
+
     updateWheelStats();
     renderStudentList();
     drawWheel();
-    
-    showToast(`Đã tải ${WHEEL_STATE.participants.length} học sinh từ lớp ${WHEEL_STATE.selectedClassName}`, 'success', 1500);
-}
+    saveWheelStateToStorage();
 
+    const absentCount = students.filter(s => absentStudentUuids.has(String(s.db_uuid || ''))).length;
+    if (!preserveSession) {
+        const suffix = absentCount > 0 ? ` • Đã loại ${absentCount} học sinh vắng hôm nay` : '';
+        showToast(`Đã tải ${WHEEL_STATE.participants.length} học sinh từ lớp ${WHEEL_STATE.selectedClassName}${suffix}`, 'success', 1800);
+    }
+}
 function getEnabledWheelParticipants() {
     return WHEEL_STATE.participants.filter(s => s.enabled !== false);
 }
@@ -587,10 +651,14 @@ function updateWheelStats() {
     const called = enabled.filter(s => s.called).length;
 
     const countEl = document.getElementById('wheelStudentCount');
+    const absentEl = document.getElementById('wheelAbsentCount');
     const calledEl = document.getElementById('wheelCalledCount');
     const remainingEl = document.getElementById('wheelRemainingCount');
 
-    if (countEl) countEl.textContent = enabled.length;
+    // Tổng là sĩ số gốc của lớp; không giảm khi học sinh vắng bị loại khỏi vòng quay.
+    const totalClassStudents = Number(WHEEL_STATE.totalClassStudents) || enabled.length + (Number(WHEEL_STATE.absentTodayCount) || 0);
+    if (countEl) countEl.textContent = totalClassStudents;
+    if (absentEl) absentEl.textContent = Number(WHEEL_STATE.absentTodayCount) || 0;
     if (calledEl) calledEl.textContent = called;
     if (remainingEl) remainingEl.textContent = WHEEL_STATE.preventDuplicates ? remaining.length : enabled.length;
     saveWheelStateToStorage();
