@@ -2022,9 +2022,9 @@ function isAssignedPairAccessible(classId, subjectId) {
     );
 }
 
-// BƯỚC 162.6D.1: khóa lại quyền Lớp ↔ Môn ↔ Học sinh ở tầng xử lý
-// Khen thưởng/Kỷ luật, không chỉ dựa vào selector trên giao diện.
-function isRewardDisciplineContextAccessible(classId, subjectId, studentUuid = '') {
+// BƯỚC 164.3.1: kiểm tra dùng chung quyền Lớp ↔ Môn ↔ Học sinh ở tầng xử lý.
+// Dùng cho Khen thưởng/Kỷ luật và Nhận xét học tập, không chỉ dựa vào selector giao diện.
+function isClassSubjectStudentContextAccessible(classId, subjectId, studentUuid = '') {
     if (!classId || !subjectId) return false;
     if (!isAssignedPairAccessible(classId, subjectId)) return false;
 
@@ -2374,7 +2374,8 @@ async function loadAllData() {
             uploadDate: f.created_at,
             desc: f.description,
             path: f.file_path,
-            url: f.file_url
+            url: f.file_url,
+            uploadedBy: f.uploaded_by || null
         }));
 
         const settings = settingsResult.data;
@@ -2699,6 +2700,10 @@ function openAddLearningComment() {
             showToast('Học sinh không thuộc lớp đã chọn.', 'error');
             return;
         }
+        if (!isClassSubjectStudentContextAccessible(classId, subjectId, studentUuid)) {
+            showToast('Bạn không có quyền thao tác với Lớp – Môn – Học sinh này.', 'warning');
+            return;
+        }
 
         try {
             const { data, error } = await supabase.from('app3_learning_comments').insert([{
@@ -2876,6 +2881,10 @@ window.editLearningComment = function(commentId) {
             showToast('Học sinh không thuộc lớp đã chọn.', 'error');
             return;
         }
+        if (!isClassSubjectStudentContextAccessible(classId, subjectId, studentUuid)) {
+            showToast('Bạn không có quyền thao tác với Lớp – Môn – Học sinh này.', 'warning');
+            return;
+        }
 
         try {
             const { data, error } = await supabase.from('app3_learning_comments').update({
@@ -2921,6 +2930,12 @@ window.deleteLearningComment = async function(commentId) {
             'error'
         );
 
+        return;
+    }
+
+    const commentSubjectId = comment.subjectId || getSubjectId(comment.subject);
+    if (!isClassSubjectStudentContextAccessible(comment.classId, commentSubjectId, comment.studentId)) {
+        showToast('Bạn không có quyền xóa nhận xét học tập này.', 'warning');
         return;
     }
 
@@ -12605,7 +12620,7 @@ function openAddReward() {
             showToast('Vui lòng chọn đầy đủ Lớp, Môn, Học sinh và nhập nội dung!', 'error');
             return;
         }
-        if (!isRewardDisciplineContextAccessible(classId, subjectId, studentUuid)) {
+        if (!isClassSubjectStudentContextAccessible(classId, subjectId, studentUuid)) {
             showToast('Bạn không có quyền thao tác với Lớp – Môn – Học sinh này.', 'warning');
             return;
         }
@@ -12630,7 +12645,7 @@ async function deleteReward(id) {
     if (!requireEditPermission('xóa khen thưởng')) return;
     const reward = APP_STATE.rewards.find(rew => rew.id === id);
     if (!reward) return;
-    if (!isRewardDisciplineContextAccessible(reward.classId, reward.subjectId, reward.studentId)) {
+    if (!isClassSubjectStudentContextAccessible(reward.classId, reward.subjectId, reward.studentId)) {
         showToast('Bạn không có quyền xóa khen thưởng này.', 'warning');
         return;
     }
@@ -12751,7 +12766,7 @@ function openAddDiscipline() {
             showToast('Vui lòng chọn đầy đủ Lớp, Môn, Học sinh và nhập nội dung!', 'error');
             return;
         }
-        if (!isRewardDisciplineContextAccessible(classId, subjectId, studentUuid)) {
+        if (!isClassSubjectStudentContextAccessible(classId, subjectId, studentUuid)) {
             showToast('Bạn không có quyền thao tác với Lớp – Môn – Học sinh này.', 'warning');
             return;
         }
@@ -12775,7 +12790,7 @@ async function deleteDiscipline(id) {
     if (!requireEditPermission('xóa kỷ luật')) return;
     const discipline = APP_STATE.disciplines.find(dis => dis.id === id);
     if (!discipline) return;
-    if (!isRewardDisciplineContextAccessible(discipline.classId, discipline.subjectId, discipline.studentId)) {
+    if (!isClassSubjectStudentContextAccessible(discipline.classId, discipline.subjectId, discipline.studentId)) {
         showToast('Bạn không có quyền xóa kỷ luật này.', 'warning');
         return;
     }
@@ -12822,6 +12837,14 @@ function getFileDisplayInfo(file) {
         icon: 'fa-file',
         className: 'file-kind-other'
     };
+}
+
+// BƯỚC 164.4.1: Teacher chỉ được sửa/xóa file do chính tài khoản đó tải lên.
+// Admin quản lý toàn bộ; Viewer chỉ xem/tải xuống theo cơ chế read-only hiện có.
+function canManageFileRecord(file) {
+    if (isAdmin()) return true;
+    if (!isTeacher()) return false;
+    return !!file?.uploadedBy && !!APP_STATE.currentUserId && file.uploadedBy === APP_STATE.currentUserId;
 }
 
 function renderFiles() {
@@ -12882,6 +12905,7 @@ function renderFiles() {
                                 ? '<tr><td colspan="7" class="text-center text-muted files-empty">Chưa có file nào.</td></tr>'
                                 : files.map((f, i) => {
                                     const fileInfo = getFileDisplayInfo(f);
+                                    const canManageThisFile = canManageFileRecord(f);
                                     return `
                                     <tr>
                                         <td>${i + 1}</td>
@@ -12901,8 +12925,8 @@ function renderFiles() {
                                             <div class="table-actions file-actions">
                                                 ${f.url ? `<button class="btn-icon file-action-view" onclick="viewFile('${f.id}')" title="Xem trực tiếp" aria-label="Xem trực tiếp"><i class="fas fa-eye"></i></button>` : `<span class="text-muted file-action-disabled" title="File mẫu không có dữ liệu"><i class="fas fa-eye-slash"></i></span>`}
                                                 <button class="btn-icon file-action-download" onclick="downloadFile('${f.id}')" title="Tải xuống" aria-label="Tải xuống"><i class="fas fa-download"></i></button>
-                                                <button class="btn-icon file-action-edit" onclick="editFile('${f.id}')" title="Sửa thông tin" aria-label="Sửa thông tin"><i class="fas fa-pen"></i></button>
-                                                <button class="btn-icon file-action-delete" onclick="deleteFile('${f.id}')" title="Xóa file" aria-label="Xóa file"><i class="fas fa-trash"></i></button>
+                                                ${canManageThisFile ? `<button class="btn-icon file-action-edit" onclick="editFile('${f.id}')" title="Sửa thông tin" aria-label="Sửa thông tin"><i class="fas fa-pen"></i></button>` : ''}
+                                                ${canManageThisFile ? `<button class="btn-icon file-action-delete" onclick="deleteFile('${f.id}')" title="Xóa file" aria-label="Xóa file"><i class="fas fa-trash"></i></button>` : ''}
                                             </div>
                                         </td>
                                     </tr>`;
@@ -13080,7 +13104,8 @@ async function openUploadFile() {
                     uploadDate: fileMeta.created_at,
                     desc: fileMeta.description,
                     path: fileMeta.file_path,
-                    url: fileMeta.file_url
+                    url: fileMeta.file_url,
+                    uploadedBy: fileMeta.uploaded_by || uploadUserId
                 });
                 showToast('Tải file thành công!');
                 renderPage('files');
@@ -13324,6 +13349,10 @@ function editFile(id) {
     if (!requireEditPermission('sửa file')) return;
     const file = APP_STATE.files.find(f => f.id === id);
     if (!file) return;
+    if (!canManageFileRecord(file)) {
+        showToast('Bạn chỉ được sửa file do chính tài khoản của mình tải lên.', 'warning', 2600);
+        return;
+    }
     showModal('Sửa file', `
         <div class="form-group"><label>Tên file</label><input type="text" id="editFileName" value="${file.name}"></div>
         <div class="form-group"><label>Mô tả</label><input type="text" id="editFileDesc" value="${file.desc || ''}"></div>
@@ -13336,13 +13365,15 @@ function editFile(id) {
                 return;
             }
             try {
-                const { error } = await supabase
+                let updateQuery = supabase
                     .from('app3_files')
                     .update({
                         file_name: newName,
                         description: newDesc
                     })
                     .eq('id', id);
+                if (isTeacher()) updateQuery = updateQuery.eq('uploaded_by', APP_STATE.currentUserId);
+                const { error } = await updateQuery;
                 if (error) throw error;
                 file.name = newName;
                 file.desc = newDesc;
@@ -13359,6 +13390,10 @@ async function deleteFile(id) {
     if (!requireEditPermission('xóa file')) return;
     const file = APP_STATE.files.find(f => f.id === id);
     if (!file) return;
+    if (!canManageFileRecord(file)) {
+        showToast('Bạn chỉ được xóa file do chính tài khoản của mình tải lên.', 'warning', 2600);
+        return;
+    }
     const confirmed = await showModal('Xóa file', `Bạn có chắc muốn xóa file <strong>${file.name}</strong>?`, 'Xóa', 'Hủy');
     if (confirmed) {
         try {
