@@ -16638,6 +16638,15 @@ async function importScoresExcel(event) {
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
         const subject = APP_STATE.currentSubject;
         const subjectId = getSubjectId(subject);
+
+        // BƯỚC 164.6.1: Import Excel phải tuân đúng cặp Lớp ↔ Môn được phân công.
+        // Không chỉ tin vào lớp/môn đang hiển thị trên giao diện.
+        const selectedClassObj = (APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes || [])
+            .find(c => c.name === selectedClass);
+        if (!selectedClassObj || !subjectId || !isAssignedPairAccessible(selectedClassObj.id, subjectId)) {
+            throw new Error(`Bạn không có quyền nhập điểm cho ${selectedClass} - ${subject}.`);
+        }
+
         const payload = [];
         const invalidRows = [];
 
@@ -18431,6 +18440,16 @@ function collectVnEduImportRows(wb){
             if(detectedClass&&rememberVnEduClassPrefix(detectedClass,info.prefix))info.cls=detectedClass;
         }
         if(!info.cls){errors.push(`${sn}: chưa xác định được lớp cho mã VNEDU ${info.prefix}`);continue;}
+
+        // BƯỚC 164.6.1: mỗi sheet VNEDU phải thuộc đúng cặp Lớp ↔ Môn được phân công.
+        // Chặn ngay ở tầng xử lý trước khi gom bản ghi để upsert hàng loạt.
+        const importClass=(APP_STATE.allClasses?.length?APP_STATE.allClasses:APP_STATE.classes||[]).find(c=>c.name===info.cls);
+        const importSubjectId=getSubjectId(info.subject);
+        if(!importClass||!importSubjectId||!isAssignedPairAccessible(importClass.id,importSubjectId)){
+            errors.push(`${sn}: bạn không có quyền nhập dữ liệu cho ${info.cls} - ${info.subject}`);
+            continue;
+        }
+
         if(selectedPeriod&&info.period!==selectedPeriod){errors.push(`${sn}: giai đoạn ${info.period.toUpperCase()} khác lựa chọn ${selectedPeriod.toUpperCase()}`);continue;}
         if(!firstTarget) firstTarget={sheet:sn,cls:info.cls,subject:info.subject,period:info.period};
         const h=rows.findIndex(r=>normalizeVnEduText(r?.[0]).toUpperCase()==='STT'&&/Mã học sinh/i.test(normalizeVnEduText(r?.[1])));
