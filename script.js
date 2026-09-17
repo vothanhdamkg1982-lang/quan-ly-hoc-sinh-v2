@@ -928,7 +928,7 @@ function spinWheel() {
     } while (finalRotation <= currentRotation + 2 * Math.PI * 3); // quay ít nhất 3 vòng
     
     const targetAngle = finalRotation - currentRotation;
-    const duration = 4000 + Math.random() * 1000;
+    const duration = (4000 + Math.random() * 1000) * 3; // BƯỚC 161.5: thời lượng quay gấp 3 lần
     const startedAt = Date.now();
     let animationFrameId = null;
     let safetyTimerId = null;
@@ -1389,6 +1389,7 @@ function playCelebrationSoundAsync() {
             winnerAudioPlayer.addEventListener('ended', done, { once: true });
             winnerAudioPlayer.addEventListener('error', failed, { once: true });
             winnerAudioPlayer.src = config.winnerUrl.trim();
+            winnerAudioPlayer.volume = 0.5; // BƯỚC 161.5: âm thanh chúc mừng vừa nghe
             winnerAudioPlayer.currentTime = 0;
             winnerAudioPlayer.play().catch(failed);
         });
@@ -1406,6 +1407,8 @@ function playCelebrationSound() {
 
     if (config.winnerUrl && config.winnerUrl.trim() !== '') {
         winnerAudioPlayer.src = config.winnerUrl.trim();
+        winnerAudioPlayer.volume = 0.5; // BƯỚC 161.5: âm thanh chúc mừng vừa nghe
+        winnerAudioPlayer.currentTime = 0;
         winnerAudioPlayer.play().catch(err => {
             console.warn('⚠️ Không thể phát âm thanh chiến thắng từ URL:', err);
             playCelebrationSoundFallback();
@@ -1443,7 +1446,7 @@ function playCelebrationSoundFallback() {
             gainNode.connect(ctx.destination);
             oscillator.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.1);
             oscillator.type = 'sine';
-            gainNode.gain.setValueAtTime(0.08, ctx.currentTime + i * 0.1);
+            gainNode.gain.setValueAtTime(0.04, ctx.currentTime + i * 0.1); // BƯỚC 161.5: giảm 50% âm chúc mừng fallback
             gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.1 + 0.2);
             oscillator.start(ctx.currentTime + i * 0.1);
             oscillator.stop(ctx.currentTime + i * 0.1 + 0.2);
