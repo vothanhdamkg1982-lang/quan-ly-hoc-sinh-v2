@@ -16528,10 +16528,19 @@ async function saveSubjectConfig(subjectId) {
 function getAdvancedReportRows() {
     const subject = document.getElementById('advancedReportSubject')?.value || APP_STATE.statSubject || APP_STATE.currentSubject;
     const className = document.getElementById('advancedReportClass')?.value || '';
-    return APP_STATE.students.filter(s => !className || s.class === className).map(s => {
-        const sc = APP_STATE.scores[s.id]?.[subject] || {};
-        return {'Mã HS':s.id,'Họ tên':s.fullName,'Lớp':s.class,'Khối':s.grade,'Môn':subject,'Giữa kỳ 1':sc.giuaKy1||'','Cuối kỳ 1':sc.cuoiKy1??'','Giữa kỳ 2':sc.giuaKy2||'','Cuối kỳ 2':sc.cuoiKy2??'','Năng lực':sc.competence||'','Phẩm chất':sc.quality||''};
-    });
+
+    // BƯỚC 164.2: Xuất báo cáo phải dùng đúng cùng phạm vi Môn → Lớp
+    // đang được phép hiển thị ở trang Thống kê. Không lấy trực tiếp toàn bộ
+    // APP_STATE.students đối với Teacher/Viewer có phạm vi assigned.
+    const allowedClassIds = new Set(getAccessibleClassesForSubject(subject).map(c => c.id));
+
+    return APP_STATE.students
+        .filter(s => allowedClassIds.has(s.class_id))
+        .filter(s => !className || s.class === className)
+        .map(s => {
+            const sc = APP_STATE.scores[s.id]?.[subject] || {};
+            return {'Mã HS':s.id,'Họ tên':s.fullName,'Lớp':s.class,'Khối':s.grade,'Môn':subject,'Giữa kỳ 1':sc.giuaKy1||'','Cuối kỳ 1':sc.cuoiKy1??'','Giữa kỳ 2':sc.giuaKy2||'','Cuối kỳ 2':sc.cuoiKy2??'','Năng lực':sc.competence||'','Phẩm chất':sc.quality||''};
+        });
 }
 function exportAdvancedReport() {
     const rows = getAdvancedReportRows();
