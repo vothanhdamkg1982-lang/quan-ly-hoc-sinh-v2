@@ -80,6 +80,29 @@ function clearWheelStateStorage() {
     } catch (err) {}
 }
 
+// BƯỚC 162.5B: phiên Vòng quay cũ chỉ được khôi phục nếu lớp vẫn còn
+// nằm trong phạm vi truy cập của tài khoản hiện tại.
+function isWheelClassAccessibleNow(classId) {
+    if (!classId) return false;
+    const allowedClasses = hasAssignedScope()
+        ? getAccessibleClassesForSubject('')
+        : (APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes || []);
+    return (allowedClasses || []).some(c => String(c.id) === String(classId));
+}
+
+function resetWheelStateAfterDeniedRestore() {
+    WHEEL_STATE.selectedClassId = null;
+    WHEEL_STATE.selectedClassName = '';
+    WHEEL_STATE.participants = [];
+    WHEEL_STATE.remainingStudents = [];
+    WHEEL_STATE.selectedStudents = [];
+    WHEEL_STATE.currentWinner = null;
+    WHEEL_STATE.winnerId = null;
+    WHEEL_STATE.rotation = 0;
+    WHEEL_STATE.totalClassStudents = 0;
+    WHEEL_STATE.absentTodayCount = 0;
+}
+
 function restoreWheelStateFromStorage() {
     if (wheelStateHydratedFromStorage) return;
     wheelStateHydratedFromStorage = true;
@@ -90,6 +113,15 @@ function restoreWheelStateFromStorage() {
 
         const saved = JSON.parse(raw);
         if (!saved || typeof saved !== 'object') return;
+
+        // BƯỚC 162.5B: không cho localStorage mang lớp của tài khoản/phân công cũ
+        // sang phiên hiện tại. Xóa riêng trạng thái Vòng quay, không đụng dữ liệu khác.
+        if (saved.selectedClassId && !isWheelClassAccessibleNow(saved.selectedClassId)) {
+            resetWheelStateAfterDeniedRestore();
+            clearWheelStateStorage();
+            console.warn('[162.5B] Đã bỏ phiên Vòng quay của lớp không còn quyền truy cập:', saved.selectedClassId);
+            return;
+        }
 
         WHEEL_STATE.selectedClassId = saved.selectedClassId || null;
         WHEEL_STATE.selectedClassName = saved.selectedClassName || '';
@@ -409,6 +441,13 @@ function restoreWheelUIFromState() {
 
 function initWheel() {
     if (!resizeWheelCanvas()) return;
+
+    // BƯỚC 162.5B: kiểm tra lại cả khi trạng thái đã hydrate trước đó nhưng
+    // phân công/quyền vừa thay đổi trong cùng phiên ứng dụng.
+    if (WHEEL_STATE.selectedClassId && !isWheelClassAccessibleNow(WHEEL_STATE.selectedClassId)) {
+        resetWheelStateAfterDeniedRestore();
+        clearWheelStateStorage();
+    }
 
     // Chỉ tải lớp lần đầu. Nếu đã có participants thì khôi phục nguyên trạng
     // called/enabled/currentWinner/rotation thay vì gọi loadWheelStudents() làm reset.
@@ -928,7 +967,7 @@ function spinWheel() {
     } while (finalRotation <= currentRotation + 2 * Math.PI * 3); // quay ít nhất 3 vòng
     
     const targetAngle = finalRotation - currentRotation;
-    const duration = (4000 + Math.random() * 1000) * 3; // BƯỚC 161.5: thời lượng quay gấp 3 lần
+    const duration = 4000 + Math.random() * 1000;
     const startedAt = Date.now();
     let animationFrameId = null;
     let safetyTimerId = null;
@@ -1389,7 +1428,6 @@ function playCelebrationSoundAsync() {
             winnerAudioPlayer.addEventListener('ended', done, { once: true });
             winnerAudioPlayer.addEventListener('error', failed, { once: true });
             winnerAudioPlayer.src = config.winnerUrl.trim();
-            winnerAudioPlayer.volume = 0.5; // BƯỚC 161.5: âm thanh chúc mừng vừa nghe
             winnerAudioPlayer.currentTime = 0;
             winnerAudioPlayer.play().catch(failed);
         });
@@ -1407,8 +1445,6 @@ function playCelebrationSound() {
 
     if (config.winnerUrl && config.winnerUrl.trim() !== '') {
         winnerAudioPlayer.src = config.winnerUrl.trim();
-        winnerAudioPlayer.volume = 0.5; // BƯỚC 161.5: âm thanh chúc mừng vừa nghe
-        winnerAudioPlayer.currentTime = 0;
         winnerAudioPlayer.play().catch(err => {
             console.warn('⚠️ Không thể phát âm thanh chiến thắng từ URL:', err);
             playCelebrationSoundFallback();
@@ -1446,7 +1482,7 @@ function playCelebrationSoundFallback() {
             gainNode.connect(ctx.destination);
             oscillator.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.1);
             oscillator.type = 'sine';
-            gainNode.gain.setValueAtTime(0.04, ctx.currentTime + i * 0.1); // BƯỚC 161.5: giảm 50% âm chúc mừng fallback
+            gainNode.gain.setValueAtTime(0.08, ctx.currentTime + i * 0.1);
             gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.1 + 0.2);
             oscillator.start(ctx.currentTime + i * 0.1);
             oscillator.stop(ctx.currentTime + i * 0.1 + 0.2);
@@ -1867,14 +1903,73 @@ function getAccessibleClassesForSubject(subjectName = '') {
 }
 
 function getVisibleSubjectNames() {
-    // Với phạm vi assigned, tuyệt đối không fallback sang toàn bộ SUBJECTS.
-    // Nếu chưa tải được phân công thì trả về [] để tránh lộ môn ngoài quyền.
+    // BƯỚC 162.6A-R2: Teacher/Viewer phạm vi assigned chỉ thấy môn thật sự được phân công.
+    // Không fallback sang toàn bộ môn nếu phân công chưa tải xong.
     if (hasAssignedScope()) {
-        return (APP_STATE.subjectCatalog || []).map(subject => subject.name);
+        const allowedSubjectIds = getAssignedSubjectIds();
+        if (!allowedSubjectIds.size) return [];
+        return (APP_STATE.subjectCatalog || [])
+            .filter(subject => allowedSubjectIds.has(subject.id))
+            .map(subject => subject.name);
     }
     return APP_STATE.subjectCatalog?.length
         ? APP_STATE.subjectCatalog.map(subject => subject.name)
         : SUBJECTS;
+}
+
+// BƯỚC 162.3A: dùng chung cho các bộ chọn Môn học trong Trò chơi.
+// Teacher/Viewer phạm vi assigned chỉ thấy các môn có phân công đang hoạt động.
+// Admin hoặc tài khoản access_scope=all giữ nguyên danh sách môn của trò chơi.
+function filterGameSubjectNamesByAccess(subjectNames = []) {
+    const names = Array.isArray(subjectNames) ? subjectNames : [];
+    if (!hasAssignedScope()) return [...names];
+
+    const allowedSubjectIds = getAssignedSubjectIds();
+    if (!allowedSubjectIds.size) return [];
+
+    return names.filter(subjectName => {
+        const subjectId = getSubjectId(subjectName);
+        return !!subjectId && allowedSubjectIds.has(subjectId);
+    });
+}
+
+
+// BƯỚC 162.3B-R1: Trò chơi phải đi theo đúng Phân công -> Lớp -> Khối -> Môn.
+function getGameAssignedClassIds() {
+    if (!hasAssignedScope()) return new Set((APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes || []).map(c => c.id));
+    return new Set((APP_STATE.currentUserAssignments || []).filter(a => a.active !== false).map(a => a.class_id).filter(Boolean));
+}
+
+function getGameAllowedGradesByAccess() {
+    if (!hasAssignedScope()) return ['1','2','3','4','5'];
+    const ids = getGameAssignedClassIds();
+    const source = APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes;
+    return [...new Set((source || []).filter(c => ids.has(c.id)).map(c => String(c.grade ?? c.name?.match(/\d+/)?.[0] ?? '')).filter(Boolean))]
+        .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+}
+
+function filterGameClassesByAccess(classes = [], grade = '') {
+    let items = Array.isArray(classes) ? [...classes] : [];
+    if (grade) items = items.filter(c => String(c.grade ?? getImageCallerClassGrade(c)) === String(grade));
+    if (!hasAssignedScope()) return items;
+    const ids = getGameAssignedClassIds();
+    return items.filter(c => ids.has(c.id));
+}
+
+function filterGameSubjectNamesByGradeAccess(subjectNames = [], grade = '', classId = '') {
+    const names = Array.isArray(subjectNames) ? subjectNames : [];
+    if (!hasAssignedScope()) return [...names];
+    const source = APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes;
+    const classIdsForGrade = new Set((source || [])
+        .filter(c => (!grade || String(c.grade ?? c.name?.match(/\d+/)?.[0] ?? '') === String(grade)) && (!classId || c.id === classId))
+        .map(c => c.id));
+    const allowedSubjectIds = new Set((APP_STATE.currentUserAssignments || [])
+        .filter(a => a.active !== false && classIdsForGrade.has(a.class_id))
+        .map(a => a.subject_id).filter(Boolean));
+    return names.filter(name => {
+        const id = getSubjectId(name);
+        return !!id && allowedSubjectIds.has(id);
+    });
 }
 
 
@@ -1925,6 +2020,23 @@ function isAssignedPairAccessible(classId, subjectId) {
     return (APP_STATE.currentUserAssignments || []).some(a =>
         a.active !== false && a.class_id === classId && a.subject_id === subjectId
     );
+}
+
+// BƯỚC 162.6D.1: khóa lại quyền Lớp ↔ Môn ↔ Học sinh ở tầng xử lý
+// Khen thưởng/Kỷ luật, không chỉ dựa vào selector trên giao diện.
+function isRewardDisciplineContextAccessible(classId, subjectId, studentUuid = '') {
+    if (!classId || !subjectId) return false;
+    if (!isAssignedPairAccessible(classId, subjectId)) return false;
+
+    const classSource = APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes;
+    if (!(classSource || []).some(cls => cls.id === classId)) return false;
+    if (!(APP_STATE.subjectCatalog || []).some(subject => subject.id === subjectId && subject.active !== false)) return false;
+
+    if (studentUuid) {
+        const student = (APP_STATE.students || []).find(item => item.db_uuid === studentUuid);
+        if (!student || student.class_id !== classId) return false;
+    }
+    return true;
 }
 
 function setupClassSubjectStudentSelectors({
@@ -3392,7 +3504,7 @@ function millionaireSelectSmartByDifficulty(pool, targetCount) {
 function getMillionaireSubjectsForGrade(grade) {
     // BƯỚC 151.40: luôn hiển thị đúng 13 môn của hệ thống,
     // không suy ra danh sách môn từ số câu hỏi đang có.
-    return [...MILLIONAIRE_SYSTEM_SUBJECTS];
+    return filterGameSubjectNamesByGradeAccess(MILLIONAIRE_SYSTEM_SUBJECTS, grade === 'all' ? '' : grade);
 }
 
 function getMillionaireQuestionsBySource(source = MILLIONAIRE_STATE.questionSource || 'custom') {
@@ -5160,6 +5272,28 @@ D: ...
 
 function renderMillionaireBankSelector() {
     const state = MILLIONAIRE_STATE;
+
+    // BƯỚC 162.4C: với Teacher/Viewer phạm vi assigned, trạng thái nội bộ phải
+    // khớp đúng giá trị đang nhìn thấy trên selector. Trước đây state có thể vẫn
+    // là 'all' dù giao diện chỉ còn Khối 5/Tin học, làm chủ đề bị lấy từ cả 58 câu.
+    if (hasAssignedScope()) {
+        const allowedGrades = getGameAllowedGradesByAccess();
+        if (!allowedGrades.includes(String(state.selectedGrade || ''))) {
+            state.selectedGrade = allowedGrades[0] || '';
+            state.selectedSubject = 'all';
+            state.selectedTopic = 'all';
+            state.bankInfo = null;
+            millionaireResetPlaySelection();
+        }
+
+        const allowedSubjects = getMillionaireSubjectsForGrade(state.selectedGrade);
+        if (!allowedSubjects.includes(state.selectedSubject)) {
+            state.selectedSubject = allowedSubjects[0] || '';
+            state.selectedTopic = 'all';
+            state.bankInfo = null;
+            millionaireResetPlaySelection();
+        }
+    }
     // BƯỚC 151.49.3F.17B.8B: thống kê câu đã thêm theo Supabase, có localStorage làm dự phòng.
     const customCount = getMillionaireQuestionsBySource('custom').length;
     const defaultCount = MILLIONAIRE_QUESTION_BANK.length;
@@ -5192,8 +5326,8 @@ function renderMillionaireBankSelector() {
                 <label>
                     <span>Khối lớp</span>
                     <select onchange="millionaireSetGrade(this.value)">
-                        <option value="all" ${state.selectedGrade === 'all' ? 'selected' : ''}>Tất cả khối</option>
-                        ${['1','2','3','4','5'].map(g => `<option value="${g}" ${state.selectedGrade === g ? 'selected' : ''}>Khối ${g}</option>`).join('')}
+                        ${!hasAssignedScope() ? `<option value="all" ${state.selectedGrade === 'all' ? 'selected' : ''}>Tất cả khối</option>` : ''}
+                        ${getGameAllowedGradesByAccess().map(g => `<option value="${g}" ${state.selectedGrade === g ? 'selected' : ''}>Khối ${g}</option>`).join('')}
                     </select>
                 </label>
                 <label>
@@ -6727,7 +6861,11 @@ const IMAGE_CALLER_STATE = {
 };
 
 function getImageCallerClasses() {
-    return [...(APP_STATE.classes || [])].sort((a, b) =>
+    // BƯỚC 162.5A: Teacher/Viewer phạm vi assigned chỉ được dùng các lớp
+    // có trong phân công hiện tại. Admin và access_scope=all giữ nguyên.
+    const source = [...(APP_STATE.classes || [])];
+    const allowedClasses = filterGameClassesByAccess(source);
+    return allowedClasses.sort((a, b) =>
         String(a.name || '').localeCompare(String(b.name || ''), 'vi', { numeric: true })
     );
 }
@@ -8357,7 +8495,7 @@ function imageQuizRestoreSession() {
     const gradeSelect=document.getElementById('imageQuizGradeSelect'), subjectSelect=document.getElementById('imageQuizSubjectSelect'), topicSelect=document.getElementById('imageQuizTopicSelect');
     if (gradeSelect) gradeSelect.value=IMAGE_QUIZ_STATE.grade;
     const gradeQs=IMAGE_QUIZ_STATE.questions.filter(q=>q.grade===IMAGE_QUIZ_STATE.grade);
-    imageQuizSetOptions(subjectSelect,imageQuizUniqueValues(gradeQs,'subject'),'-- Chọn môn học --'); if(subjectSelect) subjectSelect.value=IMAGE_QUIZ_STATE.subject;
+    imageQuizSetOptions(subjectSelect,filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gradeQs,'subject'), IMAGE_QUIZ_STATE.grade),'-- Chọn môn học --'); if(subjectSelect) subjectSelect.value=IMAGE_QUIZ_STATE.subject;
     const subjectQs=gradeQs.filter(q=>q.subject===IMAGE_QUIZ_STATE.subject);
     imageQuizSetOptions(topicSelect,imageQuizUniqueValues(subjectQs,'topic'),'-- Chọn chủ đề --'); if(topicSelect) topicSelect.value=IMAGE_QUIZ_STATE.topic;
     imageQuizUpdateStartButton();
@@ -8400,7 +8538,7 @@ function imageQuizHandleGradeChange(value) {
         ? IMAGE_QUIZ_STATE.questions.filter(item => item.grade === IMAGE_QUIZ_STATE.grade)
         : [];
 
-    imageQuizSetOptions(subjectSelect, imageQuizUniqueValues(questions, 'subject'), '-- Chọn môn học --');
+    imageQuizSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(questions, 'subject'), IMAGE_QUIZ_STATE.grade), '-- Chọn môn học --');
     imageQuizSetOptions(topicSelect, [], '-- Chọn chủ đề --');
     imageQuizResetQuestionView();
 }
@@ -8451,7 +8589,7 @@ async function initImageQuiz() {
 
     imageQuizSetOptions(
         gradeSelect,
-        imageQuizUniqueValues(IMAGE_QUIZ_STATE.questions, 'grade'),
+        imageQuizUniqueValues(IMAGE_QUIZ_STATE.questions, 'grade').filter(g => !hasAssignedScope() || getGameAllowedGradesByAccess().includes(String(g))),
         '-- Chọn khối --',
         'Khối '
     );
@@ -9029,12 +9167,12 @@ function callAnswerHandleGradeChange(value) {
     const subjectSelect = document.getElementById('callAnswerSubjectSelect');
     const topicSelect = document.getElementById('callAnswerTopicSelect');
     const classes = CALL_ANSWER_STATE.grade
-        ? getImageCallerClasses().filter(c => getImageCallerClassGrade(c) === CALL_ANSWER_STATE.grade)
+        ? filterGameClassesByAccess(getImageCallerClasses(), CALL_ANSWER_STATE.grade)
         : [];
     callAnswerSetOptions(classSelect, classes.map(c => ({value:c.id,label:c.name || 'Lớp chưa đặt tên'})), '-- Chọn lớp --');
     const gradeQuestions = CALL_ANSWER_STATE.grade
         ? CALL_ANSWER_STATE.questions.filter(q => q.grade === CALL_ANSWER_STATE.grade) : [];
-    callAnswerSetOptions(subjectSelect, imageQuizUniqueValues(gradeQuestions, 'subject'), '-- Chọn môn học --');
+    callAnswerSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gradeQuestions, 'subject'), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId), '-- Chọn môn học --');
     callAnswerSetOptions(topicSelect, [], '-- Chọn chủ đề --');
     callAnswerResetCaller();
     callAnswerUpdateSummary();
@@ -9042,6 +9180,13 @@ function callAnswerHandleGradeChange(value) {
 
 function callAnswerHandleClassChange(value) {
     CALL_ANSWER_STATE.classId = value || '';
+    CALL_ANSWER_STATE.subject = '';
+    CALL_ANSWER_STATE.topic = '';
+    const subjectSelect = document.getElementById('callAnswerSubjectSelect');
+    const topicSelect = document.getElementById('callAnswerTopicSelect');
+    const gradeQuestions = CALL_ANSWER_STATE.grade ? CALL_ANSWER_STATE.questions.filter(q => q.grade === CALL_ANSWER_STATE.grade) : [];
+    callAnswerSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gradeQuestions, 'subject'), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId), '-- Chọn môn học --');
+    callAnswerSetOptions(topicSelect, [], '-- Chọn chủ đề --');
     callAnswerResetCaller();
     callAnswerUpdateSummary();
 }
@@ -9074,13 +9219,14 @@ async function initCallAnswer() {
     const restoringSession = CALL_ANSWER_STATE.sessionActive;
     const classGrades = new Set(getImageCallerClasses().map(getImageCallerClassGrade).filter(Boolean));
     const questionGrades = new Set(imageQuizUniqueValues(CALL_ANSWER_STATE.questions, 'grade'));
-    const grades = [...classGrades].filter(g => questionGrades.has(g)).sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+    const allowedGrades = new Set(getGameAllowedGradesByAccess());
+    const grades = [...classGrades].filter(g => questionGrades.has(g) && (!hasAssignedScope() || allowedGrades.has(String(g)))).sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
     callAnswerSetOptions(gradeSelect, grades, '-- Chọn khối --', 'Khối ');
     if(restoringSession){
-        const classes=getImageCallerClasses().filter(c=>getImageCallerClassGrade(c)===CALL_ANSWER_STATE.grade);
+        const classes=filterGameClassesByAccess(getImageCallerClasses(), CALL_ANSWER_STATE.grade);
         callAnswerSetOptions(document.getElementById('callAnswerClassSelect'),classes.map(c=>({value:c.id,label:c.name||'Lớp chưa đặt tên'})),'-- Chọn lớp --');
         const gq=CALL_ANSWER_STATE.questions.filter(q=>q.grade===CALL_ANSWER_STATE.grade);
-        callAnswerSetOptions(document.getElementById('callAnswerSubjectSelect'),imageQuizUniqueValues(gq,'subject'),'-- Chọn môn học --');
+        callAnswerSetOptions(document.getElementById('callAnswerSubjectSelect'),filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gq,'subject'), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId),'-- Chọn môn học --');
         const sq=gq.filter(q=>q.subject===CALL_ANSWER_STATE.subject);
         callAnswerSetOptions(document.getElementById('callAnswerTopicSelect'),imageQuizUniqueValues(sq,'topic'),'-- Chọn chủ đề --');
         callAnswerRestoreSession();
@@ -9655,15 +9801,40 @@ function restoreStudentViewState() {
         classEl.value = classStillAvailable ? (studentViewState.className || '') : '';
         if (!classStillAvailable) studentViewState.className = '';
     }
-    if (gradeEl) gradeEl.value = studentViewState.grade || '';
+    if (gradeEl) {
+        const gradeStillAvailable = [...gradeEl.options].some(option => option.value === String(studentViewState.grade || ''));
+        if (gradeStillAvailable) {
+            gradeEl.value = String(studentViewState.grade || '');
+        } else if (gradeEl.options.length) {
+            gradeEl.selectedIndex = 0;
+            studentViewState.grade = gradeEl.value;
+        }
+    }
     if (genderEl) genderEl.value = studentViewState.gender || '';
 }
 
 function renderStudents() {
-    const studentSubject = APP_STATE.studentSubject || APP_STATE.subjectCatalog?.[0]?.name || SUBJECTS[0];
     const studentSubjectNames = getVisibleSubjectNames();
+    const requestedStudentSubject = APP_STATE.studentSubject || '';
+    const studentSubject = studentSubjectNames.includes(requestedStudentSubject)
+        ? requestedStudentSubject
+        : (studentSubjectNames[0] || '');
+    if (studentSubject) APP_STATE.studentSubject = studentSubject;
     const studentSubjectOptions = studentSubjectNames.map(subject => `<option value="${subject}" ${subject === studentSubject ? 'selected' : ''}>${subject}</option>`).join('');
     const studentAccessibleClasses = getAccessibleClassesForSubject(studentSubject);
+    // BƯỚC 162.6A-R2: Khối phải được sinh từ chính các lớp còn quyền sau khi đã chọn môn.
+    const studentAccessibleGrades = [...new Set(studentAccessibleClasses
+        .map(c => String(c.grade ?? c.name?.match(/\d+/)?.[0] ?? ''))
+        .filter(Boolean))]
+        .sort((a, b) => Number(a) - Number(b));
+    const studentGradeOptions = hasAssignedScope()
+        ? studentAccessibleGrades.map(grade => `<option value="${grade}">Khối ${grade}</option>`).join('')
+        : `<option value="">Tất cả khối</option>${[1,2,3,4,5].map(grade => `<option value="${grade}">Khối ${grade}</option>`).join('')}`;
+    if (hasAssignedScope() && studentAccessibleGrades.length === 1) {
+        studentViewState.grade = studentAccessibleGrades[0];
+    } else if (hasAssignedScope() && studentViewState.grade && !studentAccessibleGrades.includes(String(studentViewState.grade))) {
+        studentViewState.grade = '';
+    }
     const selectedClass = studentViewState.className || '';
     const selectedStudent = window.__studentInlineEditorId ? APP_STATE.students.find(s => s.id === window.__studentInlineEditorId) : null;
     let editorHtml = '';
@@ -9710,7 +9881,7 @@ function renderStudents() {
 
         <div class="student-filter-card">
           <div class="student-filter-item"><label>Môn đánh giá</label><select id="studentSubject" onchange="window.switchStudentSubject(this.value)">${studentSubjectOptions}</select></div>
-          <div class="student-filter-item"><label>Khối</label><select id="filterGrade" onchange="filterStudents()"><option value="">Tất cả khối</option><option value="1">Khối 1</option><option value="2">Khối 2</option><option value="3">Khối 3</option><option value="4">Khối 4</option><option value="5">Khối 5</option></select></div>
+          <div class="student-filter-item"><label>Khối</label><select id="filterGrade" onchange="filterStudents()">${studentGradeOptions}</select></div>
           <div class="student-filter-item"><label>Lớp</label><select id="filterClass" onchange="filterStudents()"><option value="">Tất cả lớp</option>${studentAccessibleClasses.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></div>
           <div class="student-filter-item student-search-field"><label>Tìm học sinh</label><div class="student-search-wrap"><i class="fas fa-magnifying-glass"></i><input type="text" id="studentSearch" placeholder="Nhập mã học sinh, họ tên..." oninput="filterStudents()"></div></div>
           <div class="student-filter-item"><label>Giới tính</label><select id="filterGender" onchange="filterStudents()"><option value="">Tất cả</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select></div>
@@ -9881,7 +10052,15 @@ function resetFilters() {
     studentViewState = { search: '', className: '', grade: '', gender: '' };
     document.getElementById('studentSearch').value = '';
     document.getElementById('filterClass').value = '';
-    document.getElementById('filterGrade').value = '';
+    const gradeEl = document.getElementById('filterGrade');
+    if (gradeEl) {
+        if (hasAssignedScope() && gradeEl.options.length) {
+            gradeEl.selectedIndex = 0;
+            studentViewState.grade = gradeEl.value;
+        } else {
+            gradeEl.value = '';
+        }
+    }
     document.getElementById('filterGender').value = '';
     studentPage = 1;
     initStudentTable();
@@ -11327,9 +11506,18 @@ async function deleteClass(id) {
 // 10. QUẢN LÝ ĐIỂM (CÓ CỘT NĂNG LỰC & PHẨM CHẤT)
 // ============================================================
 function renderScores() {
-    const scoreAccessibleClasses = getAccessibleClassesForSubject(APP_STATE.currentSubject);
-    const classOptions = scoreAccessibleClasses.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+    // BƯỚC 162.6B.1: khóa đúng cặp Môn <-> Lớp theo phân công.
+    // Nếu trạng thái cũ giữ một môn ngoài quyền, tự đưa về môn hợp lệ đầu tiên
+    // trước khi tạo danh sách lớp; không tạo tích Descartes giữa môn và lớp.
     const scoreSubjectNames = getVisibleSubjectNames();
+    if (hasAssignedScope() && !scoreSubjectNames.includes(APP_STATE.currentSubject)) {
+        APP_STATE.currentSubject = scoreSubjectNames[0] || '';
+    }
+
+    const scoreAccessibleClasses = APP_STATE.currentSubject
+        ? getAccessibleClassesForSubject(APP_STATE.currentSubject)
+        : [];
+    const classOptions = scoreAccessibleClasses.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
 
     const subjectOptions = scoreSubjectNames
         .map(sub => `<option value="${sub}" ${sub === APP_STATE.currentSubject ? 'selected' : ''}>${sub}</option>`)
@@ -11444,10 +11632,13 @@ function renderScores() {
 }
 
 function switchSubject(subject) {
-    const validSubjects =
-        APP_STATE.subjectCatalog?.length
+    // BƯỚC 162.6B.1: với Teacher/Viewer assigned, chỉ cho chuyển sang môn
+    // thực sự được phân công. Danh sách lớp sau đó được lọc theo chính môn này.
+    const validSubjects = hasAssignedScope()
+        ? getVisibleSubjectNames()
+        : (APP_STATE.subjectCatalog?.length
             ? APP_STATE.subjectCatalog.map(item => item.name)
-            : SUBJECTS;
+            : SUBJECTS);
 
     if (!validSubjects.includes(subject)) return;
 
@@ -11690,6 +11881,20 @@ function saveScore(studentId) {
 // ============================================================
 // 11. ĐIỂM DANH (CRUD với Supabase)
 // ============================================================
+// BƯỚC 162.6C.1: khóa quyền lớp ngay tại tầng xử lý Điểm danh.
+// Selector chỉ là lớp bảo vệ giao diện; mọi thao tác tải/lưu/thống kê/xuất
+// đều phải xác minh lại lớp theo phân công hiện tại.
+function getAuthorizedAttendanceClass({ className = '', classId = '' } = {}) {
+    const allowedClasses = hasAssignedScope()
+        ? getAccessibleClassesForSubject('')
+        : (APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes);
+
+    return (allowedClasses || []).find(c =>
+        (classId && String(c.id) === String(classId)) ||
+        (className && String(c.name) === String(className))
+    ) || null;
+}
+
 function renderAttendance() {
     const today = new Date().toISOString().split('T')[0];
     const attendanceClasses = hasAssignedScope() ? getAccessibleClassesForSubject('') : APP_STATE.classes;
@@ -11801,7 +12006,7 @@ async function loadAttendance() {
         return;
     }
 
-    const classObj = APP_STATE.classes.find(c => c.name === clsName);
+    const classObj = getAuthorizedAttendanceClass({ className: clsName });
     if (!classObj) {
         wrapper.innerHTML = '<div class="attendance-empty-state"><i class="fas fa-circle-exclamation"></i><strong>Lớp không tồn tại</strong><span>Vui lòng chọn lại lớp từ danh sách.</span></div>';
         return;
@@ -11884,6 +12089,17 @@ async function updateAttendanceStatus(date, classId, studentUuid, status) {
     }
 
     if (!requireEditPermission('cập nhật điểm danh')) { loadAttendance(); return; }
+
+    const authorizedClass = getAuthorizedAttendanceClass({ classId });
+    const authorizedStudent = authorizedClass && (APP_STATE.students || []).some(s =>
+        String(s.db_uuid) === String(studentUuid) && String(s.class) === String(authorizedClass.name)
+    );
+    if (!authorizedClass || !authorizedStudent) {
+        showToast('Bạn không có quyền điểm danh lớp hoặc học sinh này.', 'warning');
+        await loadAttendance();
+        return;
+    }
+
     try {
         const { error } = await supabase
             .from('app3_attendance')
@@ -11905,7 +12121,7 @@ async function saveAttendance() {
 
     const clsName = document.getElementById('attendanceClass')?.value;
     const date = document.getElementById('attendanceDate')?.value;
-    const classObj = APP_STATE.classes.find(c => c.name === clsName);
+    const classObj = getAuthorizedAttendanceClass({ className: clsName });
     const selects = Array.from(document.querySelectorAll('#attendanceTableWrapper .attendance-status'));
 
     if (!classObj || !date || selects.length === 0) {
@@ -11972,7 +12188,7 @@ async function loadAttendanceStats() {
     const clsName = document.getElementById('attendanceClass')?.value;
     const referenceDate = document.getElementById('attendanceDate')?.value;
     const period = document.getElementById('attendanceStatsPeriod')?.value || 'month';
-    const classObj = APP_STATE.classes.find(c => c.name === clsName);
+    const classObj = getAuthorizedAttendanceClass({ className: clsName });
 
     if (!result) return;
     if (!classObj || !referenceDate) {
@@ -12124,7 +12340,7 @@ async function exportAttendanceStatsExcel() {
     const clsName = document.getElementById('attendanceClass')?.value;
     const referenceDate = document.getElementById('attendanceDate')?.value;
     const period = document.getElementById('attendanceStatsPeriod')?.value || 'month';
-    const classObj = APP_STATE.classes.find(c => c.name === clsName);
+    const classObj = getAuthorizedAttendanceClass({ className: clsName });
 
     if (!classObj || !referenceDate) {
         showToast('Vui lòng chọn lớp và ngày tham chiếu trước khi xuất thống kê.', 'warning');
@@ -12246,6 +12462,11 @@ function exportAttendanceExcel() {
         return;
     }
 
+    if (!getAuthorizedAttendanceClass({ className: cls })) {
+        showToast('Bạn không có quyền truy cập lớp này.', 'warning');
+        return;
+    }
+
     const records = APP_STATE.attendance.find(a => a.class === cls && a.date === date);
     if (!records || records.records.length === 0) {
         showToast('Ngày đang chọn chưa có dữ liệu điểm danh. Muốn xuất Tuần/Tháng/Năm học, hãy dùng nút “Xuất Excel thống kê” bên dưới.', 'warning');
@@ -12358,7 +12579,7 @@ function renderRewards() {
 
 function openAddReward() {
     if (!requireEditPermission('thêm khen thưởng')) return;
-    const classes = APP_STATE.classes || [];
+    const classes = hasAssignedScope() ? getAccessibleClassesForSubject('') : (APP_STATE.classes || []);
     const modalPromise = showModal('Thêm khen thưởng', `
         <div class="form-group"><label>Lớp *</label><select id="rewardClass"><option value="">-- Chọn lớp --</option>${classes.map(cls => `<option value="${cls.id}">${cls.name}</option>`).join('')}</select></div>
         <div class="form-group"><label>Môn học *</label><select id="rewardSubject" disabled><option value="">-- Chọn môn --</option></select></div>
@@ -12384,6 +12605,10 @@ function openAddReward() {
             showToast('Vui lòng chọn đầy đủ Lớp, Môn, Học sinh và nhập nội dung!', 'error');
             return;
         }
+        if (!isRewardDisciplineContextAccessible(classId, subjectId, studentUuid)) {
+            showToast('Bạn không có quyền thao tác với Lớp – Môn – Học sinh này.', 'warning');
+            return;
+        }
         try {
             const { data: newReward, error } = await supabase.from('app3_rewards').insert({
                 student_id: studentUuid, class_id: classId, subject_id: subjectId, subject: subjectObj.name,
@@ -12403,7 +12628,12 @@ function openAddReward() {
 
 async function deleteReward(id) {
     if (!requireEditPermission('xóa khen thưởng')) return;
-    if (!APP_STATE.rewards.find(rew => rew.id === id)) return;
+    const reward = APP_STATE.rewards.find(rew => rew.id === id);
+    if (!reward) return;
+    if (!isRewardDisciplineContextAccessible(reward.classId, reward.subjectId, reward.studentId)) {
+        showToast('Bạn không có quyền xóa khen thưởng này.', 'warning');
+        return;
+    }
     const confirmed = await showModal('Xóa khen thưởng', 'Bạn có chắc muốn xóa khen thưởng này?', 'Xóa', 'Hủy');
     if (!confirmed) return;
     try {
@@ -12495,7 +12725,7 @@ function renderDisciplines() {
 
 function openAddDiscipline() {
     if (!requireEditPermission('thêm kỷ luật')) return;
-    const classes = APP_STATE.classes || [];
+    const classes = hasAssignedScope() ? getAccessibleClassesForSubject('') : (APP_STATE.classes || []);
     const modalPromise = showModal('Thêm kỷ luật', `
         <div class="form-group"><label>Lớp *</label><select id="disciplineClass"><option value="">-- Chọn lớp --</option>${classes.map(cls => `<option value="${cls.id}">${cls.name}</option>`).join('')}</select></div>
         <div class="form-group"><label>Môn học *</label><select id="disciplineSubject" disabled><option value="">-- Chọn môn --</option></select></div>
@@ -12521,6 +12751,10 @@ function openAddDiscipline() {
             showToast('Vui lòng chọn đầy đủ Lớp, Môn, Học sinh và nhập nội dung!', 'error');
             return;
         }
+        if (!isRewardDisciplineContextAccessible(classId, subjectId, studentUuid)) {
+            showToast('Bạn không có quyền thao tác với Lớp – Môn – Học sinh này.', 'warning');
+            return;
+        }
         try {
             const { data: newDis, error } = await supabase.from('app3_disciplines').insert({
                 student_id: studentUuid, class_id: classId, subject_id: subjectId, subject: subjectObj.name,
@@ -12539,7 +12773,12 @@ function openAddDiscipline() {
 
 async function deleteDiscipline(id) {
     if (!requireEditPermission('xóa kỷ luật')) return;
-    if (!APP_STATE.disciplines.find(dis => dis.id === id)) return;
+    const discipline = APP_STATE.disciplines.find(dis => dis.id === id);
+    if (!discipline) return;
+    if (!isRewardDisciplineContextAccessible(discipline.classId, discipline.subjectId, discipline.studentId)) {
+        showToast('Bạn không có quyền xóa kỷ luật này.', 'warning');
+        return;
+    }
     const confirmed = await showModal('Xóa kỷ luật', 'Bạn có chắc muốn xóa kỷ luật này?', 'Xóa', 'Hủy');
     if (!confirmed) return;
     try {
