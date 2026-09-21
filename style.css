@@ -4400,7 +4400,7 @@ a[onclick="goHome()"],
 }
 #publicSite .public-desktop-nav a i{
     font-size:13px;
-    opacity:.92;
+    opacity:.72;
 }
 #publicSite .public-desktop-nav a:hover,
 #publicSite .public-desktop-nav a.active{
@@ -6111,20 +6111,20 @@ a[onclick="goHome()"],
         letter-spacing:.75px!important;
     }
     .nav-item{
-        min-height:34px!important;
-        margin:1px 0!important;
-        padding:6px 8px!important;
-        border-radius:8px!important;
-        font-size:11.5px!important;
-        gap:8px!important;
+        min-height:35px!important;
+        margin:2px 0!important;
+        padding:7px 9px!important;
+        border-radius:9px!important;
+        font-size:11.7px!important;
+        gap:9px!important;
     }
     .nav-item i{
         width:18px!important;
         font-size:12.5px!important;
     }
     .nav-item.active::before{
-        top:7px!important;
-        bottom:7px!important;
+        top:8px!important;
+        bottom:8px!important;
     }
 }
 
@@ -8998,14 +8998,14 @@ tbody tr:hover td{
   flex-direction:column;
   justify-content:center;
   min-width:0;
-  max-width:138px;
+  max-width:142px;
 }
 .sidebar-header .admin-brand-copy b{
   display:block;
   color:#fff;
-  font-size:10.5px;
-  line-height:1.18;
-  font-weight:850;
+  font-size:10.8px;
+  line-height:1.22;
+  font-weight:800;
   letter-spacing:.05px;
   white-space:normal;
 }
@@ -9013,8 +9013,8 @@ tbody tr:hover td{
   display:block;
   margin-top:3px;
   color:rgba(255,255,255,.70);
-  font-size:7.8px;
-  line-height:1.15;
+  font-size:8px;
+  line-height:1.2;
   white-space:nowrap;
 }
 
@@ -9029,7 +9029,7 @@ tbody tr:hover td{
       rgba(250,253,255,.995) 68%,
       rgba(234,246,253,.96) 100%)!important;
   border-bottom:1px solid rgba(49,103,145,.11)!important;
-  box-shadow:0 3px 11px rgba(31,95,150,.05)!important;
+  box-shadow:0 4px 14px rgba(31,74,112,.055)!important;
 }
 .topbar-left,
 .topbar-right{
@@ -9065,10 +9065,10 @@ tbody tr:hover td{
 .topbar-mini-message{
   position:relative;
   z-index:2;
-  color:#2e6796;
-  font-size:13px;
-  font-style:italic;
-  font-weight:760;
+  color:#52789a;
+  font-size:12px;
+  font-style:normal;
+  font-weight:700;
   letter-spacing:.12px;
   transform:translateX(-8px);
   animation:schoolBannerFloat 6s ease-in-out infinite;
@@ -9079,7 +9079,7 @@ tbody tr:hover td{
   bottom:5px;
   width:130px;
   height:42px;
-  opacity:.82;
+  opacity:.58;
 }
 .mini-plane{
   position:absolute;
@@ -11390,3 +11390,318 @@ tbody tr:hover td{
 .image-quiz-stage{flex:1;display:flex;flex-direction:column;justify-content:center;gap:24px;min-height:500px}.image-quiz-placeholder{text-align:center;padding:35px 15px}.image-quiz-placeholder-icon{width:96px;height:96px;margin:0 auto 16px;border-radius:50%;display:grid;place-items:center;background:rgba(59,130,246,.10);font-size:42px}.image-quiz-placeholder h3{margin:0 0 8px;font-size:26px}.image-quiz-placeholder p{margin:0;opacity:.68}
 .image-quiz-answers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;max-width:900px;width:100%;margin:0 auto}.image-quiz-answers button{min-height:70px;border:1px solid var(--border-color,#d1d5db);border-radius:14px;background:var(--card-bg,#fff);color:inherit;display:flex;align-items:center;gap:14px;padding:12px 16px;text-align:left;opacity:.75}.image-quiz-answers strong{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:rgba(59,130,246,.12);font-size:18px}
 @media(max-width:700px){.image-quiz-page{gap:12px}.image-quiz-toolbar,.image-quiz-stage{padding:14px;border-radius:14px}.image-quiz-field{flex:1 1 100%}.image-quiz-answers{grid-template-columns:1fr}.image-quiz-stage{min-height:420px}.image-quiz-placeholder h3{font-size:22px}}
+
+/* ============================================================
+   BƯỚC 165.2.2 — CONTENT / CARD DESKTOP CHUYÊN NGHIỆP
+   Chỉ tinh chỉnh nhịp bố cục và bề mặt nội dung trên màn hình máy tính.
+   Không đổi HTML, logic, kích thước chức năng hoặc giao diện mobile.
+   ============================================================ */
+@media (min-width: 1024px){
+  #app .page-container{
+    max-width:1680px;
+    padding:26px 30px 38px;
+  }
+
+  /* Tạo nhịp dọc ổn định giữa các khối nội dung chính. */
+  #app .page-container > .card,
+  #app .page-container > .panel,
+  #app .page-container > .content-card{
+    margin-bottom:20px;
+  }
+
+  /* Card chính: nét viền nhẹ, bóng gọn, góc đồng nhất với desktop shell. */
+  #app .card,
+  #app .panel,
+  #app .content-card{
+    border-color:rgba(148,163,184,.24);
+    border-radius:14px;
+    box-shadow:0 4px 14px rgba(15,23,42,.045);
+  }
+
+  #app .card-title{
+    font-size:15px;
+    font-weight:750;
+    line-height:1.35;
+    letter-spacing:-.1px;
+  }
+
+  /* Khoảng cách tiêu đề/nội dung rõ hơn nhưng không can thiệp module trò chơi. */
+  #app .card > .card-title:first-child,
+  #app .panel > .card-title:first-child,
+  #app .content-card > .card-title:first-child{
+    margin-bottom:14px;
+  }
+}
+
+[data-theme="dark"] #app .card,
+[data-theme="dark"] #app .panel,
+[data-theme="dark"] #app .content-card{
+  border-color:var(--border);
+  box-shadow:0 4px 14px rgba(0,0,0,.14);
+}
+
+/* ============================================================
+   BƯỚC 165.2.3 — BẢNG DỮ LIỆU DESKTOP CHUYÊN NGHIỆP
+   Chỉ tinh chỉnh bảng nằm trong .table-wrapper trên màn hình máy tính.
+   Không đổi HTML, dữ liệu, logic, thao tác hoặc giao diện mobile.
+   ============================================================ */
+@media (min-width: 1024px){
+  /* Khung bảng rõ ràng hơn, đồng bộ với hệ Card của 165.2.2. */
+  #app .table-wrapper{
+    border:1px solid rgba(148,163,184,.24);
+    border-radius:12px;
+    background:var(--bg-card,#fff);
+    box-shadow:0 2px 8px rgba(15,23,42,.035);
+  }
+
+  #app .table-wrapper table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    font-size:12.4px;
+  }
+
+  /* Header giữ được nhận diện khi bảng cuộn dọc. */
+  #app .table-wrapper thead th{
+    position:sticky;
+    top:0;
+    z-index:2;
+    height:44px;
+    padding:10px 13px;
+    background:#f4f7fa!important;
+    color:#52667d!important;
+    font-size:11px;
+    font-weight:760;
+    line-height:1.25;
+    vertical-align:middle;
+    white-space:nowrap;
+    box-shadow:inset 0 -1px 0 rgba(148,163,184,.26);
+  }
+
+  #app .table-wrapper tbody td{
+    height:48px;
+    padding:10px 13px;
+    line-height:1.4;
+    vertical-align:middle;
+  }
+
+  /* Hover vừa đủ để theo dõi một hàng dài, không làm thay đổi trạng thái dữ liệu. */
+  #app .table-wrapper tbody tr{
+    transition:background-color .12s ease;
+  }
+  #app .table-wrapper tbody tr:hover td{
+    background:rgba(37,99,235,.055)!important;
+  }
+
+  /* Nhóm nút thao tác trong ô gọn và thẳng hàng hơn. */
+  #app .table-wrapper td .btn{
+    min-height:30px;
+    padding-top:5px;
+    padding-bottom:5px;
+    vertical-align:middle;
+  }
+  #app .table-wrapper td .btn + .btn{
+    margin-left:4px;
+  }
+
+  /* Mép trên/dưới liền mạch với bo góc của wrapper. */
+  #app .table-wrapper thead th:first-child{border-top-left-radius:11px;}
+  #app .table-wrapper thead th:last-child{border-top-right-radius:11px;}
+  #app .table-wrapper tbody tr:last-child td{border-bottom:0!important;}
+}
+
+@media (min-width: 1024px){
+  [data-theme="dark"] #app .table-wrapper{
+    border-color:var(--border);
+    background:var(--bg-card,#152333);
+    box-shadow:0 2px 8px rgba(0,0,0,.12);
+  }
+  [data-theme="dark"] #app .table-wrapper thead th{
+    background:#192838!important;
+    color:#afc0d1!important;
+    box-shadow:inset 0 -1px 0 var(--border);
+  }
+  [data-theme="dark"] #app .table-wrapper tbody tr:hover td{
+    background:rgba(96,165,250,.07)!important;
+  }
+}
+
+/* ============================================================
+   BƯỚC 165.2.4 — FORM / MODAL DESKTOP CHUYÊN NGHIỆP
+   Chỉ tinh chỉnh biểu mẫu và modal trên màn hình máy tính.
+   Không đổi HTML, dữ liệu, logic, phân quyền hoặc giao diện mobile.
+   ============================================================ */
+@media (min-width: 1024px){
+  /* Nhịp biểu mẫu rõ ràng hơn trên desktop. */
+  #app .form-group{
+    margin-bottom:16px;
+  }
+
+  #app .form-group > label{
+    display:block;
+    margin-bottom:6px;
+    color:var(--text-main);
+    font-size:11.8px;
+    font-weight:700;
+    line-height:1.35;
+  }
+
+  #app input[type="text"],
+  #app input[type="password"],
+  #app input[type="email"],
+  #app input[type="date"],
+  #app input[type="number"],
+  #app input[type="tel"],
+  #app input[type="url"],
+  #app input[type="search"],
+  #app select{
+    min-height:41px;
+    padding:8px 12px;
+  }
+
+  #app textarea{
+    min-height:94px;
+    padding:10px 12px;
+  }
+
+  #app input::placeholder,
+  #app textarea::placeholder{
+    color:#94a3b8;
+  }
+
+  /* Modal: phân cấp Header / Body / Footer rõ hơn, không đổi kích thước nghiệp vụ. */
+  #app .modal-box,
+  .modal-overlay .modal-box{
+    border-radius:16px;
+    border-color:rgba(148,163,184,.28);
+    box-shadow:0 22px 58px rgba(15,23,42,.22);
+  }
+
+  #app .modal-header,
+  .modal-overlay .modal-header{
+    min-height:60px;
+    padding:15px 20px;
+  }
+
+  #app .modal-header h2,
+  #app .modal-header h3,
+  #app .modal-header h4,
+  .modal-overlay .modal-header h2,
+  .modal-overlay .modal-header h3,
+  .modal-overlay .modal-header h4{
+    margin:0;
+    font-weight:760;
+    line-height:1.3;
+    letter-spacing:-.15px;
+  }
+
+  #app .modal-body,
+  .modal-overlay .modal-body{
+    padding:20px;
+  }
+
+  #app .modal-footer,
+  .modal-overlay .modal-footer{
+    min-height:60px;
+    padding:12px 20px;
+    gap:8px;
+  }
+
+  #app .modal-footer .btn,
+  .modal-overlay .modal-footer .btn{
+    min-width:92px;
+  }
+
+  #app .modal-close,
+  .modal-overlay .modal-close{
+    width:34px;
+    height:34px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:9px;
+    transition:background-color .12s ease,color .12s ease;
+  }
+
+  #app .modal-close:hover,
+  .modal-overlay .modal-close:hover{
+    background:rgba(148,163,184,.13);
+    color:var(--text-main);
+  }
+}
+
+@media (min-width: 1024px){
+  [data-theme="dark"] #app input::placeholder,
+  [data-theme="dark"] #app textarea::placeholder{
+    color:#71849a;
+  }
+
+  [data-theme="dark"] #app .modal-box,
+  [data-theme="dark"] .modal-overlay .modal-box{
+    border-color:var(--border);
+    box-shadow:0 22px 58px rgba(0,0,0,.34);
+  }
+}
+
+/* ============================================================
+   BƯỚC 165.2.5 — HỆ THỐNG NÚT THAO TÁC DESKTOP
+   Đồng bộ nhịp nút, icon, nhóm thao tác và trạng thái tương tác.
+   Chỉ áp dụng desktop; không đổi HTML, logic, dữ liệu hay phân quyền.
+   ============================================================ */
+@media (min-width: 1024px){
+  #app .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    white-space:nowrap;
+    vertical-align:middle;
+  }
+
+  /* Icon và chữ trong nút thẳng hàng, không làm thay đổi icon hiện có. */
+  #app .btn i,
+  #app .btn svg{
+    flex:0 0 auto;
+  }
+  #app .btn svg{
+    width:15px;
+    height:15px;
+  }
+
+  /* Nhóm nút trên toolbar/form/card giữ khoảng cách thống nhất. */
+  #app .btn-group,
+  #app .action-buttons,
+  #app .toolbar-actions,
+  #app .form-actions{
+    gap:8px;
+    align-items:center;
+  }
+
+  /* Trạng thái bàn phím rõ nhưng gọn, hữu ích khi nhập liệu trên máy tính. */
+  #app .btn:focus-visible,
+  #app .btn-icon:focus-visible{
+    outline:2px solid rgba(37,99,235,.42);
+    outline-offset:2px;
+  }
+
+  /* Disabled phải nhìn rõ là không thể thao tác. */
+  #app .btn:disabled,
+  #app .btn.disabled,
+  #app .btn[aria-disabled="true"]{
+    opacity:.55;
+    cursor:not-allowed;
+    transform:none!important;
+    box-shadow:none!important;
+  }
+
+  /* Các màu nghiệp vụ có hover nhất quán với Primary. */
+  #app .btn-success:hover{background:#128247;border-color:#128247;box-shadow:0 6px 14px rgba(22,154,85,.16);}
+  #app .btn-danger:hover{background:#c92d3c;border-color:#c92d3c;box-shadow:0 6px 14px rgba(220,53,69,.15);}
+  #app .btn-info:hover{background:#087ba4;border-color:#087ba4;box-shadow:0 6px 14px rgba(11,141,187,.15);}
+
+  /* Nút chỉ có icon trong vùng thao tác: vuông gọn, dễ bấm bằng chuột. */
+  #app .btn-icon{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+  }
+}
