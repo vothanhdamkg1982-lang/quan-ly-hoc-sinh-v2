@@ -6177,9 +6177,13 @@ function renderMillionaire() {
                         const selected = state.selectedIndex === idx;
                         // BƯỚC 159.4: trong pha 'locked' chỉ giữ đáp án đã khóa ở trạng thái hồi hộp,
                         // tuyệt đối chưa làm lộ đáp án đúng trước thời điểm công bố.
-                        const revealResult = ['correct','wrong','ended','finished','winner'].includes(state.phase);
+                        // Khi ở chế độ "phải chọn đúng mới qua câu", một lần trả lời sai chỉ
+                        // đánh dấu phương án vừa chọn là sai; tuyệt đối không làm lộ đáp án đúng
+                        // trước khi học sinh được quyền chọn lại.
+                        const retryWrongPhase = state.playMode === 'retry_until_correct' && state.phase === 'wrong';
+                        const revealResult = ['correct','wrong','ended','finished','winner'].includes(state.phase) && !retryWrongPhase;
                         const isCorrectReveal = revealResult && idx === question.c;
-                        const isWrongReveal = revealResult && selected && idx !== question.c;
+                        const isWrongReveal = (retryWrongPhase || revealResult) && selected && idx !== question.c;
                         const isSuspenseSelected = state.phase === 'locked' && selected;
                         return `
                             <button data-answer-index="${idx}" class="millionaire-answer
