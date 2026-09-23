@@ -1395,8 +1395,8 @@ function wheelMCSpeakWinner(winner) {
         utter.volume = 1;
         const noMore = WHEEL_STATE.preventDuplicates && syncWheelRemainingStudents().length === 0;
         utter.text = noMore
-            ? `Và học sinh cuối cùng được lựa chọn là ${winner.fullName}. Xin chúc mừng em! Vòng quay đã hoàn thành.`
-            : `Và học sinh được lựa chọn là ${winner.fullName}. Xin chúc mừng em!`;
+            ? `${winner.fullName}. Vòng quay đã hoàn thành.`
+            : `${winner.fullName}.`;
         window.speechSynthesis.speak(utter);
     } catch (err) {
         console.warn('[WHEEL MC] Không đọc được tên học sinh:', err);
@@ -7326,7 +7326,7 @@ function imageCallerStartRandom() {
     });
 
     const startedAt = Date.now();
-    const duration = 10000;
+    const duration = 5000;
     if (countdown) countdown.classList.add('show');
 
     // BƯỚC 152.6.1: âm thanh chuyển động liên tục, bắt đầu ngay từ thao tác bấm của người dùng.
@@ -8091,7 +8091,7 @@ function imageQuizMCQuestionParts(question, includeRules = false, includeTransit
         parts.push('Rất tốt. Chúng ta cùng đến với câu hỏi tiếp theo.');
     }
     parts.push(`Câu hỏi. ${String(question?.q || '')}`);
-    ['A','B','C','D'].forEach((letter, i) => parts.push(`Đáp án ${letter}. ${String(answers[i] ?? '')}`));
+    ['A','B','C','D'].forEach((letter, i) => parts.push(`${letter}. ${String(answers[i] ?? '')}`));
     return parts;
 }
 
@@ -8759,17 +8759,16 @@ function callAnswerMCSpeakSequence(parts, onComplete = null) {
 
 function callAnswerMCIntroParts() {
     return [
-        'Xin chào các em. Chào mừng các em đến với trò chơi Gọi tên và Trả lời.',
-        'Luật chơi như sau. Hệ thống sẽ gọi ngẫu nhiên một học sinh. Học sinh được gọi sẽ nhận một câu hỏi có bốn phương án A, B, C, D và chỉ được chọn một đáp án.',
-        'Nếu trả lời đúng, người dẫn chương trình sẽ chúc mừng. Nếu trả lời chưa chính xác, đáp án đúng sẽ được công bố.',
-        'Các em đã sẵn sàng chưa? Trò chơi bắt đầu. Chúng ta cùng gọi tên học sinh đầu tiên.'
+        'Chào mừng các em đến với trò chơi Gọi tên và Trả lời.',
+        'Mỗi lượt, một học sinh được gọi ngẫu nhiên để trả lời một câu hỏi.',
+        'Bắt đầu.'
     ];
 }
 
 function callAnswerMCQuestionParts(question, student) {
     const answers = Array.isArray(question?.a) ? question.a : [];
-    const parts = [`Câu hỏi dành cho em ${String(student?.fullName || '').trim()} là. ${String(question?.q || '')}`];
-    ['A','B','C','D'].forEach((letter, i) => parts.push(`Đáp án ${letter}. ${String(answers[i] ?? '')}`));
+    const parts = [`${String(student?.fullName || '').trim()}. ${String(question?.q || '')}`];
+    ['A','B','C','D'].forEach((letter, i) => parts.push(`${letter}. ${String(answers[i] ?? '')}`));
     return parts;
 }
 
@@ -8777,13 +8776,11 @@ function callAnswerMCFeedbackParts(question, isCorrect, correctIndex, isLastQues
     const answers = Array.isArray(question?.a) ? question.a : [];
     const letters = ['A','B','C','D'];
     if (isCorrect) {
-        return isLastQuestion
-            ? ['Chính xác! Chúc mừng em. Em đã có một câu trả lời rất tốt.', 'Đây là câu hỏi cuối cùng của trò chơi.']
-            : ['Chính xác! Chúc mừng em. Em đã có một câu trả lời rất tốt.', 'Chúng ta sẽ tiếp tục gọi tên học sinh tiếp theo.'];
+        return isLastQuestion ? ['Chính xác!', 'Đã hết câu hỏi.'] : ['Chính xác!'];
     }
     return isLastQuestion
-        ? ['Rất tiếc, câu trả lời của em chưa chính xác.', `Đáp án đúng là ${letters[correctIndex] || ''}. ${String(answers[correctIndex] ?? '')}`, 'Đây là câu hỏi cuối cùng của trò chơi.']
-        : ['Rất tiếc, câu trả lời của em chưa chính xác.', `Đáp án đúng là ${letters[correctIndex] || ''}. ${String(answers[correctIndex] ?? '')}`, 'Chúng ta sẽ tiếp tục gọi tên học sinh tiếp theo.'];
+        ? ['Chưa chính xác.', `Đáp án đúng: ${letters[correctIndex] || ''}. ${String(answers[correctIndex] ?? '')}`, 'Đã hết câu hỏi.']
+        : ['Chưa chính xác.', `Đáp án đúng: ${letters[correctIndex] || ''}. ${String(answers[correctIndex] ?? '')}`];
 }
 
 function callAnswerSetOptions(select, values, placeholder, labelPrefix = '') {
@@ -8961,7 +8958,7 @@ function callAnswerStartRandom() {
     const countdown = document.getElementById('callAnswerCountdown');
     if (status) status.textContent = 'Đang gọi ngẫu nhiên...';
     if (name) name.textContent = '';
-    const duration = 10000;
+    const duration = 5000;
     const started = Date.now();
     imageCallerStartSpinSound(duration);
     callAnswerMoveBubbles();
@@ -9002,7 +8999,7 @@ function callAnswerRevealWinner(winnerIndex) {
     if(name) name.textContent=winner.fullName || 'Chưa có họ tên';
     if(stats) stats.textContent=`Đã gọi ${CALL_ANSWER_STATE.calledKeys.size} / ${CALL_ANSWER_STATE.students.length} • Còn lại ${remaining}`;
     imageCallerPlayTone(760,.10,.12);
-    setTimeout(()=>callAnswerMCSpeakSequence([`Học sinh được gọi là ${String(winner.fullName || 'học sinh')}. Xin mời em nhận câu hỏi.`]),250);
+    setTimeout(()=>callAnswerMCSpeakSequence([`${String(winner.fullName || 'Học sinh')}.`]),250);
     const btn=document.getElementById('callAnswerStartBtn');
     if(btn){
         btn.disabled = true;
@@ -9122,7 +9119,7 @@ function callAnswerNextStudent() {
     CALL_ANSWER_STATE.winner = null;
     callAnswerRenderCallerStage();
     callAnswerPrepareStudentImages(CALL_ANSWER_STATE.students);
-    setTimeout(() => callAnswerMCSpeakSequence(['Bây giờ, chúng ta cùng gọi tên học sinh tiếp theo.']), 120);
+    setTimeout(() => callAnswerMCSpeakSequence(['Tiếp theo.']), 120);
 }
 
 function callAnswerRestoreQuestionVisuals(){
@@ -9348,7 +9345,7 @@ function renderImageCaller() {
             <div class="image-caller-toolbar">
                 <div class="image-caller-heading">
                     <div class="image-caller-heading-icon"><i class="fas fa-id-card"></i></div>
-                    <div><h2>Gọi tên bằng hình ảnh</h2><p>Ảnh học sinh chuyển động khoảng 10 giây rồi chọn ngẫu nhiên một em.</p></div>
+                    <div><h2>Gọi tên bằng hình ảnh</h2><p>Ảnh học sinh chuyển động khoảng 5 giây rồi chọn ngẫu nhiên một em.</p></div>
                 </div>
                 <div class="image-caller-filters">
                     <label class="image-caller-field"><span>Khối</span><select id="imageCallerGradeSelect" aria-label="Chọn khối">
