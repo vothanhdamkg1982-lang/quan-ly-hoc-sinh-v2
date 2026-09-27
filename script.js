@@ -14816,14 +14816,9 @@ function publicSafeImageUrl(value) {
 let PUBLIC_HERO_INDEX = 0;
 let PUBLIC_HERO_TIMER = null;
 const PUBLIC_HERO_STATIC_SLIDES = [
-    { src:'assets/banners/banner-01-truong-hoc-lai-son.webp', title:'Lại Sơn - Phân hiệu Tiểu học' },
-    { src:'assets/banners/banner-02-uom-mam-uoc-mo.webp', title:'Nơi ươm mầm những ước mơ' },
-    { src:'assets/banners/banner-03-vi-hoc-sinh-than-yeu.webp', title:'Vì học sinh thân yêu' },
-    { src:'assets/banners/banner-04-uom-mam-hanh-phuc.webp', title:'Ươm mầm hạnh phúc' },
-    { src:'assets/banners/banner-05-truong-hoc-than-thien.webp', title:'Trường học thân thiện' },
-    { src:'assets/banners/banner-06-hoc-hom-nay-vung-tuong-lai.webp', title:'Học hôm nay - Vững tương lai' },
-    { src:'assets/banners/banner-07-tri-thuc-tuong-lai.webp', title:'Tri thức hôm nay - Tương lai ngày mai' },
-    { src:'assets/banners/banner-08-sang-tao-phat-trien.webp', title:'Sáng tạo - Phát triển' }
+    // BƯỚC 166.3.2: chỉ dùng banner Lại Sơn chung, không còn tên/biểu trưng Trần Quốc Toản.
+    { src:'assets/banner-lai-son.webp', title:'Trường TH-THCS-THPT Lại Sơn - Phân hiệu Tiểu học' },
+    { src:'assets/banners/banner-07-tri-thuc-tuong-lai.webp', title:'Tri thức hôm nay - Tương lai ngày mai' }
 ];
 function setPublicHeroSlide(index=0){
     const slides=[...document.querySelectorAll('#publicHeroSlides .public-hero-slide')];
