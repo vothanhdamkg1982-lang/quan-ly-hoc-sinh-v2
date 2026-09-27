@@ -709,7 +709,7 @@ td select, td input {
         margin-right: 8px !important;
     }
 
-    .sidebar, aside {
+    .sidebar, aside.sidebar {
         position: fixed !important;
         top: 0 !important;
         left: 0 !important;
@@ -720,7 +720,7 @@ td select, td input {
         transition: transform 0.3s ease !important;
     }
 
-    .sidebar.show, aside.show {
+    .sidebar.show, aside.sidebar.show {
         transform: translateX(0) !important;
     }
 
@@ -1444,7 +1444,7 @@ a[onclick="goHome()"],
 @media(max-width:520px){.site-container{width:min(100% - 24px,1180px)}.site-brand{min-width:0}.site-brand-mark{width:42px;height:42px;font-size:17px}.site-brand strong{font-size:13px}.site-brand span{font-size:9.5px}.site-login-btn{font-size:0;width:42px;height:42px;padding:0}.site-login-btn i{font-size:15px}.hero-copy h1{font-size:36px}.hero-copy p{font-size:14px}.hero-visual{height:250px}.school-illustration{transform:scale(.62)}.feature-grid{grid-template-columns:1fr}.feature-card{min-height:170px}.info-grid{grid-template-columns:1fr}.footer-grid{grid-template-columns:1fr}.footer-bottom{gap:10px;flex-direction:column}.site-section{padding:50px 0}.site-hero{min-height:720px}}
 \n\n/* ============================================================\n   35. WEBSITE PUBLIC - BƯỚC 142: BANNER SLIDER + POLISH\n   ============================================================ */\n.site-header.scrolled{box-shadow:0 10px 32px rgba(15,39,74,.12);border-bottom-color:#d9e5f5}\n.hero-copy{transition:opacity .28s ease,transform .28s ease}.hero-copy.hero-changing{opacity:.12;transform:translateY(8px)}\n.hero-slider-nav{position:absolute;z-index:6;left:50%;bottom:60px;transform:translateX(-50%);display:flex;align-items:center;gap:12px}\n.hero-slider-arrow{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(5,35,75,.32);color:#fff;display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(8px);transition:.2s}\n.hero-slider-arrow:hover{background:rgba(255,255,255,.2);transform:scale(1.06)}\n.hero-slider-dots{display:flex;gap:8px;align-items:center}.hero-slider-dots button{width:9px;height:9px;border-radius:99px;border:0;background:rgba(255,255,255,.45);padding:0;cursor:pointer;transition:.25s}.hero-slider-dots button.active{width:28px;background:#fff}\n.public-back-to-top{position:fixed;right:22px;bottom:22px;z-index:880;width:44px;height:44px;border:0;border-radius:50%;background:linear-gradient(135deg,#1768e5,#0b3d85);color:#fff;box-shadow:0 10px 28px rgba(23,104,229,.28);display:grid;place-items:center;cursor:pointer;opacity:0;visibility:hidden;transform:translateY(8px);transition:.2s}\n.public-back-to-top.show{opacity:1;visibility:visible;transform:translateY(0)}\n.public-back-to-top:hover{transform:translateY(-2px)}\n.feature-card{position:relative;overflow:hidden}.feature-card:after{content:'';position:absolute;width:80px;height:80px;border-radius:50%;right:-45px;top:-45px;background:currentColor;opacity:.035;transition:.25s}.feature-card:hover:after{transform:scale(2.4);opacity:.055}\n@media(max-width:820px){.hero-slider-nav{bottom:58px}.hero-slider-arrow{width:32px;height:32px}}\n@media(max-width:520px){.hero-slider-nav{bottom:54px}.hero-slider-arrow{display:none}}\n
 /* ============================================================
-   BƯỚC 143 - NHẬN DIỆN TRƯỜNG TIỂU HỌC TRẦN QUỐC TOẢN
+   BƯỚC 143 - NHẬN DIỆN PHÂN HIỆU TIỂU HỌC
    ============================================================ */
 .site-brand-logo{overflow:hidden;background:#fff;padding:2px}
 .site-brand-logo img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
@@ -11703,5 +11703,135 @@ tbody tr:hover td{
     display:inline-flex;
     align-items:center;
     justify-content:center;
+  }
+}
+
+
+/* ============================================================
+   BƯỚC 166.3.1 — AI LÀ TRIỆU PHÚ: HIỂN THỊ ĐỦ TRÊN MOBILE
+   - Không để quy tắc mobile của sidebar áp dụng nhầm cho <aside> thang điểm.
+   - Khóa toàn bộ game trong chiều rộng màn hình và đưa thang điểm xuống dưới.
+   - Chỉ thay đổi giao diện, không thay đổi logic trò chơi.
+   ============================================================ */
+@media (max-width: 900px) {
+  #app .millionaire-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  #app .millionaire-shell {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    box-sizing: border-box !important;
+  }
+
+  #app .millionaire-main,
+  #app aside.millionaire-ladder {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    transform: none !important;
+    box-sizing: border-box !important;
+  }
+
+  #app aside.millionaire-ladder {
+    order: 2 !important;
+    display: block !important;
+    max-height: 310px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  #app .millionaire-bank-selector,
+  #app .millionaire-play-mode-box,
+  #app .millionaire-timer-settings,
+  #app .millionaire-manager-panel,
+  #app .millionaire-audience-panel,
+  #app .millionaire-final-confirm {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+}
+
+@media (max-width: 640px) {
+  #app .millionaire-page {
+    padding: 6px !important;
+    border-radius: 10px !important;
+  }
+
+  #app .millionaire-shell {
+    gap: 10px !important;
+  }
+
+  #app .millionaire-main {
+    min-height: 0 !important;
+    padding: 12px 8px !important;
+    border-radius: 14px !important;
+  }
+
+  #app .millionaire-brand-top,
+  #app .millionaire-status-line,
+  #app .millionaire-final-confirm-actions {
+    flex-wrap: wrap !important;
+    min-width: 0 !important;
+  }
+
+  #app .millionaire-brand-top {
+    gap: 8px !important;
+  }
+
+  #app .millionaire-audio-actions {
+    max-width: 100% !important;
+    flex-wrap: wrap !important;
+  }
+
+  #app .millionaire-question,
+  #app .millionaire-answer,
+  #app .millionaire-message,
+  #app .millionaire-bank-note {
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+  }
+
+  #app .millionaire-manager-table-wrap,
+  #app .millionaire-play-table-wrap {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #app .millionaire-lifelines {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  #app .millionaire-lifeline {
+    min-width: 0 !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+}
+
+@media (max-width: 390px) {
+  #app .millionaire-main {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+
+  #app .millionaire-brand h3 {
+    font-size: 1.15rem !important;
+  }
+
+  #app .millionaire-question {
+    padding: 14px 9px !important;
   }
 }

@@ -3,7 +3,7 @@
  * HỆ THỐNG QUẢN LÝ HỌC SINH TIỂU HỌC - JavaScript ES6
  * HỖ TRỢ NHIỀU MÔN HỌC (TIN HỌC & CÔNG NGHỆ)
  * ============================================================
- * Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản - Đặc khu Kiên Hải - An Giang
+ * Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu Tiểu học - Đặc khu Kiên Hải - An Giang
  * Giáo viên: Võ Thanh Đậm
  * Khối: 3, 4, 5
  * ============================================================
@@ -1596,7 +1596,7 @@ const APP_STATE = {
     learningComments: [],
     files: [],
     settings: {
-        schoolName: 'Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản',
+        schoolName: 'Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu Tiểu học',
         schoolYear: '2026-2027',
         theme: 'light',
         logo: '',
@@ -2391,7 +2391,7 @@ async function loadAllData() {
 
         // BƯỚC 148.5.7: cấu hình nhận diện tạm dùng cho năm học 2026-2027.
         // Giữ cố định tại runtime để dữ liệu app3_settings cũ không ghi đè tên trường/năm học mới.
-        APP_STATE.settings.schoolName = 'Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản';
+        APP_STATE.settings.schoolName = 'Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu Tiểu học';
         APP_STATE.settings.schoolYear = '2026-2027';
 
         if (APP_STATE.settings.theme === 'dark') {
@@ -14586,7 +14586,7 @@ const quality = evaluation.quality || '';
                 </table>
 
                 <div class="footer">
-                    &copy; ${new Date().getFullYear()} Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản - Hệ thống QLHS
+                    &copy; ${new Date().getFullYear()} Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu Tiểu học - Hệ thống QLHS
                 </div>
             </div>
             <script>
@@ -14816,7 +14816,7 @@ function publicSafeImageUrl(value) {
 let PUBLIC_HERO_INDEX = 0;
 let PUBLIC_HERO_TIMER = null;
 const PUBLIC_HERO_STATIC_SLIDES = [
-    { src:'assets/banners/banner-01-truong-hoc-lai-son.webp', title:'Lại Sơn - Phân hiệu Trần Quốc Toản' },
+    { src:'assets/banners/banner-01-truong-hoc-lai-son.webp', title:'Lại Sơn - Phân hiệu Tiểu học' },
     { src:'assets/banners/banner-02-uom-mam-uoc-mo.webp', title:'Nơi ươm mầm những ước mơ' },
     { src:'assets/banners/banner-03-vi-hoc-sinh-than-yeu.webp', title:'Vì học sinh thân yêu' },
     { src:'assets/banners/banner-04-uom-mam-hanh-phuc.webp', title:'Ươm mầm hạnh phúc' },
@@ -16433,7 +16433,7 @@ function initPublicWebsite() {
     // Đồng bộ lại cấu hình cục bộ để các lần mở sau không còn giữ năm học cũ.
     try {
         const localSettings = JSON.parse(localStorage.getItem('settings') || '{}');
-        localSettings.schoolName = 'Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu trường Tiểu học Trần Quốc Toản';
+        localSettings.schoolName = 'Trường Tiểu học-Trung học Cơ sở & Trung học phổ thông Lại Sơn_Phân hiệu Tiểu học';
         localSettings.schoolYear = '2026-2027';
         localStorage.setItem('settings', JSON.stringify(localSettings));
     } catch (_) {}
@@ -18334,7 +18334,7 @@ function buildVnEduWorksheet(wb,cls,subject,period){
     const ws=wb.addWorksheet(getVnEduSheetName(subject,cls));
     ws.mergeCells('A1:D1'); ws.getCell('A1').value='ỦY BAN NHÂN DÂN ĐẶC KHU KIÊN HẢI';
     ws.mergeCells('E1:G1'); ws.getCell('E1').value='CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM';
-    ws.mergeCells('A2:D2'); ws.getCell('A2').value='TRƯỜNG TH TRẦN QUỐC TOẢN';
+    ws.mergeCells('A2:D2'); ws.getCell('A2').value='PHÂN HIỆU TIỂU HỌC';
     ws.mergeCells('E2:G2'); ws.getCell('E2').value='Độc lập - Tự do - Hạnh phúc';
     ws.mergeCells('A4:G4'); ws.getCell('A4').value=`BẢNG ĐIỂM CHI TIẾT - MÔN ${getVnEduSubjectTitle(subject)} - ${meta.title} - NĂM HỌC ${year.start} - ${year.end}`;
     ws.mergeCells('A5:G5'); ws.getCell('A5').value=`Khối ${cls[0]} - Lớp ${cls}`;
@@ -18369,7 +18369,7 @@ async function exportVnEduScores(){
     if(!VNEDU_CLASS_PREFIX[cls]){showToast(`Chưa học được mã VNEDU của lớp ${cls}. Hãy nhập 1 file điểm VNEDU gốc của lớp này trước; ứng dụng sẽ tự ghi nhớ mã lớp rồi có thể xuất bình thường.`,'warning');return;}
     if(typeof ExcelJS==='undefined'){showToast('Chưa tải được thư viện ExcelJS. Hãy kiểm tra Internet và tải lại trang.','error');return;}
     try{
-        const wb=new ExcelJS.Workbook();wb.creator='VNEDU compatible - Trường TH Trần Quốc Toản';wb.created=new Date();
+        const wb=new ExcelJS.Workbook();wb.creator='VNEDU compatible - Phân hiệu Tiểu học';wb.created=new Date();
         if(!buildVnEduWorksheet(wb,cls,subject,period))throw new Error('Không tạo được sheet VNEDU cho lớp đã chọn.');
         const y=getVnEduSchoolYearParts();
         await downloadVnEduWorkbook(wb,`VNEDU_${getVnEduSubjectCode(subject)}_${cls}_${period}_${y.start}.xlsx`,`Đã xuất VNEDU ${period.toUpperCase()} lớp ${cls} theo cấu trúc file gốc.`);
@@ -18418,7 +18418,7 @@ async function exportVnEduTeachingWorkbook(){
         return;
     }
     try{
-        const wb=new ExcelJS.Workbook();wb.creator='VNEDU compatible - Trường TH Trần Quốc Toản';wb.created=new Date();
+        const wb=new ExcelJS.Workbook();wb.creator='VNEDU compatible - Phân hiệu Tiểu học';wb.created=new Date();
         let count=0;for(const [subject,cls] of pairs)if(buildVnEduWorksheet(wb,cls,subject,period))count++;
         if(!count)throw new Error('Không có sheet nào được tạo.');
         const y=getVnEduSchoolYearParts();
