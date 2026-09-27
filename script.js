@@ -14959,44 +14959,70 @@ async function loadPublicWebsiteContent() {
     const galleryGrid = document.getElementById('publicGalleryGrid');
     const videoGrid = document.getElementById('publicVideoGrid');
 
-    try {
-        const [postsRes, docsRes] = await Promise.all([
-            supabase.from('app3_public_posts').select('*').eq('is_published', true).order('published_at', { ascending:false }).limit(12),
-            supabase.from('app3_public_documents').select('*').eq('is_published', true).order('created_at', { ascending:false }).limit(6)
-        ]);
-        if (postsRes.error) throw postsRes.error;
-        if (docsRes.error) throw docsRes.error;
+    // BƯỚC 166.3.3: Website công khai đọc qua các VIEW chỉ chứa bản ghi
+    // is_published=true. Cách này tách hoàn toàn quyền đọc công khai khỏi RLS
+    // của bảng quản trị và không làm lộ các bản nháp/chưa công khai.
+    // Mỗi nhóm dữ liệu được tải độc lập: một bảng lỗi không làm trắng các mục khác.
+    const postsPromise = supabase
+        .from('app3_public_posts_live')
+        .select('*')
+        .order('published_at', { ascending:false })
+        .limit(12);
+
+    const docsPromise = supabase
+        .from('app3_public_documents_live')
+        .select('*')
+        .order('created_at', { ascending:false })
+        .limit(6);
+
+    const mediaPromise = supabase
+        .from('app3_public_media_live')
+        .select('*')
+        .order('sort_order', { ascending:true })
+        .order('created_at', { ascending:false })
+        .limit(1000);
+
+    const [postsRes, docsRes, mediaRes] = await Promise.all([postsPromise, docsPromise, mediaPromise]);
+
+    if (postsRes.error) {
+        console.warn('[166.3.3] Không tải được tin tức công khai:', postsRes.error);
+        PUBLIC_POST_CACHE = [];
+        if (newsGrid) newsGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-circle-exclamation"></i><strong>Chưa tải được tin tức</strong><span>Quyền đọc công khai chưa được kích hoạt đầy đủ.</span></div>';
+    } else {
         const posts = postsRes.data || [];
-        const docs = docsRes.data || [];
         PUBLIC_POST_CACHE = posts;
         if (newsGrid) {
             if (!posts.length) newsGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-newspaper"></i><strong>Chưa có tin tức công khai</strong><span>Nội dung sẽ được cập nhật bởi nhà trường.</span></div>';
             else renderPublicNews(posts);
         }
+    }
+
+    if (docsRes.error) {
+        console.warn('[166.3.3] Không tải được tài liệu công khai:', docsRes.error);
+        PUBLIC_DOCUMENT_CACHE = [];
+        if (docGrid) docGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-circle-exclamation"></i><strong>Chưa tải được tài liệu</strong><span>Quyền đọc công khai chưa được kích hoạt đầy đủ.</span></div>';
+    } else {
+        const docs = docsRes.data || [];
         PUBLIC_DOCUMENT_CACHE = docs;
         if (docGrid) {
             if (!docs.length) docGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-folder-open"></i><strong>Chưa có tài liệu công khai</strong><span>Tài liệu sẽ được cập nhật bởi nhà trường.</span></div>';
             else renderPublicDocuments(docs);
         }
-    } catch (err) {
-        console.warn('Không thể tải nội dung website công khai:', err);
-        if (newsGrid) newsGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-circle-exclamation"></i><strong>Chưa tải được tin tức</strong><span>Hãy kiểm tra cấu hình Supabase.</span></div>';
-        if (docGrid) docGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-circle-exclamation"></i><strong>Chưa tải được tài liệu</strong><span>Hãy kiểm tra cấu hình Supabase.</span></div>';
     }
 
-    try {
-        const mediaRes = await supabase.from('app3_public_media').select('*').eq('is_published', true).order('sort_order', { ascending:true }).order('created_at', { ascending:false }).limit(1000);
-        if (mediaRes.error) throw mediaRes.error;
+    if (mediaRes.error) {
+        console.warn('[166.3.3] Không tải được thư viện ảnh/video công khai:', mediaRes.error);
+        PUBLIC_MEDIA_CACHE = [];
+        setupPublicHero([]);
+        if (galleryGrid) galleryGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-images"></i><strong>Chưa tải được thư viện ảnh</strong><span>Quyền đọc công khai chưa được kích hoạt đầy đủ.</span></div>';
+        if (videoGrid) videoGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-circle-play"></i><strong>Chưa tải được thư viện video</strong><span>Quyền đọc công khai chưa được kích hoạt đầy đủ.</span></div>';
+    } else {
         const media = mediaRes.data || [];
         PUBLIC_MEDIA_CACHE = media;
         const publicImages = media.filter(x => x.media_type === 'image');
         renderPublicGallery(publicImages);
         setupPublicHero(publicImages);
         renderPublicVideos(media.filter(x => x.media_type === 'video' || x.media_type === 'youtube'));
-    } catch (err) {
-        console.warn('Chưa tải được thư viện ảnh/video công khai:', err);
-        if (galleryGrid) galleryGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-images"></i><strong>Thư viện ảnh chưa được kích hoạt</strong><span>Admin chạy SQL Bước 149.5 một lần để bật chức năng.</span></div>';
-        if (videoGrid) videoGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-circle-play"></i><strong>Thư viện video chưa được kích hoạt</strong><span>Admin chạy SQL Bước 149.5 một lần để bật chức năng.</span></div>';
     }
 
     await loadPublicUtilityContent();
@@ -15304,7 +15330,7 @@ async function openPublicPostDetail(id) {
     body.innerHTML = '<div class="public-post-loading"><i class="fas fa-spinner fa-spin"></i> Đang tải bài viết...</div>';
     let post = PUBLIC_POST_CACHE.find(x => x.id === id);
     if (!post || post.content === undefined || post.image_url === undefined) {
-        const {data,error} = await supabase.from('app3_public_posts').select('*').eq('id',id).maybeSingle();
+        const {data,error} = await supabase.from('app3_public_posts_live').select('*').eq('id',id).maybeSingle();
         if (error || !data) {
             body.innerHTML = `<div class="public-post-error"><i class="fas fa-circle-exclamation"></i><h3>Không mở được bài viết</h3><p>${publicEscape(error?.message || 'Bài viết không tồn tại hoặc chưa được công khai.')}</p><button class="btn btn-primary" onclick="closePublicPostDetail()">Đóng</button></div>`;
             return;
@@ -15643,20 +15669,32 @@ function renderPublicUtilityFallback(){
     renderPublicAnnouncements([]);
 }
 async function loadPublicUtilityContent(){
-    try{
-        const [annRes,linkRes]=await Promise.all([
-            supabase.from('app3_public_announcements').select('*').eq('is_published',true).order('is_pinned',{ascending:false}).order('sort_order',{ascending:true}).order('published_at',{ascending:false}).limit(8),
-            supabase.from('app3_public_links').select('*').eq('is_published',true).order('sort_order',{ascending:true}).order('created_at',{ascending:false}).limit(20)
-        ]);
-        if(annRes.error) throw annRes.error;
-        if(linkRes.error) throw linkRes.error;
+    // BƯỚC 166.3.3: Thông báo và liên kết cũng đọc từ VIEW công khai,
+    // đồng thời tải độc lập để một nguồn lỗi không làm mất nguồn còn lại.
+    const [annRes,linkRes]=await Promise.all([
+        supabase.from('app3_public_announcements_live').select('*').order('is_pinned',{ascending:false}).order('sort_order',{ascending:true}).order('published_at',{ascending:false}).limit(8),
+        supabase.from('app3_public_links_live').select('*').order('sort_order',{ascending:true}).order('created_at',{ascending:false}).limit(20)
+    ]);
+
+    if(annRes.error){
+        console.warn('[166.3.3] Chưa tải được thông báo công khai:',annRes.error);
+        renderPublicAnnouncements([]);
+    }else{
         renderPublicAnnouncements(annRes.data||[]);
+    }
+
+    if(linkRes.error){
+        console.warn('[166.3.3] Chưa tải được liên kết công khai:',linkRes.error);
+        // Giữ liên kết cơ bản để website không trống hoàn toàn nếu riêng bảng liên kết lỗi.
+        renderPublicLinks([
+            {title:'VNEDU',description:'Hệ thống đang sử dụng của nhà trường',url:'https://ucnnzccazsgdkiengiang.vnedu.vn/v5/',icon:'school'},
+            {title:'Bộ Giáo dục và Đào tạo',description:'Cổng thông tin điện tử',url:'https://moet.gov.vn/',icon:'landmark'}
+        ]);
+    }else{
         renderPublicLinks(linkRes.data||[]);
-    }catch(err){
-        console.warn('Chưa tải được thông báo/liên kết công khai:',err);
-        renderPublicUtilityFallback();
     }
 }
+
 function publicAdminLoadError(panel,error,feature){
     panel.innerHTML=`<div class="public-empty-state"><i class="fas fa-database"></i><strong>Chưa kích hoạt ${publicEscape(feature)}</strong><span>Hãy chạy SQL Bước 149.8 trong Supabase trước. ${publicEscape(error?.message||'')}</span></div>`;
 }
