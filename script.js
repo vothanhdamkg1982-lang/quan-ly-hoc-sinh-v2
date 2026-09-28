@@ -3095,18 +3095,19 @@ let MILLIONAIRE_SUPABASE_QUESTIONS = [];
 let millionaireSupabaseQuestionsLoaded = false;
 
 function mapMillionaireQuestionFromSupabase(row) {
-    const correctMap = {
-        A: 0,
-        B: 1,
-        C: 2,
-        D: 3
-    };
+    const correctMap = { A: 0, B: 1, C: 2, D: 3 };
 
     return normalizeMillionaireQuestionInput({
         id: row.id,
         grade: row.grade || 'all',
         subject: row.subject || '',
         topic: row.topic || '',
+        curriculumCode: row.curriculum_code || '',
+        week: row.week,
+        ppct: row.ppct,
+        subjectCode: row.subject_code || '',
+        lessonName: row.lesson_name || '',
+        lessonKey: row.lesson_key || '',
         difficulty: row.difficulty || 'easy',
         q: row.question || '',
         a: [
@@ -3125,23 +3126,7 @@ async function loadMillionaireQuestionsFromSupabase() {
     try {
         const { data, error } = await supabase
             .from('app3_millionaire_questions')
-            .select(`
-                id,
-                grade,
-                subject,
-                topic,
-                difficulty,
-                question,
-                answer_a,
-                answer_b,
-                answer_c,
-                answer_d,
-                correct_answer,
-                image_url,
-                active,
-                created_by,
-                created_at
-            `)
+            .select('*')
             .eq('active', true)
             .order('created_at', { ascending: true });
 
@@ -3240,11 +3225,23 @@ function saveMillionaireCustomQuestions(items) {
 // ============================================================
 function mapMillionaireQuestionToSupabase(item) {
     const correctAnswer = ['A', 'B', 'C', 'D'][Number(item?.c)] || 'A';
+    const lessonKey = millionaireBuildLessonKey(item);
+    const lessonName = String(item?.lessonName || item?.lesson_name || '').trim();
+    const curriculumCode = String(
+        item?.curriculumCode || item?.curriculum_code ||
+        (lessonName || lessonKey ? 'GDPT2018' : 'LEGACY')
+    ).trim() || 'LEGACY';
 
     return {
         grade: String(item?.grade || 'all'),
         subject: String(item?.subject || '').trim(),
-        topic: String(item?.topic || '').trim(),
+        topic: String(item?.topic || lessonName || '').trim(),
+        curriculum_code: curriculumCode,
+        week: normalizeMillionaireInteger(item?.week, 1, 35),
+        ppct: normalizeMillionaireInteger(item?.ppct, 1, 9999),
+        subject_code: String(item?.subjectCode || item?.subject_code || '').trim() || null,
+        lesson_name: lessonName || null,
+        lesson_key: lessonKey || null,
         difficulty: ['easy', 'medium', 'hard'].includes(item?.difficulty) ? item.difficulty : 'easy',
         question: String(item?.q || '').trim(),
         answer_a: String(item?.a?.[0] || '').trim(),
@@ -3271,11 +3268,27 @@ function normalizeMillionaireQuestionInput(item) {
     const answers = Array.isArray(item?.a) ? item.a.map(v => String(v ?? '').trim()).slice(0, 4) : [];
     while (answers.length < 4) answers.push('');
 
-    return {
+    const lessonName = String(item?.lessonName || item?.lesson_name || '').trim();
+    const week = normalizeMillionaireInteger(item?.week, 1, 35);
+    const ppct = normalizeMillionaireInteger(item?.ppct, 1, 9999);
+    const subjectCode = String(item?.subjectCode || item?.subject_code || '').trim();
+    const suppliedLessonKey = String(item?.lessonKey || item?.lesson_key || '').trim();
+    const hasLessonMeta = !!(lessonName || week || ppct || subjectCode || suppliedLessonKey);
+    const curriculumCode = String(
+        item?.curriculumCode || item?.curriculum_code || (hasLessonMeta ? 'GDPT2018' : 'LEGACY')
+    ).trim() || (hasLessonMeta ? 'GDPT2018' : 'LEGACY');
+
+    const normalized = {
         id: item?.id || makeMillionaireQuestionId(),
         grade: String(item?.grade || 'all'),
         subject: String(item?.subject || '').trim(),
         topic: String(item?.topic || '').trim(),
+        curriculumCode,
+        week,
+        ppct,
+        subjectCode,
+        lessonName,
+        lessonKey: suppliedLessonKey,
         difficulty: ['easy','medium','hard'].includes(item?.difficulty) ? item.difficulty : 'easy',
         q: String(item?.q || '').trim(),
         a: answers,
@@ -3284,12 +3297,23 @@ function normalizeMillionaireQuestionInput(item) {
         imageUrl: String(item?.imageUrl || item?.image_url || '').trim(),
         custom: true
     };
+
+    if (!normalized.lessonKey && normalized.lessonName) {
+        normalized.lessonKey = millionaireBuildLessonKey(normalized);
+    }
+    return normalized;
 }
 
 function validateMillionaireQuestion(item) {
     if (!item.q) return 'Vui lòng nhập nội dung câu hỏi.';
     if (!item.subject) return 'Vui lòng nhập môn học.';
-    if (!item.topic) return 'Vui lòng nhập chủ đề.';
+    if (!item.topic && !item.lessonName) return 'Vui lòng nhập Tên bài học hoặc Chủ đề.';
+    if (String(item.curriculumCode || '').toUpperCase() === 'GDPT2018') {
+        if (!item.grade || item.grade === 'all') return 'Câu hỏi CTGDPT 2018 phải gắn với một khối cụ thể.';
+        if (!normalizeMillionaireInteger(item.week, 1, 35)) return 'Vui lòng nhập Tuần từ 1 đến 35.';
+        if (!normalizeMillionaireInteger(item.ppct, 1, 9999)) return 'Vui lòng nhập số PPCT hợp lệ.';
+        if (!String(item.lessonName || '').trim()) return 'Vui lòng nhập Tên bài học.';
+    }
     if (!Array.isArray(item.a) || item.a.length !== 4 || item.a.some(v => !String(v).trim())) {
         return 'Vui lòng nhập đủ 4 đáp án.';
     }
@@ -3451,7 +3475,7 @@ function millionaireGetHistoryStatsForCurrentSelection() {
     const exact = getMillionaireQuestionsBySource(source).filter(item => {
         const gradeOk = grade === 'all' || item.grade === grade;
         const subjectOk = subject === 'all' || item.subject === subject;
-        const topicOk = topic === 'all' || item.topic === topic;
+        const topicOk = millionaireQuestionMatchesLessonSelection(item, topic);
         return gradeOk && subjectOk && topicOk;
     });
     const used = exact.filter(item => history.has(millionaireQuestionHistoryKey(item, source))).length;
@@ -3548,18 +3572,13 @@ function millionaireSetQuestionSource(value) {
 }
 
 function getMillionaireTopicsForSelection(grade, subject) {
-    const values = new Set();
-
-    getMillionaireQuestionsBySource().forEach(item => {
-        // Lọc tuyệt đối theo khối/môn đã chọn. Không kéo "Tổng hợp" vào môn cụ thể.
+    const items = getMillionaireQuestionsBySource().filter(item => {
         const gradeOk = grade === 'all' || item.grade === grade;
         const subjectOk = subject === 'all' || item.subject === subject;
-        if (gradeOk && subjectOk && item.topic) values.add(item.topic);
+        return gradeOk && subjectOk;
     });
-
-    return [...values].sort((a,b) => a.localeCompare(b, 'vi'));
+    return millionaireGetLessonOptions(items);
 }
-
 function millionaireSetGrade(value) {
     millionaireResetPlaySelection();
     MILLIONAIRE_STATE.selectedGrade = value || 'all';
@@ -3596,7 +3615,7 @@ function millionaireFilteredQuestionsForPlay() {
     return all.filter(item =>
         (s.selectedGrade === 'all' || item.grade === s.selectedGrade) &&
         (s.selectedSubject === 'all' || item.subject === s.selectedSubject) &&
-        (s.selectedTopic === 'all' || item.topic === s.selectedTopic)
+        millionaireQuestionMatchesLessonSelection(item, s.selectedTopic)
     );
 }
 
@@ -3707,7 +3726,7 @@ function createMillionaireQuestionSet(allowedKeys = null) {
     let exact = allQuestions.filter(item => {
         const gradeOk = grade === 'all' || item.grade === grade;
         const subjectOk = subject === 'all' || item.subject === subject;
-        const topicOk = topic === 'all' || item.topic === topic;
+        const topicOk = millionaireQuestionMatchesLessonSelection(item, topic);
         return gradeOk && subjectOk && topicOk;
     });
     if (allowedKeys) {
@@ -4017,6 +4036,12 @@ async function millionaireSaveQuestion() {
         grade: get('mqGrade')?.value || 'all',
         subject: get('mqSubject')?.value || '',
         topic: get('mqTopic')?.value || '',
+        curriculumCode: get('mqCurriculumCode')?.value || '',
+        week: get('mqWeek')?.value || '',
+        ppct: get('mqPpct')?.value || '',
+        subjectCode: get('mqSubjectCode')?.value || '',
+        lessonName: get('mqLessonName')?.value || '',
+        lessonKey: get('mqLessonKey')?.value || '',
         difficulty: get('mqDifficulty')?.value || 'easy',
         q: get('mqQuestion')?.value || '',
         a: [
@@ -4140,11 +4165,193 @@ function normalizeMillionaireGrade(value) {
     return m ? m[0] : '';
 }
 
+// ============================================================
+// BƯỚC 167.1 - KHÓA BÀI HỌC CTGDPT 2018 DÙNG CHUNG
+// Câu hỏi mới có thể gắn chính xác Chương trình + Khối + Mã môn +
+// Tuần + PPCT + Tên bài. Câu cũ chỉ có "topic" vẫn hoạt động.
+// ============================================================
+function normalizeMillionaireInteger(value, min = 0, max = Number.MAX_SAFE_INTEGER) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+    const n = Number(raw.replace(',', '.'));
+    if (!Number.isInteger(n) || n < min || n > max) return null;
+    return n;
+}
+
+function millionaireNormalizeLessonKeyPart(value) {
+    return String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+function millionaireBuildLessonKey(item = {}) {
+    const explicit = String(item?.lessonKey || item?.lesson_key || '').trim();
+    if (explicit) return explicit;
+
+    const lessonName = String(item?.lessonName || item?.lesson_name || '').trim();
+    if (!lessonName) return '';
+
+    const curriculum = String(item?.curriculumCode || item?.curriculum_code || 'GDPT2018').trim() || 'GDPT2018';
+    const grade = String(item?.grade || '').trim();
+    const subjectToken = String(item?.subjectCode || item?.subject_code || item?.subject || '').trim();
+    const week = normalizeMillionaireInteger(item?.week, 1, 35);
+    const ppct = normalizeMillionaireInteger(item?.ppct, 1, 9999);
+
+    const parts = [
+        millionaireNormalizeLessonKeyPart(curriculum),
+        grade && grade !== 'all' ? `g${millionaireNormalizeLessonKeyPart(grade)}` : '',
+        millionaireNormalizeLessonKeyPart(subjectToken),
+        week ? `w${week}` : '',
+        ppct ? `p${ppct}` : '',
+        millionaireNormalizeLessonKeyPart(lessonName)
+    ].filter(Boolean);
+
+    return parts.join('|');
+}
+
+function millionaireQuestionLessonSelectionValue(item = {}) {
+    const lessonKey = String(item?.lessonKey || item?.lesson_key || '').trim() || millionaireBuildLessonKey(item);
+    if (lessonKey) return `lesson:${lessonKey}`;
+    const topic = String(item?.topic || '').trim();
+    return topic ? `topic:${topic}` : '';
+}
+
+// ============================================================
+// BƯỚC 167.2A - GỘP ĐÚNG MỘT BÀI HỌC TRONG BỘ LỌC
+// Một bài có thể kéo dài nhiều tuần/PPCT và Tên bài ở tuần sau có hậu tố
+// “(tiếp)”. Dropdown phải chỉ hiện MỘT bài, nhưng khi chọn vẫn lấy toàn bộ
+// câu CTGDPT 2018 của các tuần thuộc bài đó. Câu legacy cùng tên không được
+// trộn vào bộ câu CTGDPT 2018; legacy vẫn hiện nếu chưa có bài cấu trúc mới.
+// ============================================================
+function millionaireCanonicalLessonName(value) {
+    return String(value ?? '')
+        .trim()
+        .replace(/\s*\(\s*tiếp(?:\s+theo)?\s*\)\s*$/iu, '')
+        .replace(/\s*[-–—]\s*tiếp(?:\s+theo)?\s*$/iu, '')
+        .trim();
+}
+
+function millionaireStructuredLessonGroupValue(item = {}) {
+    const lessonName = String(item?.lessonName || item?.lesson_name || '').trim();
+    if (!lessonName) return '';
+
+    const grade = String(item?.grade || '').trim();
+    const subjectToken = String(item?.subjectCode || item?.subject_code || item?.subject || '').trim();
+    const lessonToken = millionaireNormalizeLessonKeyPart(millionaireCanonicalLessonName(lessonName));
+    if (!lessonToken) return '';
+
+    return `lesson-group:${millionaireNormalizeLessonKeyPart(grade)}|${millionaireNormalizeLessonKeyPart(subjectToken)}|${lessonToken}`;
+}
+
+function millionaireQuestionMatchesLessonSelection(item, selection) {
+    const selected = String(selection || '').trim();
+    if (!selected || selected === 'all') return true;
+
+    // BƯỚC 167.2A: bộ lọc theo BÀI, không theo từng tuần/PPCT.
+    // Chỉ câu có lesson_name (CTGDPT 2018) mới thuộc lesson-group để tránh
+    // trộn câu legacy cũ có cùng Chủ đề vào ngân hàng chuẩn mới.
+    if (selected.startsWith('lesson-group:')) {
+        return millionaireStructuredLessonGroupValue(item) === selected;
+    }
+
+    // Tương thích các phiên bản 167.1 đã lưu lựa chọn theo lesson_key.
+    if (selected.startsWith('lesson:')) {
+        const expected = selected.slice(7);
+        const actual = String(item?.lessonKey || item?.lesson_key || '').trim() || millionaireBuildLessonKey(item);
+        return actual === expected;
+    }
+
+    if (selected.startsWith('topic:')) {
+        return String(item?.topic || '').trim() === selected.slice(6);
+    }
+
+    // Tương thích trạng thái đã lưu từ các phiên bản cũ.
+    return String(item?.topic || '').trim() === selected ||
+           String(item?.lessonName || item?.lesson_name || '').trim() === selected;
+}
+
+function millionaireQuestionLessonLabel(item = {}) {
+    const lessonName = String(item?.lessonName || item?.lesson_name || '').trim();
+    if (!lessonName) return String(item?.topic || '').trim();
+    return millionaireCanonicalLessonName(lessonName);
+}
+
+function millionaireGetLessonOptions(items = []) {
+    const structured = new Map();
+    const legacy = new Map();
+
+    // Ưu tiên gom các câu có Tên bài học chuẩn CTGDPT 2018.
+    (items || []).forEach(item => {
+        const lessonName = String(item?.lessonName || item?.lesson_name || '').trim();
+        if (!lessonName) return;
+
+        const value = millionaireStructuredLessonGroupValue(item);
+        if (!value) return;
+
+        const label = millionaireCanonicalLessonName(lessonName);
+        const week = normalizeMillionaireInteger(item?.week, 1, 35) || 999;
+        const ppct = normalizeMillionaireInteger(item?.ppct, 1, 9999) || 99999;
+        const current = structured.get(value);
+
+        if (!current) {
+            structured.set(value, { value, label, week, ppct });
+        } else {
+            current.week = Math.min(current.week, week);
+            current.ppct = Math.min(current.ppct, ppct);
+        }
+    });
+
+    // Câu cũ chỉ có Chủ đề vẫn dùng được. Nếu Chủ đề cũ trùng tên một bài
+    // CTGDPT 2018 vừa có ở trên thì ẩn lựa chọn legacy để không hiện 2 dòng.
+    const structuredLabels = new Set(
+        [...structured.values()].map(x => millionaireNormalizeLessonKeyPart(x.label))
+    );
+
+    (items || []).forEach(item => {
+        const lessonName = String(item?.lessonName || item?.lesson_name || '').trim();
+        if (lessonName) return;
+
+        const topic = String(item?.topic || '').trim();
+        if (!topic) return;
+
+        const labelKey = millionaireNormalizeLessonKeyPart(millionaireCanonicalLessonName(topic));
+        if (structuredLabels.has(labelKey)) return;
+
+        const value = `topic:${topic}`;
+        if (!legacy.has(value)) {
+            legacy.set(value, { value, label: topic, week: 999, ppct: 99999 });
+        }
+    });
+
+    return [...structured.values(), ...legacy.values()].sort((a, b) =>
+        a.week - b.week ||
+        a.ppct - b.ppct ||
+        String(a.label).localeCompare(String(b.label), 'vi', { numeric: true })
+    );
+}
+
+function millionaireLessonSelectionLabel(items, selection) {
+    if (!selection || selection === 'all') return 'Tất cả bài học / chủ đề';
+    const option = millionaireGetLessonOptions(items).find(x => x.value === selection);
+    if (option) return option.label;
+    if (String(selection).startsWith('topic:')) return String(selection).slice(6);
+    if (String(selection).startsWith('lesson:')) return String(selection).slice(7);
+    return String(selection);
+}
+
 function makeMillionaireDuplicateKey(item) {
+    const lessonPart = millionaireQuestionLessonSelectionValue(item) ||
+        `topic:${String(item?.topic || '').trim().toLowerCase()}`;
     return [
-        String(item.grade || '').trim().toLowerCase(),
-        String(item.subject || '').trim().toLowerCase(),
-        String(item.q || '').trim().toLowerCase().replace(/\s+/g, ' ')
+        String(item?.grade || '').trim().toLowerCase(),
+        String(item?.subject || '').trim().toLowerCase(),
+        lessonPart.toLowerCase(),
+        String(item?.q || '').trim().toLowerCase().replace(/\s+/g, ' ')
     ].join('|');
 }
 
@@ -4155,23 +4362,23 @@ function millionaireDownloadExcelTemplate() {
     }
 
     const rows = [
-        ['Khối', 'Môn', 'Chủ đề', 'Mức độ', 'Câu hỏi', 'A', 'B', 'C', 'D', 'Đáp án đúng'],
-        ['5', 'Tin học', 'Internet', 'Dễ', 'Thiết bị nào dùng để nhập dữ liệu vào máy tính?', 'Màn hình', 'Bàn phím', 'Loa', 'Máy in', 'B'],
-        ['4', 'Toán', 'Hình học', 'Trung bình', 'Hình vuông có mấy cạnh bằng nhau?', '2', '3', '4', '5', 'C'],
-        ['all', 'Tổng hợp', 'Kiến thức chung', 'Khó', 'Ví dụ câu hỏi tổng hợp?', 'Đáp án A', 'Đáp án B', 'Đáp án C', 'Đáp án D', 'A']
+        ['Chương trình', 'Khối', 'Mã môn', 'Môn', 'Tuần', 'PPCT', 'Tên bài học', 'Khóa bài học', 'Chủ đề', 'Mức độ', 'Câu hỏi', 'A', 'B', 'C', 'D', 'Đáp án đúng'],
+        ['GDPT2018', '3', 'TINHOC', 'Tin học', '1', '1', 'Bài 1: Thông tin và quyết định', '', 'Thông tin và quyết định', 'Dễ', 'Ví dụ câu hỏi bám đúng bài học?', 'Đáp án A', 'Đáp án B', 'Đáp án C', 'Đáp án D', 'A'],
+        ['GDPT2018', '4', 'TOAN', 'Toán', '2', '6', 'Bài học theo PPCT', '', '', 'Trung bình', 'Ví dụ câu hỏi theo bài?', 'Đáp án A', 'Đáp án B', 'Đáp án C', 'Đáp án D', 'B'],
+        ['LEGACY', '5', '', 'Tin học', '', '', '', '', 'Internet', 'Dễ', 'Ví dụ câu hỏi cũ theo chủ đề?', 'Đáp án A', 'Đáp án B', 'Đáp án C', 'Đáp án D', 'C']
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!cols'] = [
-        { wch: 10 }, { wch: 18 }, { wch: 22 }, { wch: 14 }, { wch: 55 },
+        { wch: 15 }, { wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 8 }, { wch: 9 },
+        { wch: 42 }, { wch: 46 }, { wch: 24 }, { wch: 14 }, { wch: 58 },
         { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 14 }
     ];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Cau hoi');
-    XLSX.writeFile(wb, 'MAU_NGAN_HANG_CAU_HOI_AI_LA_TRIEU_PHU.xlsx');
+    XLSX.writeFile(wb, 'MAU_NGAN_HANG_CAU_HOI_CTGDPT2018.xlsx');
 }
-
 function millionairePickExcelFile() {
     let input = document.getElementById('millionaireExcelImportInput');
     if (!input) {
@@ -4229,8 +4436,14 @@ async function millionaireImportExcelQuestions(event) {
         };
 
         const cols = {
+            curriculumCode: findCol('Chương trình', 'Chuong trinh', 'Curriculum'),
             grade: findCol('Khối', 'Khoi'),
+            subjectCode: findCol('Mã môn', 'Ma mon', 'Subject code'),
             subject: findCol('Môn', 'Mon', 'Môn học', 'Mon hoc'),
+            week: findCol('Tuần', 'Tuan', 'Week'),
+            ppct: findCol('PPCT'),
+            lessonName: findCol('Tên bài học', 'Ten bai hoc', 'Bài học', 'Bai hoc'),
+            lessonKey: findCol('Khóa bài học', 'Khoa bai hoc', 'Lesson key'),
             topic: findCol('Chủ đề', 'Chu de'),
             difficulty: findCol('Mức độ', 'Muc do'),
             q: findCol('Câu hỏi', 'Cau hoi'),
@@ -4241,7 +4454,8 @@ async function millionaireImportExcelQuestions(event) {
             correct: findCol('Đáp án đúng', 'Dap an dung', 'Đáp án', 'Dap an')
         };
 
-        const required = Object.entries(cols).filter(([,idx]) => idx < 0);
+        const requiredNames = ['grade','subject','difficulty','q','a0','a1','a2','a3','correct'];
+        const required = requiredNames.filter(name => cols[name] < 0);
         if (required.length) {
             throw new Error('Thiếu cột bắt buộc trong file Excel.');
         }
@@ -4268,25 +4482,38 @@ async function millionaireImportExcelQuestions(event) {
             const row = rows[r] || [];
             if (row.every(v => String(v ?? '').trim() === '')) continue;
 
+            const readCol = (idx) => idx >= 0 ? row[idx] : '';
             const item = normalizeMillionaireQuestionInput({
-                grade: normalizeMillionaireGrade(row[cols.grade]),
-                subject: String(row[cols.subject] ?? '').trim(),
-                topic: String(row[cols.topic] ?? '').trim(),
-                difficulty: normalizeMillionaireDifficulty(row[cols.difficulty]),
-                q: String(row[cols.q] ?? '').trim(),
+                curriculumCode: String(readCol(cols.curriculumCode) ?? '').trim(),
+                grade: normalizeMillionaireGrade(readCol(cols.grade)),
+                subjectCode: String(readCol(cols.subjectCode) ?? '').trim(),
+                subject: String(readCol(cols.subject) ?? '').trim(),
+                week: readCol(cols.week),
+                ppct: readCol(cols.ppct),
+                lessonName: String(readCol(cols.lessonName) ?? '').trim(),
+                lessonKey: String(readCol(cols.lessonKey) ?? '').trim(),
+                topic: String(readCol(cols.topic) ?? '').trim(),
+                difficulty: normalizeMillionaireDifficulty(readCol(cols.difficulty)),
+                q: String(readCol(cols.q) ?? '').trim(),
                 a: [
-                    String(row[cols.a0] ?? '').trim(),
-                    String(row[cols.a1] ?? '').trim(),
-                    String(row[cols.a2] ?? '').trim(),
-                    String(row[cols.a3] ?? '').trim()
+                    String(readCol(cols.a0) ?? '').trim(),
+                    String(readCol(cols.a1) ?? '').trim(),
+                    String(readCol(cols.a2) ?? '').trim(),
+                    String(readCol(cols.a3) ?? '').trim()
                 ],
-                c: normalizeMillionaireCorrectAnswer(row[cols.correct])
+                c: normalizeMillionaireCorrectAnswer(readCol(cols.correct))
             });
 
             const problems = [];
             if (!item.grade) problems.push('Khối không hợp lệ');
             if (!item.subject) problems.push('Thiếu môn');
-            if (!item.topic) problems.push('Thiếu chủ đề');
+            if (!item.topic && !item.lessonName) problems.push('Thiếu Tên bài học/Chủ đề');
+            if (String(item.curriculumCode || '').toUpperCase() === 'GDPT2018') {
+                if (item.grade === 'all') problems.push('CTGDPT2018 phải có khối cụ thể');
+                if (!item.week) problems.push('Thiếu/không hợp lệ Tuần 1-35');
+                if (!item.ppct) problems.push('Thiếu/không hợp lệ PPCT');
+                if (!item.lessonName) problems.push('Thiếu Tên bài học');
+            }
             if (!item.difficulty) problems.push('Mức độ không hợp lệ');
             if (!item.q) problems.push('Thiếu câu hỏi');
             if (item.a.some(v => !String(v).trim())) problems.push('Thiếu đáp án A/B/C/D');
@@ -4312,6 +4539,12 @@ async function millionaireImportExcelQuestions(event) {
                     String(existing.grade || '') === String(updatedItem.grade || '') &&
                     String(existing.subject || '') === String(updatedItem.subject || '') &&
                     String(existing.topic || '') === String(updatedItem.topic || '') &&
+                    String(existing.curriculumCode || '') === String(updatedItem.curriculumCode || '') &&
+                    Number(existing.week || 0) === Number(updatedItem.week || 0) &&
+                    Number(existing.ppct || 0) === Number(updatedItem.ppct || 0) &&
+                    String(existing.subjectCode || '') === String(updatedItem.subjectCode || '') &&
+                    String(existing.lessonName || '') === String(updatedItem.lessonName || '') &&
+                    String(existing.lessonKey || '') === String(updatedItem.lessonKey || '') &&
                     String(existing.difficulty || '') === String(updatedItem.difficulty || '') &&
                     String(existing.q || '') === String(updatedItem.q || '') &&
                     Number(existing.c) === Number(updatedItem.c) &&
@@ -4397,14 +4630,21 @@ function millionaireCorrectLabel(index) {
 
 function buildMillionaireExcelRows(items) {
     const rows = [[
-        'Khối', 'Môn', 'Chủ đề', 'Mức độ',
+        'Chương trình', 'Khối', 'Mã môn', 'Môn', 'Tuần', 'PPCT',
+        'Tên bài học', 'Khóa bài học', 'Chủ đề', 'Mức độ',
         'Câu hỏi', 'A', 'B', 'C', 'D', 'Đáp án đúng'
     ]];
 
     (items || []).forEach(item => {
         rows.push([
+            item.curriculumCode || 'LEGACY',
             item.grade === 'all' ? 'all' : String(item.grade || ''),
+            item.subjectCode || '',
             item.subject || '',
+            item.week || '',
+            item.ppct || '',
+            item.lessonName || '',
+            item.lessonKey || millionaireBuildLessonKey(item) || '',
             item.topic || '',
             millionaireDifficultyLabel(item.difficulty),
             item.q || '',
@@ -4418,7 +4658,6 @@ function buildMillionaireExcelRows(items) {
 
     return rows;
 }
-
 function exportMillionaireQuestionsToExcel(mode = 'custom') {
     if (typeof XLSX === 'undefined') {
         alert('Thư viện Excel chưa sẵn sàng.');
@@ -4434,8 +4673,8 @@ function exportMillionaireQuestionsToExcel(mode = 'custom') {
         fileName = 'NGAN_HANG_CAU_HOI_AI_LA_TRIEU_PHU_TOAN_BO.xlsx';
         sheetName = 'Toan bo';
     } else {
-        items = loadMillionaireCustomQuestions();
-        fileName = 'NGAN_HANG_CAU_HOI_AI_LA_TRIEU_PHU_TU_THEM.xlsx';
+        items = getMillionaireQuestionsBySource('custom');
+        fileName = 'NGAN_HANG_CAU_HOI_DUNG_CHUNG_CTGDPT2018.xlsx';
         sheetName = 'Tu them';
     }
 
@@ -4450,16 +4689,9 @@ function exportMillionaireQuestionsToExcel(mode = 'custom') {
     const ws = XLSX.utils.aoa_to_sheet(rows);
 
     ws['!cols'] = [
-        { wch: 10 },
-        { wch: 18 },
-        { wch: 22 },
-        { wch: 14 },
-        { wch: 58 },
-        { wch: 24 },
-        { wch: 24 },
-        { wch: 24 },
-        { wch: 24 },
-        { wch: 14 }
+        { wch: 15 }, { wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 8 }, { wch: 9 },
+        { wch: 42 }, { wch: 46 }, { wch: 24 }, { wch: 14 }, { wch: 58 },
+        { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 14 }
     ];
 
     const wb = XLSX.utils.book_new();
@@ -4507,7 +4739,7 @@ function parseMillionaireMarkdownOrTabTable(rawText) {
     if (!rows.length) return [];
 
     const header = rows[0].map(normalizeMillionaireExcelHeader);
-    const hasHeader = header.some(v => ['khoi','môn','mon','chu de','cau hoi','dap an dung'].includes(v));
+    const hasHeader = header.some(v => ['khoi','môn','mon','chu de','ten bai hoc','cau hoi','dap an dung'].includes(v));
 
     const findCol = (...names) => {
         const candidates = names.map(normalizeMillionaireExcelHeader);
@@ -4519,8 +4751,14 @@ function parseMillionaireMarkdownOrTabTable(rawText) {
 
     if (hasHeader) {
         cols = {
+            curriculumCode: findCol('Chương trình', 'Chuong trinh', 'Curriculum'),
             grade: findCol('Khối', 'Khoi'),
+            subjectCode: findCol('Mã môn', 'Ma mon', 'Subject code'),
             subject: findCol('Môn', 'Mon', 'Môn học', 'Mon hoc'),
+            week: findCol('Tuần', 'Tuan', 'Week'),
+            ppct: findCol('PPCT'),
+            lessonName: findCol('Tên bài học', 'Ten bai hoc', 'Bài học', 'Bai hoc'),
+            lessonKey: findCol('Khóa bài học', 'Khoa bai hoc', 'Lesson key'),
             topic: findCol('Chủ đề', 'Chu de'),
             difficulty: findCol('Mức độ', 'Muc do'),
             q: findCol('Câu hỏi', 'Cau hoi'),
@@ -4531,38 +4769,56 @@ function parseMillionaireMarkdownOrTabTable(rawText) {
             correct: findCol('Đáp án đúng', 'Dap an dung', 'Đáp án', 'Dap an')
         };
         dataRows = rows.slice(1);
+    } else if (rows[0].length >= 16) {
+        cols = {
+            curriculumCode:0, grade:1, subjectCode:2, subject:3, week:4, ppct:5,
+            lessonName:6, lessonKey:7, topic:8, difficulty:9, q:10,
+            a0:11, a1:12, a2:13, a3:14, correct:15
+        };
+        dataRows = rows;
     } else if (rows[0].length >= 10) {
-        cols = { grade:0, subject:1, topic:2, difficulty:3, q:4, a0:5, a1:6, a2:7, a3:8, correct:9 };
+        cols = {
+            curriculumCode:-1, grade:0, subjectCode:-1, subject:1, week:-1, ppct:-1,
+            lessonName:-1, lessonKey:-1, topic:2, difficulty:3, q:4,
+            a0:5, a1:6, a2:7, a3:8, correct:9
+        };
         dataRows = rows;
     } else {
         return [];
     }
 
-    if (Object.values(cols).some(i => i < 0)) return [];
+    const requiredNames = ['grade','subject','difficulty','q','a0','a1','a2','a3','correct'];
+    if (requiredNames.some(name => cols[name] < 0)) return [];
 
+    const read = (row, idx) => idx >= 0 ? row[idx] : '';
     return dataRows.map((row, idx) => ({
         sourceLine: idx + (hasHeader ? 2 : 1),
         item: {
-            grade: normalizeMillionaireGrade(row[cols.grade]),
-            subject: String(row[cols.subject] ?? '').trim(),
-            topic: String(row[cols.topic] ?? '').trim(),
-            difficulty: normalizeMillionaireDifficulty(row[cols.difficulty]),
-            q: String(row[cols.q] ?? '').trim(),
+            curriculumCode: String(read(row, cols.curriculumCode) ?? '').trim(),
+            grade: normalizeMillionaireGrade(read(row, cols.grade)),
+            subjectCode: String(read(row, cols.subjectCode) ?? '').trim(),
+            subject: String(read(row, cols.subject) ?? '').trim(),
+            week: read(row, cols.week),
+            ppct: read(row, cols.ppct),
+            lessonName: String(read(row, cols.lessonName) ?? '').trim(),
+            lessonKey: String(read(row, cols.lessonKey) ?? '').trim(),
+            topic: String(read(row, cols.topic) ?? '').trim(),
+            difficulty: normalizeMillionaireDifficulty(read(row, cols.difficulty)),
+            q: String(read(row, cols.q) ?? '').trim(),
             a: [
-                String(row[cols.a0] ?? '').trim(),
-                String(row[cols.a1] ?? '').trim(),
-                String(row[cols.a2] ?? '').trim(),
-                String(row[cols.a3] ?? '').trim()
+                String(read(row, cols.a0) ?? '').trim(),
+                String(read(row, cols.a1) ?? '').trim(),
+                String(read(row, cols.a2) ?? '').trim(),
+                String(read(row, cols.a3) ?? '').trim()
             ],
-            c: normalizeMillionaireCorrectAnswer(row[cols.correct])
+            c: normalizeMillionaireCorrectAnswer(read(row, cols.correct))
         }
     }));
 }
-
 function parseMillionaireLabeledBlocks(rawText) {
     const raw = String(rawText || '').replace(/\r/g, '');
     const blocks = raw
-        .split(/\n{2,}(?=\s*(?:Khối|Khoi)\s*:)/i)
+        .split(/\n{2,}(?=\s*(?:Chương trình|Chuong trinh|Khối|Khoi)\s*:)/i)
         .map(b => b.trim())
         .filter(Boolean);
 
@@ -4597,8 +4853,14 @@ function parseMillionaireLabeledBlocks(rawText) {
         parsed.push({
             sourceLine: idx + 1,
             item: {
+                curriculumCode: read(block, ['Chương trình', 'Chuong trinh', 'Curriculum']),
                 grade: normalizeMillionaireGrade(read(block, ['Khối', 'Khoi'])),
+                subjectCode: read(block, ['Mã môn', 'Ma mon', 'Subject code']),
                 subject: read(block, ['Môn', 'Mon', 'Môn học', 'Mon hoc']),
+                week: read(block, ['Tuần', 'Tuan', 'Week']),
+                ppct: read(block, ['PPCT']),
+                lessonName: read(block, ['Tên bài học', 'Ten bai hoc', 'Bài học', 'Bai hoc']),
+                lessonKey: read(block, ['Khóa bài học', 'Khoa bai hoc', 'Lesson key']),
                 topic: read(block, ['Chủ đề', 'Chu de']),
                 difficulty: normalizeMillionaireDifficulty(read(block, ['Mức độ', 'Muc do'])),
                 q,
@@ -4610,7 +4872,6 @@ function parseMillionaireLabeledBlocks(rawText) {
 
     return parsed;
 }
-
 function parseMillionaireAIText(rawText) {
     const text = String(rawText || '').trim();
     if (!text) return [];
@@ -4638,8 +4899,9 @@ async function importMillionaireQuestionsFromPastedAI() {
         alert(
             'Không nhận diện được cấu trúc câu hỏi.\n\n' +
             'Hãy dùng một trong hai dạng:\n' +
-            '1) Bảng có 10 cột Khối | Môn | Chủ đề | Mức độ | Câu hỏi | A | B | C | D | Đáp án đúng\n' +
-            '2) Khối văn bản có nhãn Khối:, Môn:, Chủ đề:, Mức độ:, Câu hỏi:, A:, B:, C:, D:, Đáp án đúng:'
+            '1) Bảng CTGDPT 2018 gồm Chương trình | Khối | Mã môn | Môn | Tuần | PPCT | Tên bài học | Khóa bài học | Chủ đề | Mức độ | Câu hỏi | A | B | C | D | Đáp án đúng\n' +
+            '   (bảng cũ 10 cột vẫn được hỗ trợ)\n' +
+            '2) Khối văn bản có các nhãn tương ứng; tối thiểu phải có Khối, Môn, Tên bài học/Chủ đề, Mức độ, Câu hỏi, A-D, Đáp án đúng.'
         );
         return;
     }
@@ -4664,7 +4926,13 @@ async function importMillionaireQuestionsFromPastedAI() {
 
             if (!normalized.grade) problems.push('Khối không hợp lệ');
             if (!normalized.subject) problems.push('Thiếu môn');
-            if (!normalized.topic) problems.push('Thiếu chủ đề');
+            if (!normalized.topic && !normalized.lessonName) problems.push('Thiếu Tên bài học/Chủ đề');
+            if (String(normalized.curriculumCode || '').toUpperCase() === 'GDPT2018') {
+                if (normalized.grade === 'all') problems.push('CTGDPT2018 phải có khối cụ thể');
+                if (!normalized.week) problems.push('Thiếu/không hợp lệ Tuần 1-35');
+                if (!normalized.ppct) problems.push('Thiếu/không hợp lệ PPCT');
+                if (!normalized.lessonName) problems.push('Thiếu Tên bài học');
+            }
             if (!normalized.difficulty) problems.push('Mức độ không hợp lệ');
             if (!normalized.q) problems.push('Thiếu câu hỏi');
             if (normalized.a.some(v => !String(v).trim())) problems.push('Thiếu đáp án A/B/C/D');
@@ -4749,11 +5017,19 @@ async function importMillionaireQuestionsFromPastedAI() {
 function getMillionaireAIPromptData() {
     const gradeValue = String(document.getElementById('mqGrade')?.value || 'all').trim();
     const subject = String(document.getElementById('mqSubject')?.value || '').trim();
+    const subjectCode = String(document.getElementById('mqSubjectCode')?.value || '').trim();
+    const week = String(document.getElementById('mqWeek')?.value || '').trim();
+    const ppct = String(document.getElementById('mqPpct')?.value || '').trim();
+    const lessonName = String(document.getElementById('mqLessonName')?.value || '').trim();
     const topic = String(document.getElementById('mqTopic')?.value || '').trim();
     return {
-        grade: gradeValue === 'all' ? '[xác định theo bài học hoặc tôi sẽ bổ sung]' : `Khối ${gradeValue}`,
+        grade: gradeValue === 'all' ? '[xác định theo bài học hoặc tôi sẽ bổ sung]' : gradeValue,
         subject: subject || '[xác định theo ảnh bài học hoặc tôi sẽ bổ sung]',
-        topic: topic || '[xác định theo ảnh bài học]'
+        subjectCode: subjectCode || '[để trống nếu chưa biết]',
+        week: week || '[xác định/bổ sung]',
+        ppct: ppct || '[xác định/bổ sung]',
+        lessonName: lessonName || topic || '[xác định theo ảnh bài học]',
+        topic: topic || ''
     };
 }
 
@@ -4761,39 +5037,48 @@ function buildMillionaireAIPrompt() {
     const data = getMillionaireAIPromptData();
     return `Tôi sẽ gửi cho bạn MỘT HOẶC NHIỀU ẢNH chứa TOÀN BỘ nội dung của một bài học trong sách giáo khoa/sách giáo viên.
 
+Đây là ngân hàng câu hỏi dùng cho các trò chơi trong Web App Quản lý học sinh V2 (Ai là triệu phú, Trắc nghiệm hình ảnh, Gọi tên + Trả lời).
+
+Chương trình: GDPT2018
 Khối dự kiến: ${data.grade}
 Môn dự kiến: ${data.subject}
-Bài/Chủ đề dự kiến: ${data.topic}
+Mã môn dự kiến: ${data.subjectCode}
+Tuần dự kiến: ${data.week}
+PPCT dự kiến: ${data.ppct}
+Tên bài học dự kiến: ${data.lessonName}
 
-NHIỆM VỤ CỦA BẠN:
-1. Đọc kỹ toàn bộ các ảnh tôi gửi và chỉ sử dụng kiến thức có trong bài học đó để tạo câu hỏi.
-2. Tự xác định bài học cần BAO NHIÊU câu hỏi trắc nghiệm để học sinh ôn tập và hiểu được các kiến thức, ý chính và yêu cầu quan trọng của bài. KHÔNG bắt buộc 15 câu, KHÔNG cố kéo dài cho đủ số lượng. Bài ngắn có thể ít câu, bài nhiều nội dung có thể nhiều câu.
-3. Không bỏ sót nội dung trọng tâm, nhưng không tạo nhiều câu hỏi lặp ý chỉ để tăng số lượng.
-4. Mỗi câu có đúng 4 phương án A, B, C, D và chỉ có 1 đáp án đúng. Các phương án nhiễu phải hợp lý, rõ ràng, phù hợp lứa tuổi và không gây tranh cãi.
-5. Phân bố mức độ Dễ – Trung bình – Khó phù hợp với nội dung bài học. Mỗi câu phải ghi rõ mức độ.
-6. ĐẶC BIỆT QUAN TRỌNG VỀ ĐÁP ÁN: vị trí đáp án đúng phải được phân bố tương đối cân bằng giữa A, B, C và D. Không được để phần lớn hoặc toàn bộ câu có cùng đáp án đúng A/B/C/D; không tạo quy luật dễ đoán như tất cả A, tất cả B hoặc lặp một mẫu cố định. Hãy kiểm tra lại toàn bộ danh sách trước khi trả kết quả.
-7. Nếu ảnh bị mờ, thiếu trang hoặc chưa đủ nội dung để xác định bài học, hãy nói rõ phần nào còn thiếu thay vì tự suy đoán kiến thức ngoài ảnh.
+NHIỆM VỤ:
+1. Chỉ dùng kiến thức có trong đúng bài học được cung cấp; không tự mở rộng sang bài khác.
+2. Tạo số câu phù hợp với nội dung bài. Không bắt buộc 10 hay 15 câu.
+3. Câu hỏi phải phù hợp lứa tuổi, rõ ràng, có 4 phương án A/B/C/D và đúng 1 đáp án.
+4. Phương án nhiễu hợp lý, không mơ hồ; phân bố đáp án đúng tương đối cân bằng A/B/C/D.
+5. Mức độ dùng một trong ba giá trị: Dễ, Trung bình, Khó.
+6. Mọi câu của cùng một bài phải lặp lại chính xác cùng Khối, Môn, Mã môn, Tuần, PPCT và Tên bài học.
+7. Khóa bài học để trống; phần mềm sẽ tự sinh khóa ổn định khi nhập.
+8. Nếu ảnh thiếu hoặc không đủ căn cứ, phải nói rõ thay vì đoán.
 
-CÁCH TÔI GỬI ẢNH:
-- Sau câu lệnh này tôi sẽ gửi lần lượt các ảnh của bài học.
-- Trong lúc tôi đang gửi ảnh, chỉ tiếp nhận và chưa tạo câu hỏi.
-- Chỉ bắt đầu phân tích và tạo danh sách khi tôi nhắn chính xác: ĐÃ GỬI ĐỦ ẢNH.
+Trong lúc tôi đang gửi ảnh, chỉ tiếp nhận. Chỉ tạo câu hỏi khi tôi nhắn chính xác: ĐÃ GỬI ĐỦ ẢNH.
 
-KHI TÔI NHẮN “ĐÃ GỬI ĐỦ ẢNH”, hãy tự xác định số câu phù hợp rồi trả kết quả. Không viết lời mở đầu, không giải thích, không dùng bảng Markdown và không thêm nội dung trước hoặc sau danh sách câu hỏi.
+Khi trả kết quả, KHÔNG viết lời mở đầu, KHÔNG dùng bảng Markdown. Mỗi câu phải đúng cấu trúc:
 
-Mỗi câu phải đúng cấu trúc sau:
+Chương trình: GDPT2018
 Khối: [1/2/3/4/5]
+Mã môn: [mã môn nếu có]
 Môn: [tên môn]
-Chủ đề: [tên bài/chủ đề]
+Tuần: [1-35]
+PPCT: [số PPCT]
+Tên bài học: [đúng tên bài]
+Khóa bài học:
+Chủ đề: [có thể để trống hoặc nhóm nội dung trong bài]
 Mức độ: [Dễ/Trung bình/Khó]
-Câu hỏi: [nội dung câu hỏi]
+Câu hỏi: [nội dung]
 A: [phương án A]
 B: [phương án B]
 C: [phương án C]
 D: [phương án D]
 Đáp án đúng: [A/B/C/D]
 
-Giữa hai câu để đúng 1 dòng trống. Trước khi trả kết quả, hãy kiểm tra lần cuối: số câu đã đủ để bao quát bài học nhưng không dư thừa, và đáp án đúng đã được phân bố đa dạng giữa A/B/C/D.`;
+Giữa hai câu để đúng 1 dòng trống. Trước khi trả kết quả, kiểm tra lại toàn bộ câu đều thuộc đúng bài học và không lặp ý không cần thiết.`;
 }
 async function millionaireBuildAndCopyAIPrompt() {
     const prompt = buildMillionaireAIPrompt();
@@ -4822,8 +5107,14 @@ function millionaireFillAIPasteExample() {
     if (!box) return;
 
     box.value =
-`Khối: 5
+`Chương trình: GDPT2018
+Khối: 5
+Mã môn: TINHOC
 Môn: Tin học
+Tuần: 4
+PPCT: 4
+Tên bài học: Internet
+Khóa bài học:
 Chủ đề: Internet
 Mức độ: Dễ
 Câu hỏi: Trình duyệt web dùng để làm gì?
@@ -4831,20 +5122,8 @@ A: Soạn văn bản ngoại tuyến
 B: Truy cập và xem các trang web
 C: In giấy
 D: Tắt máy tính
-Đáp án đúng: B
-
-Khối: 5
-Môn: Toán
-Chủ đề: Số thập phân
-Mức độ: Trung bình
-Câu hỏi: 2,5 + 1,75 bằng bao nhiêu?
-A: 3,25
-B: 4,25
-C: 4,5
-D: 5,25
 Đáp án đúng: B`;
 }
-
 
 // BƯỚC 151.49.3F.16B: Cập nhật trạng thái chọn ngay trên DOM, không render lại toàn bộ
 // module. Nhờ đó thanh cuộn của danh sách câu hỏi giữ nguyên vị trí khi tích từng câu.
@@ -5016,7 +5295,13 @@ function renderMillionaireQuestionManager() {
     const form = editing || {
         grade: MILLIONAIRE_STATE.selectedGrade !== 'all' ? MILLIONAIRE_STATE.selectedGrade : 'all',
         subject: MILLIONAIRE_STATE.selectedSubject !== 'all' ? MILLIONAIRE_STATE.selectedSubject : '',
-        topic: MILLIONAIRE_STATE.selectedTopic !== 'all' ? MILLIONAIRE_STATE.selectedTopic : '',
+        curriculumCode: 'GDPT2018',
+        week: '',
+        ppct: '',
+        subjectCode: '',
+        lessonName: '',
+        lessonKey: '',
+        topic: '',
         difficulty: 'easy',
         q: '',
         a: ['', '', '', ''],
@@ -5039,7 +5324,7 @@ function renderMillionaireQuestionManager() {
                 <td>${index + 1}</td>
                 <td>${escapeHtml(item.grade === 'all' ? 'Tất cả' : 'Khối ' + item.grade)}</td>
                 <td>${escapeHtml(item.subject)}</td>
-                <td>${escapeHtml(item.topic)}</td>
+                <td>${escapeHtml(millionaireQuestionLessonLabel(item) || item.topic || '')}</td>
                 <td>${item.difficulty === 'easy' ? 'Dễ' : item.difficulty === 'medium' ? 'Trung bình' : 'Khó'}</td>
                 <td class="millionaire-manager-question-cell">${escapeHtml(item.q)}</td>
                 <td>
@@ -5095,8 +5380,35 @@ function renderMillionaireQuestionManager() {
                         <input id="mqSubject" value="${escapeHtml(form.subject || '')}" placeholder="Ví dụ: Tin học">
                     </label>
                     <label>
-                        <span>Chủ đề</span>
-                        <input id="mqTopic" value="${escapeHtml(form.topic || '')}" placeholder="Ví dụ: Internet">
+                        <span>Chương trình</span>
+                        <select id="mqCurriculumCode">
+                            <option value="GDPT2018" ${String(form.curriculumCode || '').toUpperCase() === 'GDPT2018' ? 'selected' : ''}>GDPT 2018</option>
+                            <option value="LEGACY" ${String(form.curriculumCode || '').toUpperCase() !== 'GDPT2018' ? 'selected' : ''}>Dữ liệu cũ / Chủ đề</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Mã môn</span>
+                        <input id="mqSubjectCode" value="${escapeHtml(form.subjectCode || '')}" placeholder="Ví dụ: TINHOC">
+                    </label>
+                    <label>
+                        <span>Tuần</span>
+                        <input id="mqWeek" type="number" min="1" max="35" value="${escapeHtml(form.week || '')}" placeholder="1-35">
+                    </label>
+                    <label>
+                        <span>PPCT</span>
+                        <input id="mqPpct" type="number" min="1" value="${escapeHtml(form.ppct || '')}" placeholder="Số PPCT">
+                    </label>
+                    <label>
+                        <span>Tên bài học</span>
+                        <input id="mqLessonName" value="${escapeHtml(form.lessonName || '')}" placeholder="Tên bài đúng theo chương trình">
+                    </label>
+                    <label>
+                        <span>Khóa bài học</span>
+                        <input id="mqLessonKey" value="${escapeHtml(form.lessonKey || '')}" placeholder="Để trống để hệ thống tự tạo">
+                    </label>
+                    <label>
+                        <span>Chủ đề (cũ / tùy chọn)</span>
+                        <input id="mqTopic" value="${escapeHtml(form.topic || '')}" placeholder="Dùng cho dữ liệu cũ hoặc nhóm chủ đề">
                     </label>
                     <label>
                         <span>Mức độ</span>
@@ -5165,7 +5477,7 @@ function renderMillionaireQuestionManager() {
                 <div class="millionaire-ai-paste-title">
                     <div>
                         <strong><i class="fas fa-wand-magic-sparkles"></i> Tạo câu hỏi bằng AI</strong>
-                        <span>Phần mềm tạo sẵn câu lệnh theo Khối – Môn – Chủ đề – Mức độ ở phía trên. Sao chép câu lệnh sang ChatGPT, rồi dán kết quả trở lại đây.</span>
+                        <span>Phần mềm tạo sẵn câu lệnh theo Khối – Môn – Tuần – PPCT – Tên bài học. Sao chép câu lệnh sang ChatGPT, rồi dán kết quả trở lại đây.</span>
                     </div>
                     <button type="button" onclick="millionaireFillAIPasteExample()" title="Điền ví dụ kết quả AI">
                         <i class="fas fa-lightbulb"></i> Ví dụ kết quả
@@ -5185,7 +5497,7 @@ function renderMillionaireQuestionManager() {
                     <textarea id="millionaireAIPromptBox" rows="9" readonly
                         placeholder="Nhấn “Tạo & sao chép câu lệnh AI”. Câu lệnh hoàn chỉnh sẽ xuất hiện tại đây và được sao chép vào clipboard."></textarea>
                     <div class="millionaire-ai-guide">
-                        <strong>Cách dùng:</strong> 1. Chọn Khối, nhập Môn/Chủ đề nếu đã biết → 2. Sao chép câu lệnh AI → 3. Dán vào ChatGPT → 4. Gửi lần lượt toàn bộ ảnh bài học → 5. Nhắn <b>ĐÃ GỬI ĐỦ ẢNH</b> → 6. Sao chép danh sách AI trả về, dán xuống dưới và bấm <b>Phân tích & nhập</b>.
+                        <strong>Cách dùng:</strong> 1. Chọn Khối, nhập Môn, Tuần, PPCT và Tên bài học nếu đã biết → 2. Sao chép câu lệnh AI → 3. Dán vào ChatGPT → 4. Gửi lần lượt toàn bộ ảnh bài học → 5. Nhắn <b>ĐÃ GỬI ĐỦ ẢNH</b> → 6. Sao chép danh sách AI trả về, dán xuống dưới và bấm <b>Phân tích & nhập</b>.
                     </div>
                 </div>
 
@@ -5197,8 +5509,14 @@ function renderMillionaireQuestionManager() {
                     placeholder="Dán danh sách câu hỏi ChatGPT/AI trả về vào đây...
 
 Ví dụ mỗi câu:
+Chương trình: GDPT2018
 Khối: 5
+Mã môn: TINHOC
 Môn: Tin học
+Tuần: 4
+PPCT: 4
+Tên bài học: Internet
+Khóa bài học:
 Chủ đề: Internet
 Mức độ: Dễ
 Câu hỏi: ...
@@ -5275,7 +5593,7 @@ D: ...
                                     onchange="millionaireSelectAllCustomQuestions(this.checked)"
                                     title="Chọn tất cả câu bạn có quyền quản lý">` : '—'}
                             </th>
-                            <th>STT</th><th>Khối</th><th>Môn</th><th>Chủ đề</th><th>Mức</th><th>Câu hỏi</th><th>Thao tác</th>
+                            <th>STT</th><th>Khối</th><th>Môn</th><th>Bài học / Chủ đề</th><th>Mức</th><th>Câu hỏi</th><th>Thao tác</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -5314,15 +5632,20 @@ function renderMillionaireBankSelector() {
     const defaultCount = MILLIONAIRE_QUESTION_BANK.length;
     const subjects = getMillionaireSubjectsForGrade(state.selectedGrade);
     const topics = getMillionaireTopicsForSelection(state.selectedGrade, state.selectedSubject);
+    if (state.selectedTopic !== 'all' && !topics.some(item => item.value === state.selectedTopic)) {
+        state.selectedTopic = 'all';
+        millionaireResetPlaySelection();
+    }
     const historyStats = millionaireGetHistoryStatsForCurrentSelection();
 
     const subjectOptions = ['all', ...subjects]
         .map(value => `<option value="${escapeHtml(value)}" ${state.selectedSubject === value ? 'selected' : ''}>${value === 'all' ? 'Tất cả 13 môn' : escapeHtml(value)}</option>`)
         .join('');
 
-    const topicOptions = ['all', ...topics]
-        .map(value => `<option value="${escapeHtml(value)}" ${state.selectedTopic === value ? 'selected' : ''}>${value === 'all' ? 'Tất cả chủ đề' : escapeHtml(value)}</option>`)
-        .join('');
+    const topicOptions = [
+        `<option value="all" ${state.selectedTopic === 'all' ? 'selected' : ''}>Tất cả bài học / chủ đề</option>`,
+        ...topics.map(item => `<option value="${escapeHtml(item.value)}" ${state.selectedTopic === item.value ? 'selected' : ''}>${escapeHtml(item.label)}</option>`)
+    ].join('');
 
     return `
         <div class="millionaire-bank-selector">
@@ -5352,7 +5675,7 @@ function renderMillionaireBankSelector() {
                     </select>
                 </label>
                 <label>
-                    <span>Chủ đề</span>
+                    <span>Bài học / Chủ đề</span>
                     <select onchange="millionaireSetTopic(this.value)">
                         ${topicOptions}
                     </select>
@@ -6397,7 +6720,7 @@ function millionaireStart() {
         MILLIONAIRE_STATE.started = false;
         MILLIONAIRE_STATE.message =
             `Bộ câu giáo viên đã chọn hiện không tạo được câu hỏi phù hợp (${info.exactCount || 0} câu). ` +
-            `Hãy kiểm tra Khối/Môn/Chủ đề hoặc chọn nguồn câu hỏi khác.`;
+            `Hãy kiểm tra Khối/Môn/Bài học hoặc chọn nguồn câu hỏi khác.`;
         refreshMillionaire();
         alert(MILLIONAIRE_STATE.message);
         return;
@@ -6705,7 +7028,7 @@ function millionaireUseSwitch() {
     const available = getMillionaireQuestionsBySource(source).filter(item => {
         const gradeOk = grade === 'all' || item.grade === grade;
         const subjectOk = subject === 'all' || item.subject === subject;
-        const topicOk = topic === 'all' || item.topic === topic;
+        const topicOk = millionaireQuestionMatchesLessonSelection(item, topic);
         return gradeOk && subjectOk && topicOk && !usedTexts.has(String(item.q || '').trim());
     });
 
@@ -7552,9 +7875,10 @@ function imageQuizUniqueValues(items, field) {
 
 function imageQuizSetOptions(select, values, placeholder, labelPrefix = '') {
     if (!select) return;
-    select.innerHTML = `<option value="">${placeholder}</option>` + values.map(value => {
-        const safeValue = escapeHtml(value);
-        return `<option value="${safeValue}">${labelPrefix}${safeValue}</option>`;
+    select.innerHTML = `<option value="">${placeholder}</option>` + values.map(item => {
+        const value = typeof item === 'object' ? item.value : item;
+        const label = typeof item === 'object' ? item.label : `${labelPrefix}${item}`;
+        return `<option value="${escapeHtml(String(value))}">${escapeHtml(String(label))}</option>`;
     }).join('');
     select.disabled = values.length === 0;
 }
@@ -7572,16 +7896,16 @@ function imageQuizUpdateInfo() {
     let filtered = questions;
     if (grade) filtered = filtered.filter(item => item.grade === grade);
     if (subject) filtered = filtered.filter(item => item.subject === subject);
-    if (topic) filtered = filtered.filter(item => item.topic === topic);
+    if (topic) filtered = filtered.filter(item => millionaireQuestionMatchesLessonSelection(item, topic));
 
     if (!grade) {
         info.textContent = `Đã kết nối ngân hàng dùng chung: ${questions.length} câu hỏi. Chọn khối để tiếp tục.`;
     } else if (!subject) {
         info.textContent = `Khối ${grade}: ${filtered.length} câu hỏi. Chọn môn học để tiếp tục.`;
     } else if (!topic) {
-        info.textContent = `${subject} - Khối ${grade}: ${filtered.length} câu hỏi. Chọn chủ đề để tiếp tục.`;
+        info.textContent = `${subject} - Khối ${grade}: ${filtered.length} câu hỏi. Chọn bài học để tiếp tục.`;
     } else {
-        info.textContent = `${subject} - Khối ${grade} - ${topic}: ${filtered.length} câu hỏi sẵn sàng.`;
+        info.textContent = `${subject} - Khối ${grade} - ${millionaireLessonSelectionLabel(questions, topic)}: ${filtered.length} câu hỏi sẵn sàng.`;
     }
 }
 
@@ -7589,7 +7913,7 @@ function imageQuizGetFilteredQuestions() {
     const { questions, grade, subject, topic } = IMAGE_QUIZ_STATE;
     if (!grade || !subject || !topic) return [];
     return questions.filter(item =>
-        item.grade === grade && item.subject === subject && item.topic === topic
+        item.grade === grade && item.subject === subject && millionaireQuestionMatchesLessonSelection(item, topic)
     );
 }
 
@@ -7661,7 +7985,7 @@ function imageQuizRenderQuestionPicker() {
     stage.innerHTML = `
       <div id="imageQuizQuestionPicker" style="width:100%;">
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px;">
-          <div><h3 style="margin:0 0 4px;">Chọn câu hỏi cho lượt chơi</h3><div style="opacity:.75;">${escapeHtml(IMAGE_QUIZ_STATE.subject)} - Khối ${escapeHtml(IMAGE_QUIZ_STATE.grade)} - ${escapeHtml(IMAGE_QUIZ_STATE.topic)}</div></div>
+          <div><h3 style="margin:0 0 4px;">Chọn câu hỏi cho lượt chơi</h3><div style="opacity:.75;">${escapeHtml(IMAGE_QUIZ_STATE.subject)} - Khối ${escapeHtml(IMAGE_QUIZ_STATE.grade)} - ${escapeHtml(millionaireLessonSelectionLabel(IMAGE_QUIZ_STATE.questions, IMAGE_QUIZ_STATE.topic))}</div></div>
           <strong id="imageQuizSelectedCount">Đã chọn ${pool.length} / ${pool.length} câu</strong>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
@@ -7846,7 +8170,7 @@ function imageQuizShowResult() {
         <div class="image-quiz-placeholder">
             <div class="image-quiz-placeholder-icon"><i class="fas fa-trophy"></i></div>
             <h3>Hoàn thành lượt trắc nghiệm</h3>
-            <p>${escapeHtml(IMAGE_QUIZ_STATE.subject)} - Khối ${escapeHtml(IMAGE_QUIZ_STATE.grade)} - ${escapeHtml(IMAGE_QUIZ_STATE.topic)}</p>
+            <p>${escapeHtml(IMAGE_QUIZ_STATE.subject)} - Khối ${escapeHtml(IMAGE_QUIZ_STATE.grade)} - ${escapeHtml(millionaireLessonSelectionLabel(IMAGE_QUIZ_STATE.questions, IMAGE_QUIZ_STATE.topic))}</p>
         </div>
         <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin:4px 0 22px;">
             <span style="padding:10px 16px;border:1px solid rgba(148,163,184,.25);border-radius:12px;"><b>Tổng câu:</b> ${total}</span>
@@ -8428,7 +8752,7 @@ function imageQuizRenderQuestion(question, restoring = false) {
     const title = stage.querySelector('#imageQuizQuestionTitle');
     const info = stage.querySelector('#imageQuizBankInfo');
     if (title) title.textContent = questionText;
-    if (info) info.textContent = `${IMAGE_QUIZ_STATE.subject} - Khối ${IMAGE_QUIZ_STATE.grade} - ${IMAGE_QUIZ_STATE.topic}`;
+    if (info) info.textContent = `${IMAGE_QUIZ_STATE.subject} - Khối ${IMAGE_QUIZ_STATE.grade} - ${millionaireLessonSelectionLabel(IMAGE_QUIZ_STATE.questions, IMAGE_QUIZ_STATE.topic)}`;
 
     Object.entries(answers).forEach(([letter, value]) => {
         const span = stage.querySelector(`#imageQuizAnswer${letter}`);
@@ -8516,7 +8840,7 @@ function imageQuizRestoreSession() {
     const gradeQs=IMAGE_QUIZ_STATE.questions.filter(q=>q.grade===IMAGE_QUIZ_STATE.grade);
     imageQuizSetOptions(subjectSelect,filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gradeQs,'subject'), IMAGE_QUIZ_STATE.grade),'-- Chọn môn học --'); if(subjectSelect) subjectSelect.value=IMAGE_QUIZ_STATE.subject;
     const subjectQs=gradeQs.filter(q=>q.subject===IMAGE_QUIZ_STATE.subject);
-    imageQuizSetOptions(topicSelect,imageQuizUniqueValues(subjectQs,'topic'),'-- Chọn chủ đề --'); if(topicSelect) topicSelect.value=IMAGE_QUIZ_STATE.topic;
+    imageQuizSetOptions(topicSelect,millionaireGetLessonOptions(subjectQs),'-- Chọn bài học / chủ đề --'); if(topicSelect) topicSelect.value=IMAGE_QUIZ_STATE.topic;
     imageQuizUpdateStartButton();
     if (IMAGE_QUIZ_STATE.phase==='result') { imageQuizShowResult(); return true; }
     if (IMAGE_QUIZ_STATE.currentQuestion) {
@@ -8558,7 +8882,7 @@ function imageQuizHandleGradeChange(value) {
         : [];
 
     imageQuizSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(questions, 'subject'), IMAGE_QUIZ_STATE.grade), '-- Chọn môn học --');
-    imageQuizSetOptions(topicSelect, [], '-- Chọn chủ đề --');
+    imageQuizSetOptions(topicSelect, [], '-- Chọn bài học / chủ đề --');
     imageQuizResetQuestionView();
 }
 
@@ -8576,7 +8900,7 @@ function imageQuizHandleSubjectChange(value) {
         )
         : [];
 
-    imageQuizSetOptions(topicSelect, imageQuizUniqueValues(questions, 'topic'), '-- Chọn chủ đề --');
+    imageQuizSetOptions(topicSelect, millionaireGetLessonOptions(questions), '-- Chọn bài học / chủ đề --');
     imageQuizResetQuestionView();
 }
 
@@ -8597,7 +8921,7 @@ async function initImageQuiz() {
     imageQuizBindStartButton();
     imageQuizSetOptions(gradeSelect, [], 'Đang tải...');
     imageQuizSetOptions(subjectSelect, [], '-- Chọn môn học --');
-    imageQuizSetOptions(topicSelect, [], '-- Chọn chủ đề --');
+    imageQuizSetOptions(topicSelect, [], '-- Chọn bài học / chủ đề --');
 
     const questions = millionaireSupabaseQuestionsLoaded
         ? [...MILLIONAIRE_SUPABASE_QUESTIONS]
@@ -8797,7 +9121,7 @@ function callAnswerAllFilteredQuestions() {
     return (CALL_ANSWER_STATE.questions || []).filter(q =>
         (!CALL_ANSWER_STATE.grade || q.grade === CALL_ANSWER_STATE.grade) &&
         (!CALL_ANSWER_STATE.subject || q.subject === CALL_ANSWER_STATE.subject) &&
-        (!CALL_ANSWER_STATE.topic || q.topic === CALL_ANSWER_STATE.topic)
+        (!CALL_ANSWER_STATE.topic || millionaireQuestionMatchesLessonSelection(q, CALL_ANSWER_STATE.topic))
     );
 }
 function callAnswerFilteredQuestions() {
@@ -8818,7 +9142,7 @@ function callAnswerRenderQuestionPicker(preserve=false){
     const pool=callAnswerAllFilteredQuestions(); if(!pool.length)return;
     if(!preserve){CALL_ANSWER_STATE.selectedQuestionKeys=new Set(pool.map((q,i)=>imageQuizQuestionKey(q,i)));CALL_ANSWER_STATE.selectionConfirmed=false;}
     const rows=pool.map((q,i)=>{const key=imageQuizQuestionKey(q,i),a=Array.isArray(q.a)?q.a:[],correct=['A','B','C','D'][Number(q.c)]||'',checked=CALL_ANSWER_STATE.selectedQuestionKeys.has(key);return `<tr><td style="text-align:center"><input type="checkbox" ${checked?'checked':''} data-question-key="${escapeHtml(key)}" onchange="callAnswerToggleQuestionSelection(this.dataset.questionKey,this.checked)"></td><td style="text-align:center;font-weight:700">${i+1}</td><td style="min-width:260px;font-weight:650">${escapeHtml(String(q.q||''))}</td><td>${escapeHtml(String(a[0]??''))}</td><td>${escapeHtml(String(a[1]??''))}</td><td>${escapeHtml(String(a[2]??''))}</td><td>${escapeHtml(String(a[3]??''))}</td><td style="text-align:center;font-weight:900">${correct}</td><td style="text-align:center">${String(q.imageUrl||q.image_url||'').trim()?'🖼️ Có':'—'}</td><td style="text-align:center"><button class="btn btn-secondary" style="padding:6px 10px;min-height:32px" onclick="callAnswerEditQuestion('${escapeHtml(String(q.id||''))}')"><i class="fas fa-edit"></i> Sửa</button></td></tr>`}).join('');
-    stage.innerHTML=`<div id="callAnswerQuestionPicker" style="width:100%"><div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:center;margin-bottom:14px"><div><h3 style="margin:0 0 4px">Chọn câu hỏi cho lượt Gọi tên + Trả lời</h3><div style="opacity:.75">${escapeHtml(CALL_ANSWER_STATE.subject)} - Khối ${escapeHtml(CALL_ANSWER_STATE.grade)} - ${escapeHtml(CALL_ANSWER_STATE.topic)}</div></div><strong id="callAnswerSelectedCount"></strong></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn btn-secondary" onclick="callAnswerSelectAllQuestions(true)"><i class="fas fa-check-double"></i> Chọn tất cả</button><button class="btn btn-secondary" onclick="callAnswerSelectAllQuestions(false)"><i class="fas fa-square"></i> Bỏ chọn tất cả</button><button id="callAnswerSaveSelectionBtn" class="btn btn-primary" onclick="callAnswerConfirmQuestionSelection()"><i class="fas fa-save"></i> Lưu bộ câu & Chuẩn bị trò chơi</button></div><div style="overflow:auto;max-height:520px;border:1px solid rgba(148,163,184,.28);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead style="position:sticky;top:0;background:var(--card-bg,#fff);z-index:1"><tr><th>Chọn</th><th>STT</th><th>Câu hỏi</th><th>A</th><th>B</th><th>C</th><th>D</th><th>Đúng</th><th>Ảnh</th><th>Thao tác</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    stage.innerHTML=`<div id="callAnswerQuestionPicker" style="width:100%"><div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:center;margin-bottom:14px"><div><h3 style="margin:0 0 4px">Chọn câu hỏi cho lượt Gọi tên + Trả lời</h3><div style="opacity:.75">${escapeHtml(CALL_ANSWER_STATE.subject)} - Khối ${escapeHtml(CALL_ANSWER_STATE.grade)} - ${escapeHtml(millionaireLessonSelectionLabel(CALL_ANSWER_STATE.questions, CALL_ANSWER_STATE.topic))}</div></div><strong id="callAnswerSelectedCount"></strong></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn btn-secondary" onclick="callAnswerSelectAllQuestions(true)"><i class="fas fa-check-double"></i> Chọn tất cả</button><button class="btn btn-secondary" onclick="callAnswerSelectAllQuestions(false)"><i class="fas fa-square"></i> Bỏ chọn tất cả</button><button id="callAnswerSaveSelectionBtn" class="btn btn-primary" onclick="callAnswerConfirmQuestionSelection()"><i class="fas fa-save"></i> Lưu bộ câu & Chuẩn bị trò chơi</button></div><div style="overflow:auto;max-height:520px;border:1px solid rgba(148,163,184,.28);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead style="position:sticky;top:0;background:var(--card-bg,#fff);z-index:1"><tr><th>Chọn</th><th>STT</th><th>Câu hỏi</th><th>A</th><th>B</th><th>C</th><th>D</th><th>Đúng</th><th>Ảnh</th><th>Thao tác</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
     stage.querySelectorAll('td,th').forEach(el=>{el.style.borderBottom='1px solid rgba(148,163,184,.18)';el.style.padding='9px 8px';el.style.verticalAlign='top';});callAnswerUpdatePickerSummary();
 }
 function callAnswerConfirmQuestionSelection(){if(!CALL_ANSWER_STATE.selectedQuestionKeys.size){alert('Vui lòng chọn ít nhất 1 câu hỏi.');return;}CALL_ANSWER_STATE.selectionConfirmed=true;CALL_ANSWER_STATE.usedQuestionKeys.clear();CALL_ANSWER_STATE.currentQuestion=null;CALL_ANSWER_STATE.questionAnswered=false;CALL_ANSWER_STATE.students=getImageCallerStudents(CALL_ANSWER_STATE.classId);CALL_ANSWER_STATE.calledKeys.clear();CALL_ANSWER_STATE.winner=null;CALL_ANSWER_STATE.mcIntroduced=false;CALL_ANSWER_STATE.sessionActive=false;CALL_ANSWER_STATE.results=[];callAnswerUpdateSummary();callAnswerRenderCallerStage();callAnswerPrepareStudentImages(CALL_ANSWER_STATE.students);}
@@ -8863,7 +9187,7 @@ function callAnswerRenderCallerStage() {
     if (!stage) return;
     const students = CALL_ANSWER_STATE.students;
     if (!students.length) {
-        stage.innerHTML = `<div style="opacity:.65;text-align:center;"><i class="fas fa-gamepad" style="font-size:54px;opacity:.35;"></i><h3>Khu vực Gọi tên + Trả lời</h3><p id="callAnswerReadyText">Chọn đầy đủ Khối, Lớp, Môn học và Chủ đề để chuẩn bị trò chơi.</p></div>`;
+        stage.innerHTML = `<div style="opacity:.65;text-align:center;"><i class="fas fa-gamepad" style="font-size:54px;opacity:.35;"></i><h3>Khu vực Gọi tên + Trả lời</h3><p id="callAnswerReadyText">Chọn đầy đủ Khối, Lớp, Môn học và Bài học để chuẩn bị trò chơi.</p></div>`;
         return;
     }
     stage.innerHTML = `<div id="callAnswerArena" style="position:relative;width:100%;height:430px;overflow:hidden;border-radius:18px;background:rgba(99,102,241,.035);">
@@ -9161,7 +9485,7 @@ function callAnswerUpdateSummary() {
     if (readyEl) {
         readyEl.textContent = students.length && questions.length
             ? `Đã sẵn sàng: ${students.length} học sinh và ${questions.length} câu hỏi.`
-            : 'Chọn đầy đủ Khối, Lớp, Môn học và Chủ đề để chuẩn bị trò chơi.';
+            : 'Chọn đầy đủ Khối, Lớp, Môn học và Bài học để chuẩn bị trò chơi.';
     }
     const ready = students.length > 0 && questions.length > 0;
     if (ready && CALL_ANSWER_STATE.selectionConfirmed) {
@@ -9189,7 +9513,7 @@ function callAnswerHandleGradeChange(value) {
     const gradeQuestions = CALL_ANSWER_STATE.grade
         ? CALL_ANSWER_STATE.questions.filter(q => q.grade === CALL_ANSWER_STATE.grade) : [];
     callAnswerSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gradeQuestions, 'subject'), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId), '-- Chọn môn học --');
-    callAnswerSetOptions(topicSelect, [], '-- Chọn chủ đề --');
+    callAnswerSetOptions(topicSelect, [], '-- Chọn bài học / chủ đề --');
     callAnswerResetCaller();
     callAnswerUpdateSummary();
 }
@@ -9202,7 +9526,7 @@ function callAnswerHandleClassChange(value) {
     const topicSelect = document.getElementById('callAnswerTopicSelect');
     const gradeQuestions = CALL_ANSWER_STATE.grade ? CALL_ANSWER_STATE.questions.filter(q => q.grade === CALL_ANSWER_STATE.grade) : [];
     callAnswerSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gradeQuestions, 'subject'), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId), '-- Chọn môn học --');
-    callAnswerSetOptions(topicSelect, [], '-- Chọn chủ đề --');
+    callAnswerSetOptions(topicSelect, [], '-- Chọn bài học / chủ đề --');
     callAnswerResetCaller();
     callAnswerUpdateSummary();
 }
@@ -9214,7 +9538,7 @@ function callAnswerHandleSubjectChange(value) {
     const items = CALL_ANSWER_STATE.subject
         ? CALL_ANSWER_STATE.questions.filter(q => q.grade === CALL_ANSWER_STATE.grade && q.subject === CALL_ANSWER_STATE.subject)
         : [];
-    callAnswerSetOptions(topicSelect, imageQuizUniqueValues(items, 'topic'), '-- Chọn chủ đề --');
+    callAnswerSetOptions(topicSelect, millionaireGetLessonOptions(items), '-- Chọn bài học / chủ đề --');
     callAnswerUpdateSummary();
 }
 
@@ -9244,13 +9568,13 @@ async function initCallAnswer() {
         const gq=CALL_ANSWER_STATE.questions.filter(q=>q.grade===CALL_ANSWER_STATE.grade);
         callAnswerSetOptions(document.getElementById('callAnswerSubjectSelect'),filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gq,'subject'), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId),'-- Chọn môn học --');
         const sq=gq.filter(q=>q.subject===CALL_ANSWER_STATE.subject);
-        callAnswerSetOptions(document.getElementById('callAnswerTopicSelect'),imageQuizUniqueValues(sq,'topic'),'-- Chọn chủ đề --');
+        callAnswerSetOptions(document.getElementById('callAnswerTopicSelect'),millionaireGetLessonOptions(sq),'-- Chọn bài học / chủ đề --');
         callAnswerRestoreSession();
     } else {
         CALL_ANSWER_STATE.grade='';CALL_ANSWER_STATE.classId='';CALL_ANSWER_STATE.subject='';CALL_ANSWER_STATE.topic='';callAnswerResetCaller();
         callAnswerSetOptions(document.getElementById('callAnswerClassSelect'), [], '-- Chọn lớp --');
         callAnswerSetOptions(document.getElementById('callAnswerSubjectSelect'), [], '-- Chọn môn học --');
-        callAnswerSetOptions(document.getElementById('callAnswerTopicSelect'), [], '-- Chọn chủ đề --');
+        callAnswerSetOptions(document.getElementById('callAnswerTopicSelect'), [], '-- Chọn bài học / chủ đề --');
         callAnswerUpdateSummary();
     }
 }
@@ -9267,7 +9591,7 @@ function renderCallAnswer() {
             <label><span style="display:block;font-weight:700;margin-bottom:6px;">Khối</span><select id="callAnswerGradeSelect" onchange="callAnswerHandleGradeChange(this.value)" style="width:100%;padding:10px;border-radius:10px;"><option>Đang tải...</option></select></label>
             <label><span style="display:block;font-weight:700;margin-bottom:6px;">Lớp</span><select id="callAnswerClassSelect" onchange="callAnswerHandleClassChange(this.value)" disabled style="width:100%;padding:10px;border-radius:10px;"><option>-- Chọn lớp --</option></select></label>
             <label><span style="display:block;font-weight:700;margin-bottom:6px;">Môn học</span><select id="callAnswerSubjectSelect" onchange="callAnswerHandleSubjectChange(this.value)" disabled style="width:100%;padding:10px;border-radius:10px;"><option>-- Chọn môn học --</option></select></label>
-            <label><span style="display:block;font-weight:700;margin-bottom:6px;">Chủ đề</span><select id="callAnswerTopicSelect" onchange="callAnswerHandleTopicChange(this.value)" disabled style="width:100%;padding:10px;border-radius:10px;"><option>-- Chọn chủ đề --</option></select></label>
+            <label><span style="display:block;font-weight:700;margin-bottom:6px;">Bài học / Chủ đề</span><select id="callAnswerTopicSelect" onchange="callAnswerHandleTopicChange(this.value)" disabled style="width:100%;padding:10px;border-radius:10px;"><option>-- Chọn bài học / chủ đề --</option></select></label>
           </div>
         </div>
         <div style="margin-top:18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;">
@@ -9275,7 +9599,7 @@ function renderCallAnswer() {
           <div style="padding:20px;border-radius:16px;background:var(--card-bg,#fff);border:1px solid var(--border-color,#e5e7eb);text-align:center;"><strong id="callAnswerQuestionCount" style="display:block;font-size:34px;">0</strong><span>Câu hỏi</span></div>
         </div>
         <div id="callAnswerGameStage" style="margin-top:18px;min-height:520px;border:2px dashed var(--border-color,#d1d5db);border-radius:20px;display:flex;flex-direction:column;align-items:stretch;justify-content:center;text-align:center;padding:20px;background:var(--card-bg,#fff);">
-          <div><i class="fas fa-gamepad" style="font-size:54px;opacity:.25;"></i><h3 style="margin:14px 0 8px;">Khu vực Gọi tên + Trả lời</h3><p id="callAnswerReadyText" style="margin:0;opacity:.7;">Chọn đầy đủ Khối, Lớp, Môn học và Chủ đề để chuẩn bị trò chơi.</p></div>
+          <div><i class="fas fa-gamepad" style="font-size:54px;opacity:.25;"></i><h3 style="margin:14px 0 8px;">Khu vực Gọi tên + Trả lời</h3><p id="callAnswerReadyText" style="margin:0;opacity:.7;">Chọn đầy đủ Khối, Lớp, Môn học và Bài học để chuẩn bị trò chơi.</p></div>
         </div>
       </section>`;
 }
@@ -9317,7 +9641,7 @@ function renderImageQuiz() {
                 <div class="image-quiz-filters">
                     <label class="image-quiz-field"><span>Khối</span><select id="imageQuizGradeSelect" onchange="imageQuizHandleGradeChange(this.value)" disabled><option>Đang tải...</option></select></label>
                     <label class="image-quiz-field"><span>Môn học</span><select id="imageQuizSubjectSelect" onchange="imageQuizHandleSubjectChange(this.value)" disabled><option>-- Chọn môn học --</option></select></label>
-                    <label class="image-quiz-field"><span>Chủ đề</span><select id="imageQuizTopicSelect" onchange="imageQuizHandleTopicChange(this.value)" disabled><option>-- Chọn chủ đề --</option></select></label>
+                    <label class="image-quiz-field"><span>Bài học / Chủ đề</span><select id="imageQuizTopicSelect" onchange="imageQuizHandleTopicChange(this.value)" disabled><option>-- Chọn bài học / chủ đề --</option></select></label>
                 </div>
             </div>
             <div class="image-quiz-stage">
