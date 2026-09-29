@@ -3188,6 +3188,81 @@ const MILLIONAIRE_CUSTOM_STORAGE_KEY = 'qlhs_millionaire_custom_questions_v1';
 // ============================================================
 let MILLIONAIRE_SUPABASE_QUESTIONS = [];
 let millionaireSupabaseQuestionsLoaded = false;
+let millionaireSupabaseCurrentScope = 'none';
+let millionaireSupabaseTotalCount = 0;
+let millionaireSupabaseCountLoaded = false;
+
+function millionaireSelectionScopeKey(grade, subject) {
+    const g = String(grade || '').trim() || 'all';
+    const s = getCanonicalSubjectName(subject || '') || 'all';
+    if (g === 'all' && s === 'all') return 'all';
+    if (g !== 'all' && s === 'all') return `grade:${g}`;
+    if (g === 'all' && s !== 'all') return `subject:${s}`;
+    return `selection:${g}|${s}`;
+}
+
+async function loadMillionaireQuestionCount() {
+    try {
+        const { count, error } = await supabase
+            .from('app3_millionaire_questions')
+            .select('id', { count: 'exact', head: true })
+            .eq('active', true);
+        if (error) throw error;
+        millionaireSupabaseTotalCount = Number(count || 0);
+        millionaireSupabaseCountLoaded = true;
+        return millionaireSupabaseTotalCount;
+    } catch (error) {
+        console.warn('[168.8A] Không đọc được tổng số câu hỏi:', error);
+        return millionaireSupabaseTotalCount;
+    }
+}
+
+async function loadMillionaireQuestionsForSelection(grade, subject, force = false) {
+    const scope = millionaireSelectionScopeKey(grade, subject);
+    if (scope === 'all') {
+        return loadMillionaireQuestionsFromSupabase();
+    }
+    if (!force && millionaireSupabaseQuestionsLoaded && millionaireSupabaseCurrentScope === scope) {
+        return [...MILLIONAIRE_SUPABASE_QUESTIONS];
+    }
+
+    const PAGE_SIZE = 500;
+    const gradeValue = String(grade || 'all').trim() || 'all';
+    const canonicalSubject = getCanonicalSubjectName(subject || '') || 'all';
+    const allRows = [];
+    try {
+        for (let page = 0; page < 40; page++) {
+            const from = page * PAGE_SIZE;
+            const to = from + PAGE_SIZE - 1;
+            let query = supabase
+                .from('app3_millionaire_questions')
+                .select('*')
+                .eq('active', true);
+
+            if (gradeValue !== 'all') query = query.eq('grade', gradeValue);
+            if (canonicalSubject !== 'all') query = query.eq('subject', canonicalSubject);
+
+            const { data, error } = await query
+                .order('week', { ascending: true, nullsFirst: false })
+                .order('ppct', { ascending: true, nullsFirst: false })
+                .order('created_at', { ascending: true })
+                .range(from, to);
+            if (error) throw error;
+            const rows = Array.isArray(data) ? data : [];
+            allRows.push(...rows);
+            if (rows.length < PAGE_SIZE) break;
+        }
+        MILLIONAIRE_SUPABASE_QUESTIONS = allRows.map(mapMillionaireQuestionFromSupabase);
+        millionaireSupabaseQuestionsLoaded = true;
+        millionaireSupabaseCurrentScope = scope;
+        console.log(`[168.8A] Đã tải phạm vi ${scope}: ${MILLIONAIRE_SUPABASE_QUESTIONS.length} câu.`);
+        return [...MILLIONAIRE_SUPABASE_QUESTIONS];
+    } catch (error) {
+        console.error('[168.8A] Không tải được câu hỏi theo phạm vi đã chọn:', error);
+        return [];
+    }
+}
+window.loadMillionaireQuestionsForSelection = loadMillionaireQuestionsForSelection;
 
 function mapMillionaireQuestionFromSupabase(row) {
     const correctMap = { A: 0, B: 1, C: 2, D: 3 };
@@ -3263,6 +3338,9 @@ async function loadMillionaireQuestionsFromSupabase() {
             allRows.map(mapMillionaireQuestionFromSupabase);
 
         millionaireSupabaseQuestionsLoaded = true;
+        millionaireSupabaseCurrentScope = 'all';
+        millionaireSupabaseTotalCount = MILLIONAIRE_SUPABASE_QUESTIONS.length;
+        millionaireSupabaseCountLoaded = true;
 
         console.log(
             `[167.17] Đã tải ĐẦY ĐỦ ${MILLIONAIRE_SUPABASE_QUESTIONS.length} câu hỏi từ Supabase theo phân trang.`
@@ -3288,7 +3366,7 @@ window.loadMillionaireQuestionsFromSupabase = loadMillionaireQuestionsFromSupaba
 // được chuyển sang Supabase. Không tự chạy để tránh khôi phục nhầm câu người dùng đã xóa.
 async function syncMillionaireMissingLocalToSupabase() {
     const localItems = loadMillionaireCustomQuestions();
-    const remoteItems = millionaireSupabaseQuestionsLoaded
+    const remoteItems = (millionaireSupabaseQuestionsLoaded && millionaireSupabaseCurrentScope === 'all')
         ? [...MILLIONAIRE_SUPABASE_QUESTIONS]
         : await loadMillionaireQuestionsFromSupabase();
 
@@ -3504,6 +3582,9 @@ const MILLIONAIRE_STATE = {
     playSelectedQuestionKeys: [],
     playSelectionSignature: '',
     managerOpen: false,
+    managerLoading: false,
+    managerPage: 1,
+    managerPageSize: 100,
     editingQuestionId: null,
     managerFilter: '',
     message: 'Chọn bộ câu hỏi rồi nhấn “Bắt đầu”.'
@@ -3538,6 +3619,9 @@ function resetMillionaireState() {
     MILLIONAIRE_STATE.playSelectedQuestionKeys = [];
     MILLIONAIRE_STATE.playSelectionSignature = '';
     MILLIONAIRE_STATE.managerOpen = false;
+    MILLIONAIRE_STATE.managerLoading = false;
+    MILLIONAIRE_STATE.managerPage = 1;
+    MILLIONAIRE_STATE.managerPageSize = 100;
     MILLIONAIRE_STATE.editingQuestionId = null;
     MILLIONAIRE_STATE.managerFilter = '';
     MILLIONAIRE_STATE.message = 'Chọn bộ câu hỏi rồi nhấn “Bắt đầu”.';
@@ -3696,9 +3780,10 @@ function getMillionaireQuestionsBySource(source = MILLIONAIRE_STATE.questionSour
         return [...MILLIONAIRE_SUPABASE_QUESTIONS];
     }
 
-    // Trong lúc Supabase chưa tải xong hoặc gặp lỗi,
-    // tạm dùng localStorage để không làm gián đoạn trò chơi.
-    return loadMillionaireCustomQuestions();
+    // BƯỚC 168.8A: không parse bản localStorage có thể chứa hàng nghìn câu
+    // trong mỗi lần render. Khi chưa tải phạm vi Supabase cần thiết, trả mảng rỗng;
+    // các handler Khối/Môn sẽ nạp đúng dữ liệu từ Supabase ngay sau đó.
+    return [];
 }
 
 function millionaireSetQuestionSource(value) {
@@ -3717,18 +3802,37 @@ function getMillionaireTopicsForSelection(grade, subject) {
     });
     return millionaireGetLessonOptions(items);
 }
-function millionaireSetGrade(value) {
+async function millionaireSetGrade(value) {
     millionaireResetPlaySelection();
     MILLIONAIRE_STATE.selectedGrade = value || 'all';
     MILLIONAIRE_STATE.selectedSubject = 'all';
     MILLIONAIRE_STATE.selectedTopic = 'all';
+    MILLIONAIRE_STATE.bankInfo = null;
     refreshMillionaire();
+
+    if (MILLIONAIRE_STATE.questionSource === 'custom' && MILLIONAIRE_STATE.selectedGrade !== 'all') {
+        await loadMillionaireQuestionsForSelection(MILLIONAIRE_STATE.selectedGrade, 'all');
+        refreshMillionaire();
+    }
 }
 
-function millionaireSetSubject(value) {
+async function millionaireSetSubject(value) {
     millionaireResetPlaySelection();
     MILLIONAIRE_STATE.selectedSubject = value || 'all';
     MILLIONAIRE_STATE.selectedTopic = 'all';
+    MILLIONAIRE_STATE.bankInfo = null;
+
+    if (MILLIONAIRE_STATE.questionSource === 'custom' &&
+        MILLIONAIRE_STATE.selectedGrade !== 'all' &&
+        MILLIONAIRE_STATE.selectedSubject !== 'all') {
+        MILLIONAIRE_STATE.message = 'Đang tải câu hỏi đúng Khối + Môn...';
+        refreshMillionaire();
+        await loadMillionaireQuestionsForSelection(
+            MILLIONAIRE_STATE.selectedGrade,
+            MILLIONAIRE_STATE.selectedSubject
+        );
+        MILLIONAIRE_STATE.message = 'Đã tải câu hỏi theo Khối + Môn đã chọn.';
+    }
     refreshMillionaire();
 }
 
@@ -3956,14 +4060,31 @@ function millionaireCanManageQuestion(item) {
     return !!item?.createdBy && item.createdBy === APP_STATE.currentUserId;
 }
 
-function millionaireOpenQuestionManager() {
+async function millionaireOpenQuestionManager() {
     MILLIONAIRE_STATE.managerOpen = true;
+    MILLIONAIRE_STATE.managerLoading = true;
+    MILLIONAIRE_STATE.managerPage = 1;
     MILLIONAIRE_STATE.editingQuestionId = null;
+    refreshMillionaire();
+    await loadMillionaireQuestionsFromSupabase();
+    MILLIONAIRE_STATE.managerLoading = false;
     refreshMillionaire();
 }
 
+function millionaireManagerSetPage(page) {
+    const items = getMillionaireQuestionsBySource('custom');
+    const pageSize = Math.max(20, Number(MILLIONAIRE_STATE.managerPageSize || 100));
+    const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+    MILLIONAIRE_STATE.managerPage = Math.max(1, Math.min(totalPages, Number(page || 1)));
+    refreshMillionaire();
+}
+window.millionaireManagerSetPage = millionaireManagerSetPage;
+
 function millionaireCloseQuestionManager() {
     MILLIONAIRE_STATE.managerOpen = false;
+    MILLIONAIRE_STATE.managerLoading = false;
+    MILLIONAIRE_STATE.managerPage = 1;
+    MILLIONAIRE_STATE.managerPageSize = 100;
     MILLIONAIRE_STATE.editingQuestionId = null;
     refreshMillionaire();
 }
@@ -4605,7 +4726,7 @@ async function millionaireImportExcelQuestions(event) {
         // BƯỚC 151.49.3F.17B.10A:
         // Nhập Excel phải đối chiếu và ghi trực tiếp với ngân hàng Supabase dùng chung.
         // Không dùng localStorage làm nguồn chính nữa, nếu không thiết bị khác sẽ không thấy câu vừa nhập.
-        const custom = millionaireSupabaseQuestionsLoaded
+        const custom = (millionaireSupabaseQuestionsLoaded && millionaireSupabaseCurrentScope === 'all')
             ? [...MILLIONAIRE_SUPABASE_QUESTIONS]
             : await loadMillionaireQuestionsFromSupabase();
         const defaultQuestions = MILLIONAIRE_QUESTION_BANK;
@@ -4717,10 +4838,14 @@ async function millionaireImportExcelQuestions(event) {
 
         // Ghi các câu mới lên Supabase và để database tự sinh UUID.
         if (imported.length) {
-            const { error } = await supabase
-                .from('app3_millionaire_questions')
-                .insert(imported.map(mapMillionaireQuestionToSupabase));
-            if (error) throw error;
+            const BATCH_SIZE = 200;
+            for (let i = 0; i < imported.length; i += BATCH_SIZE) {
+                const batch = imported.slice(i, i + BATCH_SIZE).map(mapMillionaireQuestionToSupabase);
+                const { error } = await supabase
+                    .from('app3_millionaire_questions')
+                    .insert(batch);
+                if (error) throw error;
+            }
         }
 
         if (imported.length || updatedItems.length) {
@@ -5051,7 +5176,7 @@ async function importMillionaireQuestionsFromPastedAI() {
     try {
         // BƯỚC 151.49.3F.17B.10A:
         // Dán từ AI cũng phải đối chiếu và ghi trực tiếp lên Supabase.
-        const custom = millionaireSupabaseQuestionsLoaded
+        const custom = (millionaireSupabaseQuestionsLoaded && millionaireSupabaseCurrentScope === 'all')
             ? [...MILLIONAIRE_SUPABASE_QUESTIONS]
             : await loadMillionaireQuestionsFromSupabase();
         const duplicateKeys = new Set(
@@ -5115,10 +5240,14 @@ async function importMillionaireQuestionsFromPastedAI() {
                 }
             });
 
-            const { error } = await supabase
-                .from('app3_millionaire_questions')
-                .insert(imported.map(mapMillionaireQuestionToSupabase));
-            if (error) throw error;
+            const BATCH_SIZE = 200;
+            for (let i = 0; i < imported.length; i += BATCH_SIZE) {
+                const batch = imported.slice(i, i + BATCH_SIZE).map(mapMillionaireQuestionToSupabase);
+                const { error } = await supabase
+                    .from('app3_millionaire_questions')
+                    .insert(batch);
+                if (error) throw error;
+            }
 
             await loadMillionaireQuestionsFromSupabase();
             saveMillionaireCustomQuestions(MILLIONAIRE_SUPABASE_QUESTIONS);
@@ -5380,7 +5509,9 @@ async function millionaireDeleteAllCustomQuestions() {
         alert('Chỉ Admin mới được xóa toàn bộ ngân hàng câu hỏi tự thêm.');
         return;
     }
-    const items = getMillionaireQuestionsBySource('custom');
+    const items = (millionaireSupabaseQuestionsLoaded && millionaireSupabaseCurrentScope === 'all')
+        ? getMillionaireQuestionsBySource('custom')
+        : await loadMillionaireQuestionsFromSupabase();
     if (!items.length) {
         alert('Hiện không có câu hỏi tự thêm để xóa.');
         return;
@@ -5394,29 +5525,37 @@ async function millionaireDeleteAllCustomQuestions() {
     if (!ok) return;
 
     try {
-        const targetIds = items.map(q => q.id);
-        const { data, error } = await supabase
-            .from('app3_millionaire_questions')
-            .delete()
-            .in('id', targetIds)
-            .select('id');
+        const targetIds = items.map(q => q.id).filter(Boolean);
+        const deletedIds = new Set();
+        const BATCH_SIZE = 200;
+        for (let i = 0; i < targetIds.length; i += BATCH_SIZE) {
+            const batchIds = targetIds.slice(i, i + BATCH_SIZE);
+            const { data, error } = await supabase
+                .from('app3_millionaire_questions')
+                .delete()
+                .in('id', batchIds)
+                .select('id');
+            if (error) throw error;
+            (data || []).forEach(row => deletedIds.add(row.id));
+        }
 
-        if (error) throw error;
-
-        const deletedIds = new Set((data || []).map(row => row.id));
-        if (!deletedIds.size) {
+        if (!deletedIds.size && targetIds.length) {
             throw new Error('Không xóa được câu hỏi nào trên Supabase hoặc bạn không có quyền xóa.');
         }
 
-        MILLIONAIRE_SUPABASE_QUESTIONS = MILLIONAIRE_SUPABASE_QUESTIONS.filter(q => !deletedIds.has(q.id));
+        MILLIONAIRE_SUPABASE_QUESTIONS = [];
         millionaireSupabaseQuestionsLoaded = true;
+        millionaireSupabaseCurrentScope = 'all';
+        millionaireSupabaseTotalCount = Math.max(0, millionaireSupabaseTotalCount - deletedIds.size);
+        millionaireSupabaseCountLoaded = true;
         MILLIONAIRE_STATE.selectedQuestionIds = [];
         MILLIONAIRE_STATE.editingQuestionId = null;
+        MILLIONAIRE_STATE.managerPage = 1;
         MILLIONAIRE_STATE.message = deletedIds.size === items.length
             ? `Đã xóa toàn bộ ${deletedIds.size} câu hỏi tự thêm khỏi Supabase.`
             : `Đã xóa ${deletedIds.size}/${items.length} câu hỏi. Hãy tải lại danh sách để kiểm tra.`;
         refreshMillionaire();
-        console.log(`[151.49.3F.17B.10] Đã xóa ${deletedIds.size}/${items.length} câu hỏi tự thêm trên Supabase.`);
+        console.log(`[168.8A] Đã xóa ${deletedIds.size}/${items.length} câu hỏi theo từng lô ${BATCH_SIZE}.`);
     } catch (error) {
         console.error('[151.49.3F.17B.10] Lỗi xóa toàn bộ câu hỏi trên Supabase:', error);
         alert(
@@ -5453,8 +5592,18 @@ function renderMillionaireQuestionManager() {
 
     const selectedIds = new Set((MILLIONAIRE_STATE.selectedQuestionIds || []).filter(id => manageableIds.has(id)));
     MILLIONAIRE_STATE.selectedQuestionIds = [...selectedIds];
-    const rows = custom.length
-        ? custom.map((item, index) => `
+
+    const pageSize = Math.max(20, Number(MILLIONAIRE_STATE.managerPageSize || 100));
+    const totalPages = Math.max(1, Math.ceil(custom.length / pageSize));
+    const currentPage = Math.max(1, Math.min(totalPages, Number(MILLIONAIRE_STATE.managerPage || 1)));
+    MILLIONAIRE_STATE.managerPage = currentPage;
+    const pageStart = (currentPage - 1) * pageSize;
+    const pageItems = custom.slice(pageStart, pageStart + pageSize);
+
+    const rows = MILLIONAIRE_STATE.managerLoading
+        ? '<tr><td colspan="8" class="millionaire-manager-empty">Đang tải toàn bộ ngân hàng để quản lý...</td></tr>'
+        : custom.length
+        ? pageItems.map((item, index) => `
             <tr>
                 <td class="millionaire-select-cell">
                     ${millionaireCanManageQuestion(item) ? `
@@ -5463,7 +5612,7 @@ function renderMillionaireQuestionManager() {
                         ${selectedIds.has(item.id) ? 'checked' : ''}
                         onchange="millionaireToggleQuestionSelection('${item.id}', this.checked)">` : '<span title="Chỉ xem">—</span>'}
                 </td>
-                <td>${index + 1}</td>
+                <td>${pageStart + index + 1}</td>
                 <td>${escapeHtml(item.grade === 'all' ? 'Tất cả' : 'Khối ' + item.grade)}</td>
                 <td>${escapeHtml(item.subject)}</td>
                 <td>${escapeHtml(millionaireQuestionLessonLabel(item) || item.topic || '')}</td>
@@ -5681,6 +5830,14 @@ D: ...
             </div>
             `}
 
+            ${!MILLIONAIRE_STATE.managerLoading && custom.length > pageSize ? `
+            <div class="millionaire-manager-pager" style="display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0;">
+                <button class="btn" onclick="millionaireManagerSetPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>← Trang trước</button>
+                <strong>Trang ${currentPage}/${totalPages}</strong>
+                <span>Hiển thị ${pageStart + 1}–${Math.min(pageStart + pageSize, custom.length)} / ${custom.length} câu</span>
+                <button class="btn" onclick="millionaireManagerSetPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>Trang sau →</button>
+            </div>` : ''}
+
             <div class="millionaire-manager-import-toolbar">
                 ${canCreate ? `
                 <button class="btn" onclick="millionaireDownloadExcelTemplate()">
@@ -5770,7 +5927,9 @@ function renderMillionaireBankSelector() {
         }
     }
     // BƯỚC 151.49.3F.17B.8B: thống kê câu đã thêm theo Supabase, có localStorage làm dự phòng.
-    const customCount = getMillionaireQuestionsBySource('custom').length;
+    const customCount = millionaireSupabaseCountLoaded
+        ? millionaireSupabaseTotalCount
+        : (millionaireSupabaseQuestionsLoaded ? MILLIONAIRE_SUPABASE_QUESTIONS.length : 0);
     const defaultCount = MILLIONAIRE_QUESTION_BANK.length;
     const subjects = getMillionaireSubjectsForGrade(state.selectedGrade);
     const topics = getMillionaireTopicsForSelection(state.selectedGrade, state.selectedSubject);
@@ -6754,29 +6913,23 @@ function initMillionaire() {
         resetMillionaireState();
     }
 
-        // BƯỚC 151.49.3F.17B.7:
-    // Tự động tải ngân hàng câu hỏi dùng chung từ Supabase.
-    if (!millionaireSupabaseQuestionsLoaded) {
-        loadMillionaireQuestionsFromSupabase()
-            .then(items => {
-    console.log(
-        `[151.49.3F.17B.7] Ngân hàng dùng chung sẵn sàng: ${items.length} câu.`
-    );
+    // BƯỚC 168.8A: không còn tải toàn bộ hàng nghìn câu khi chỉ mở trò chơi.
+    // Chỉ lấy tổng số câu (request rất nhẹ), và nếu đang có lựa chọn Khối + Môn
+    // thì tải đúng phạm vi đó.
+    loadMillionaireQuestionCount().then(() => refreshMillionaire()).catch(() => {});
 
-    // Render lại một lần sau khi dữ liệu Supabase đã tải xong.
-    refreshMillionaire();
-})
-            .catch(error => {
-                console.error(
-                    '[151.49.3F.17B.7] Lỗi khởi tạo ngân hàng Supabase:',
-                    error
-                );
-            });
+    if (MILLIONAIRE_STATE.questionSource === 'custom' &&
+        (MILLIONAIRE_STATE.selectedGrade !== 'all' || MILLIONAIRE_STATE.selectedSubject !== 'all')) {
+        loadMillionaireQuestionsForSelection(
+            MILLIONAIRE_STATE.selectedGrade,
+            MILLIONAIRE_STATE.selectedSubject
+        ).then(() => refreshMillionaire()).catch(error => {
+            console.error('[168.8A] Lỗi tải câu hỏi theo lựa chọn:', error);
+        });
     }
+
     preloadMillionaireAudio();
 
-    // Nếu đang giữa một câu và chỉ vừa chuyển module rồi quay lại,
-    // tiếp tục nhạc suy nghĩ sau khi giao diện đã được render lại.
     if (
         MILLIONAIRE_STATE.started &&
         !MILLIONAIRE_STATE.ended &&
@@ -9013,22 +9166,19 @@ function imageQuizHandleGradeChange(value) {
     IMAGE_QUIZ_STATE.grade = value || '';
     IMAGE_QUIZ_STATE.subject = '';
     IMAGE_QUIZ_STATE.topic = '';
+    IMAGE_QUIZ_STATE.questions = [];
     IMAGE_QUIZ_STATE.currentQuestion = null;
     IMAGE_QUIZ_STATE.selectedQuestionKeys.clear();
     IMAGE_QUIZ_STATE.selectionConfirmed = false;
 
     const subjectSelect = document.getElementById('imageQuizSubjectSelect');
     const topicSelect = document.getElementById('imageQuizTopicSelect');
-    const questions = IMAGE_QUIZ_STATE.grade
-        ? IMAGE_QUIZ_STATE.questions.filter(item => item.grade === IMAGE_QUIZ_STATE.grade)
-        : [];
-
-    imageQuizSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(questions, 'subject'), IMAGE_QUIZ_STATE.grade), '-- Chọn môn học --');
+    imageQuizSetOptions(subjectSelect, getMillionaireSubjectsForGrade(IMAGE_QUIZ_STATE.grade), '-- Chọn môn học --');
     imageQuizSetOptions(topicSelect, [], '-- Chọn bài học / chủ đề --');
     imageQuizResetQuestionView();
 }
 
-function imageQuizHandleSubjectChange(value) {
+async function imageQuizHandleSubjectChange(value) {
     IMAGE_QUIZ_STATE.subject = value || '';
     IMAGE_QUIZ_STATE.topic = '';
     IMAGE_QUIZ_STATE.currentQuestion = null;
@@ -9036,13 +9186,11 @@ function imageQuizHandleSubjectChange(value) {
     IMAGE_QUIZ_STATE.selectionConfirmed = false;
 
     const topicSelect = document.getElementById('imageQuizTopicSelect');
-    const questions = IMAGE_QUIZ_STATE.subject
-        ? IMAGE_QUIZ_STATE.questions.filter(item =>
-            item.grade === IMAGE_QUIZ_STATE.grade && millionaireSubjectMatches(item, IMAGE_QUIZ_STATE.subject)
-        )
+    imageQuizSetOptions(topicSelect, [], 'Đang tải bài học...');
+    IMAGE_QUIZ_STATE.questions = IMAGE_QUIZ_STATE.subject
+        ? await loadMillionaireQuestionsForSelection(IMAGE_QUIZ_STATE.grade, IMAGE_QUIZ_STATE.subject)
         : [];
-
-    imageQuizSetOptions(topicSelect, millionaireGetLessonOptions(questions), '-- Chọn bài học / chủ đề --');
+    imageQuizSetOptions(topicSelect, millionaireGetLessonOptions(IMAGE_QUIZ_STATE.questions), '-- Chọn bài học / chủ đề --');
     imageQuizResetQuestionView();
 }
 
@@ -9061,32 +9209,27 @@ async function initImageQuiz() {
     if (!gradeSelect || !subjectSelect || !topicSelect) return;
 
     imageQuizBindStartButton();
-    imageQuizSetOptions(gradeSelect, [], 'Đang tải...');
+    const grades = getGameAllowedGradesByAccess();
+    imageQuizSetOptions(gradeSelect, grades, '-- Chọn khối --', 'Khối ');
     imageQuizSetOptions(subjectSelect, [], '-- Chọn môn học --');
     imageQuizSetOptions(topicSelect, [], '-- Chọn bài học / chủ đề --');
 
-    const questions = millionaireSupabaseQuestionsLoaded
-        ? [...MILLIONAIRE_SUPABASE_QUESTIONS]
-        : await loadMillionaireQuestionsFromSupabase();
-
-    // Chỉ lấy khối cụ thể cho module học sinh; câu grade='all' không đưa vào bộ lọc Khối.
-    IMAGE_QUIZ_STATE.questions = (questions || []).filter(item => item && item.grade && item.grade !== 'all');
-
-    imageQuizSetOptions(
-        gradeSelect,
-        imageQuizUniqueValues(IMAGE_QUIZ_STATE.questions, 'grade').filter(g => !hasAssignedScope() || getGameAllowedGradesByAccess().includes(String(g))),
-        '-- Chọn khối --',
-        'Khối '
-    );
-    if (!imageQuizRestoreSession()) {
-        IMAGE_QUIZ_STATE.grade = '';
-        IMAGE_QUIZ_STATE.subject = '';
-        IMAGE_QUIZ_STATE.topic = '';
-        IMAGE_QUIZ_STATE.currentQuestion = null;
-        imageQuizResetStats(0);
-        imageQuizUpdateInfo();
+    if (IMAGE_QUIZ_STATE.sessionActive && IMAGE_QUIZ_STATE.grade && IMAGE_QUIZ_STATE.subject) {
+        IMAGE_QUIZ_STATE.questions = await loadMillionaireQuestionsForSelection(IMAGE_QUIZ_STATE.grade, IMAGE_QUIZ_STATE.subject);
+        imageQuizSetOptions(subjectSelect, getMillionaireSubjectsForGrade(IMAGE_QUIZ_STATE.grade), '-- Chọn môn học --');
+        imageQuizSetOptions(topicSelect, millionaireGetLessonOptions(IMAGE_QUIZ_STATE.questions), '-- Chọn bài học / chủ đề --');
+        if (imageQuizRestoreSession()) return;
     }
+
+    IMAGE_QUIZ_STATE.grade = '';
+    IMAGE_QUIZ_STATE.subject = '';
+    IMAGE_QUIZ_STATE.topic = '';
+    IMAGE_QUIZ_STATE.questions = [];
+    IMAGE_QUIZ_STATE.currentQuestion = null;
+    imageQuizResetStats(0);
+    imageQuizUpdateInfo();
 }
+
 
 window.imageQuizHandleGradeChange = imageQuizHandleGradeChange;
 window.imageQuizHandleSubjectChange = imageQuizHandleSubjectChange;
@@ -9652,9 +9795,8 @@ function callAnswerHandleGradeChange(value) {
         ? filterGameClassesByAccess(getImageCallerClasses(), CALL_ANSWER_STATE.grade)
         : [];
     callAnswerSetOptions(classSelect, classes.map(c => ({value:c.id,label:c.name || 'Lớp chưa đặt tên'})), '-- Chọn lớp --');
-    const gradeQuestions = CALL_ANSWER_STATE.grade
-        ? CALL_ANSWER_STATE.questions.filter(q => q.grade === CALL_ANSWER_STATE.grade) : [];
-    callAnswerSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gradeQuestions, 'subject'), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId), '-- Chọn môn học --');
+    CALL_ANSWER_STATE.questions = [];
+    callAnswerSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(getMillionaireSubjectsForGrade(CALL_ANSWER_STATE.grade), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId), '-- Chọn môn học --');
     callAnswerSetOptions(topicSelect, [], '-- Chọn bài học / chủ đề --');
     callAnswerResetCaller();
     callAnswerUpdateSummary();
@@ -9666,21 +9808,22 @@ function callAnswerHandleClassChange(value) {
     CALL_ANSWER_STATE.topic = '';
     const subjectSelect = document.getElementById('callAnswerSubjectSelect');
     const topicSelect = document.getElementById('callAnswerTopicSelect');
-    const gradeQuestions = CALL_ANSWER_STATE.grade ? CALL_ANSWER_STATE.questions.filter(q => q.grade === CALL_ANSWER_STATE.grade) : [];
-    callAnswerSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gradeQuestions, 'subject'), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId), '-- Chọn môn học --');
+    CALL_ANSWER_STATE.questions = [];
+    callAnswerSetOptions(subjectSelect, filterGameSubjectNamesByGradeAccess(getMillionaireSubjectsForGrade(CALL_ANSWER_STATE.grade), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId), '-- Chọn môn học --');
     callAnswerSetOptions(topicSelect, [], '-- Chọn bài học / chủ đề --');
     callAnswerResetCaller();
     callAnswerUpdateSummary();
 }
 
-function callAnswerHandleSubjectChange(value) {
+async function callAnswerHandleSubjectChange(value) {
     CALL_ANSWER_STATE.subject = value || '';
     CALL_ANSWER_STATE.topic = '';
     const topicSelect = document.getElementById('callAnswerTopicSelect');
-    const items = CALL_ANSWER_STATE.subject
-        ? CALL_ANSWER_STATE.questions.filter(q => q.grade === CALL_ANSWER_STATE.grade && millionaireSubjectMatches(q, CALL_ANSWER_STATE.subject))
+    callAnswerSetOptions(topicSelect, [], 'Đang tải bài học...');
+    CALL_ANSWER_STATE.questions = CALL_ANSWER_STATE.subject
+        ? await loadMillionaireQuestionsForSelection(CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.subject)
         : [];
-    callAnswerSetOptions(topicSelect, millionaireGetLessonOptions(items), '-- Chọn bài học / chủ đề --');
+    callAnswerSetOptions(topicSelect, millionaireGetLessonOptions(CALL_ANSWER_STATE.questions), '-- Chọn bài học / chủ đề --');
     callAnswerUpdateSummary();
 }
 
@@ -9694,32 +9837,31 @@ function callAnswerHandleTopicChange(value) {
 async function initCallAnswer() {
     const gradeSelect = document.getElementById('callAnswerGradeSelect');
     if (!gradeSelect) return;
-    const questions = millionaireSupabaseQuestionsLoaded
-        ? [...MILLIONAIRE_SUPABASE_QUESTIONS]
-        : await loadMillionaireQuestionsFromSupabase();
-    CALL_ANSWER_STATE.questions = (questions || []).filter(q => q && q.grade && q.grade !== 'all');
+
     const restoringSession = CALL_ANSWER_STATE.sessionActive;
     const classGrades = new Set(getImageCallerClasses().map(getImageCallerClassGrade).filter(Boolean));
-    const questionGrades = new Set(imageQuizUniqueValues(CALL_ANSWER_STATE.questions, 'grade'));
     const allowedGrades = new Set(getGameAllowedGradesByAccess());
-    const grades = [...classGrades].filter(g => questionGrades.has(g) && (!hasAssignedScope() || allowedGrades.has(String(g)))).sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
+    const grades = [...classGrades]
+        .filter(g => !hasAssignedScope() || allowedGrades.has(String(g)))
+        .sort((a,b)=>a.localeCompare(b,'vi',{numeric:true}));
     callAnswerSetOptions(gradeSelect, grades, '-- Chọn khối --', 'Khối ');
-    if(restoringSession){
+
+    if (restoringSession && CALL_ANSWER_STATE.grade && CALL_ANSWER_STATE.subject) {
+        CALL_ANSWER_STATE.questions = await loadMillionaireQuestionsForSelection(CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.subject);
         const classes=filterGameClassesByAccess(getImageCallerClasses(), CALL_ANSWER_STATE.grade);
         callAnswerSetOptions(document.getElementById('callAnswerClassSelect'),classes.map(c=>({value:c.id,label:c.name||'Lớp chưa đặt tên'})),'-- Chọn lớp --');
-        const gq=CALL_ANSWER_STATE.questions.filter(q=>q.grade===CALL_ANSWER_STATE.grade);
-        callAnswerSetOptions(document.getElementById('callAnswerSubjectSelect'),filterGameSubjectNamesByGradeAccess(imageQuizUniqueValues(gq,'subject'), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId),'-- Chọn môn học --');
-        const sq=gq.filter(q=>millionaireSubjectMatches(q, CALL_ANSWER_STATE.subject));
-        callAnswerSetOptions(document.getElementById('callAnswerTopicSelect'),millionaireGetLessonOptions(sq),'-- Chọn bài học / chủ đề --');
+        callAnswerSetOptions(document.getElementById('callAnswerSubjectSelect'),filterGameSubjectNamesByGradeAccess(getMillionaireSubjectsForGrade(CALL_ANSWER_STATE.grade), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId),'-- Chọn môn học --');
+        callAnswerSetOptions(document.getElementById('callAnswerTopicSelect'),millionaireGetLessonOptions(CALL_ANSWER_STATE.questions),'-- Chọn bài học / chủ đề --');
         callAnswerRestoreSession();
     } else {
-        CALL_ANSWER_STATE.grade='';CALL_ANSWER_STATE.classId='';CALL_ANSWER_STATE.subject='';CALL_ANSWER_STATE.topic='';callAnswerResetCaller();
+        CALL_ANSWER_STATE.grade='';CALL_ANSWER_STATE.classId='';CALL_ANSWER_STATE.subject='';CALL_ANSWER_STATE.topic='';CALL_ANSWER_STATE.questions=[];callAnswerResetCaller();
         callAnswerSetOptions(document.getElementById('callAnswerClassSelect'), [], '-- Chọn lớp --');
         callAnswerSetOptions(document.getElementById('callAnswerSubjectSelect'), [], '-- Chọn môn học --');
         callAnswerSetOptions(document.getElementById('callAnswerTopicSelect'), [], '-- Chọn bài học / chủ đề --');
         callAnswerUpdateSummary();
     }
 }
+
 
 function renderCallAnswer() {
     return `
