@@ -3299,7 +3299,7 @@ function mapMillionaireQuestionFromSupabase(row) {
 // các bộ câu hỏi nhập sau như Toán/Tiếng Việt sẽ không bao giờ vào bộ nhớ.
 // Dùng batch 500 để luôn thấp hơn giới hạn và lặp cho đến khi hết dữ liệu.
 // ============================================================
-async function loadMillionaireQuestionsFromSupabase() {
+async function loadMillionaireQuestionsFromSupabase(throwOnError = false) {
     const PAGE_SIZE = 500;
     const MAX_PAGES = 100;
 
@@ -3337,6 +3337,7 @@ async function loadMillionaireQuestionsFromSupabase() {
         MILLIONAIRE_SUPABASE_QUESTIONS =
             allRows.map(mapMillionaireQuestionFromSupabase);
 
+        try { saveMillionaireCustomQuestions(MILLIONAIRE_SUPABASE_QUESTIONS); } catch (cacheError) { console.warn('Không cập nhật được bộ nhớ câu hỏi:', cacheError); }
         millionaireSupabaseQuestionsLoaded = true;
         millionaireSupabaseCurrentScope = 'all';
         millionaireSupabaseTotalCount = MILLIONAIRE_SUPABASE_QUESTIONS.length;
@@ -3355,6 +3356,7 @@ async function loadMillionaireQuestionsFromSupabase() {
         );
 
         millionaireSupabaseQuestionsLoaded = false;
+        if (throwOnError) throw error;
         return [];
     }
 }
@@ -3461,7 +3463,7 @@ function mapMillionaireQuestionToSupabase(item) {
 }
 
 function getAllMillionaireQuestions() {
-    return [...MILLIONAIRE_QUESTION_BANK, ...loadMillionaireCustomQuestions()];
+    return [...MILLIONAIRE_QUESTION_BANK, ...getMillionaireQuestionsBySource('custom')];
 }
 
 function makeMillionaireQuestionId() {
@@ -4061,14 +4063,21 @@ function millionaireCanManageQuestion(item) {
 }
 
 async function millionaireOpenQuestionManager() {
+    if (MILLIONAIRE_STATE.managerLoading) return;
     MILLIONAIRE_STATE.managerOpen = true;
     MILLIONAIRE_STATE.managerLoading = true;
+    MILLIONAIRE_STATE.managerLoadError = '';
     MILLIONAIRE_STATE.managerPage = 1;
     MILLIONAIRE_STATE.editingQuestionId = null;
     refreshMillionaire();
-    await loadMillionaireQuestionsFromSupabase();
-    MILLIONAIRE_STATE.managerLoading = false;
-    refreshMillionaire();
+    try {
+        await loadMillionaireQuestionsFromSupabase(true);
+    } catch (error) {
+        MILLIONAIRE_STATE.managerLoadError = millionaireDeleteErrorText(error);
+    } finally {
+        MILLIONAIRE_STATE.managerLoading = false;
+        refreshMillionaire();
+    }
 }
 
 function millionaireManagerSetPage(page) {
@@ -4925,9 +4934,18 @@ function buildMillionaireExcelRows(items) {
 
     return rows;
 }
-function exportMillionaireQuestionsToExcel(mode = 'custom') {
+async function exportMillionaireQuestionsToExcel(mode = 'custom') {
     if (typeof XLSX === 'undefined') {
         alert('Thư viện Excel chưa sẵn sàng.');
+        return;
+    }
+
+    try {
+        await loadMillionaireQuestionsFromSupabase(true);
+        MILLIONAIRE_STATE.managerLoadError = '';
+        refreshMillionaire();
+    } catch (error) {
+        alert('Không tải được ngân hàng hiện tại để xuất Excel. Không dùng bản cũ trong trình duyệt.\n\n' + millionaireDeleteErrorText(error));
         return;
     }
 
@@ -5523,6 +5541,7 @@ async function millionaireRunBulkDelete(all) {
             millionaireSupabaseCountLoaded = false;
             MILLIONAIRE_STATE.managerPage = 1;
             refreshMillionaire();
+            await millionaireOpenQuestionManager();
         }
     }
 }
@@ -5535,6 +5554,7 @@ function renderMillionaireQuestionManager() {
     if (!MILLIONAIRE_STATE.managerOpen) return '';
 
     const custom = getMillionaireQuestionsBySource('custom');
+    const managerUnavailable = !millionaireSupabaseQuestionsLoaded || millionaireSupabaseCurrentScope !== 'all';
     const canCreate = millionaireCanCreateQuestion();
     const manageable = custom.filter(millionaireCanManageQuestion);
     const manageableIds = new Set(manageable.map(q => q.id));
@@ -5568,6 +5588,10 @@ function renderMillionaireQuestionManager() {
 
     const rows = MILLIONAIRE_STATE.managerLoading
         ? '<tr><td colspan="8" class="millionaire-manager-empty">Đang tải toàn bộ ngân hàng để quản lý...</td></tr>'
+        : MILLIONAIRE_STATE.managerLoadError
+        ? `<tr><td colspan="8">Không tải được ngân hàng: ${escapeHtml(MILLIONAIRE_STATE.managerLoadError)}. Bấm Tải lại danh sách.</td></tr>`
+        : managerUnavailable
+        ? '<tr><td colspan="8">Danh sách chưa được tải đầy đủ. Bấm Tải lại danh sách.</td></tr>'
         : custom.length
         ? pageItems.map((item, index) => `
             <tr>
@@ -5603,6 +5627,7 @@ function renderMillionaireQuestionManager() {
                     <span>Ngân hàng câu hỏi dùng chung trên Supabase · ${isAdmin() ? 'Admin' : isTeacher() ? 'Giáo viên' : 'Chỉ xem'}.</span>
                 </div>
                 <div class="millionaire-manager-head-actions">
+                    <button type="button" onclick="millionaireOpenQuestionManager()" title="Tải lại danh sách từ Supabase"><i class="fas fa-rotate"></i> Tải lại danh sách</button>
                     ${canCreate ? `
                     <button onclick="millionaireDownloadExcelTemplate()" title="Tải file mẫu Excel">
                         <i class="fas fa-file-arrow-down"></i>
@@ -5820,7 +5845,7 @@ D: ...
                 </button>
             </div>
 
-            ${manageable.length ? `
+            ${(manageable.length || isAdmin()) ? `
             <div class="millionaire-bulk-toolbar">
                 <div class="millionaire-bulk-left">
                     <button class="btn" onclick="millionaireSelectAllCustomQuestions(true)">
@@ -5846,8 +5871,8 @@ D: ...
             <div class="millionaire-manager-table-wrap">
                 <div class="millionaire-manager-count">
                     Câu hỏi mặc định: <strong>${MILLIONAIRE_QUESTION_BANK.length}</strong> ·
-                    Tự thêm: <strong>${custom.length}</strong> ·
-                    Tổng: <strong>${MILLIONAIRE_QUESTION_BANK.length + custom.length}</strong>
+                    Tự thêm: <strong>${MILLIONAIRE_STATE.managerLoading ? 'Đang tải' : MILLIONAIRE_STATE.managerLoadError ? 'Tải lỗi' : managerUnavailable ? 'Chưa tải đủ' : custom.length}</strong> ·
+                    Tổng: <strong>${managerUnavailable || MILLIONAIRE_STATE.managerLoadError || MILLIONAIRE_STATE.managerLoading ? '—' : MILLIONAIRE_QUESTION_BANK.length + custom.length}</strong>
                 </div>
                 <table class="millionaire-manager-table">
                     <thead>
@@ -6884,7 +6909,9 @@ function initMillionaire() {
     // thì tải đúng phạm vi đó.
     loadMillionaireQuestionCount().then(() => refreshMillionaire()).catch(() => {});
 
-    if (MILLIONAIRE_STATE.questionSource === 'custom' &&
+    if (MILLIONAIRE_STATE.managerOpen) {
+        millionaireOpenQuestionManager();
+    } else if (MILLIONAIRE_STATE.questionSource === 'custom' &&
         (MILLIONAIRE_STATE.selectedGrade !== 'all' || MILLIONAIRE_STATE.selectedSubject !== 'all')) {
         loadMillionaireQuestionsForSelection(
             MILLIONAIRE_STATE.selectedGrade,
