@@ -1,0 +1,19 @@
+BƯỚC 168.16 – XÓA NHIỀU ẢNH WEBSITE + TÌM HỌC SINH ĐIỂM DANH
+Nguồn: quan-ly-hoc-sinh-v2(20260930-102001).zip, bản thầy gửi ngày 30/09.
+
+Chép đè 2 tệp script.js và index.html vào đúng thư mục gốc app. Giữ bản cũ để khôi phục nếu cần. Sau khi cập nhật website, nhấn Ctrl+F5.
+
+1. Nội dung website > Hình ảnh/video: chọn từng mục hoặc Chọn tất cả. Bộ đếm và nút Xóa đã chọn hoạt động trở lại. Bấm xóa rồi xác nhận số mục. Chức năng dành cho Admin.
+Nguyên nhân: script ES module chưa đưa 3 hàm sự kiện ra window, trong khi HTML gọi các hàm bằng onclick/onchange.
+
+2. Điểm danh: chọn lớp/ngày; nhập tên hoặc mã học sinh. Hỗ trợ có dấu/không dấu, không phân biệt hoa thường. Tìm kiếm kết hợp bộ lọc Có mặt/Vắng-Phép/Muộn. Có số lượng kết quả và thông báo không tìm thấy. Xóa tìm kiếm chỉ xóa từ khóa, giữ bộ lọc trạng thái.
+Tìm kiếm chỉ ẩn/hiện dòng, không loại học sinh khỏi dữ liệu hoặc làm mất các giá trị điểm danh trong bảng. Giữ nguyên chức năng lưu/xuất Excel và kiểm tra quyền lớp.
+
+Vị trí mã đã sửa:
+script.js dòng 12612: ô tìm kiếm.
+script.js dòng 12698: chuẩn hóa tìm kiếm và kết hợp lọc trạng thái.
+script.js dòng 19473: kết nối các hàm sự kiện website/điểm danh.
+index.html dòng 1045: đổi phiên bản script để tải mã mới.
+
+Đã kiểm tra cú pháp ES module và mô phỏng DOM: tìm không dấu, tìm mã HS, kết hợp lọc trạng thái, không có kết quả, xóa tìm kiếm; chọn ảnh/chọn tất cả, bộ đếm, trạng thái nút và liên kết sự kiện. Chưa thực hiện xóa hoặc ghi dữ liệu trên Supabase thật.
+Ảnh báo Bad Request khi xóa câu hỏi thuộc module ngân hàng câu hỏi; bản này chỉ xử lý hai yêu cầu: xóa nhiều ảnh website và tìm kiếm điểm danh.
