@@ -5102,8 +5102,29 @@ function parseMillionaireMarkdownOrTabTable(rawText) {
 }
 function parseMillionaireLabeledBlocks(rawText) {
     const raw = String(rawText || '').replace(/\r/g, '');
-    const blocks = raw
-        .split(/\n{2,}(?=\s*(?:Chương trình|Chuong trinh|Khối|Khoi)\s*:)/i)
+
+    // FIX AI PASTE: Khi sao chép câu trả lời từ ChatGPT/trình duyệt, dòng trống giữa
+    // hai câu có thể bị mất. Parser cũ chỉ tách theo 2+ ký tự xuống dòng nên toàn bộ
+    // 12-15 câu bị hiểu thành 1 khối và chỉ nhập câu đầu tiên.
+    //
+    // Ưu tiên tách theo nhãn mở đầu lặp lại của từng câu, KHÔNG phụ thuộc dòng trống.
+    const curriculumMarker = /^[ \t]*(?:Chương trình|Chuong trinh)[ \t]*:/gmi;
+    const gradeMarker = /^[ \t]*(?:Khối|Khoi)[ \t]*:/gmi;
+    const curriculumCount = (raw.match(curriculumMarker) || []).length;
+    const gradeCount = (raw.match(gradeMarker) || []).length;
+
+    let blocks;
+    if (curriculumCount >= 2) {
+        blocks = raw.split(/(?=^[ \t]*(?:Chương trình|Chuong trinh)[ \t]*:)/gmi);
+    } else if (gradeCount >= 2) {
+        // Hỗ trợ dữ liệu rút gọn không lặp trường Chương trình.
+        blocks = raw.split(/(?=^[ \t]*(?:Khối|Khoi)[ \t]*:)/gmi);
+    } else {
+        // Tương thích ngược với định dạng cũ có dòng trống giữa các câu.
+        blocks = raw.split(/\n{2,}(?=[ \t]*(?:Chương trình|Chuong trinh|Khối|Khoi)[ \t]*:)/i);
+    }
+
+    blocks = blocks
         .map(b => b.trim())
         .filter(Boolean);
 
@@ -5311,23 +5332,58 @@ function getMillionaireAIPromptData() {
     const ppct = String(document.getElementById('mqPpct')?.value || '').trim();
     const lessonName = String(document.getElementById('mqLessonName')?.value || '').trim();
     const topic = String(document.getElementById('mqTopic')?.value || '').trim();
+
     return {
-        grade: gradeValue === 'all' ? '[xác định theo bài học hoặc tôi sẽ bổ sung]' : gradeValue,
-        subject: subject || '[xác định theo ảnh bài học hoặc tôi sẽ bổ sung]',
+        // Giá trị thô để app kiểm tra trước khi sao chép prompt.
+        gradeValue,
+        subjectValue: subject,
+        subjectCodeValue: subjectCode,
+        weekValue: week,
+        ppctValue: ppct,
+        lessonNameValue: lessonName,
+        topicValue: topic,
+
+        // Giá trị hiển thị trong prompt. Không tự biến dữ liệu thiếu thành dữ liệu đoán.
+        grade: gradeValue === 'all' ? '[chưa chọn - chỉ xác định từ ảnh nếu có đủ căn cứ]' : gradeValue,
+        subject: subject || '[chưa nhập - chỉ xác định từ ảnh nếu có đủ căn cứ]',
         subjectCode: subjectCode || '[để trống nếu chưa biết]',
-        week: week || '[xác định/bổ sung]',
-        ppct: ppct || '[xác định/bổ sung]',
-        lessonName: lessonName || topic || '[xác định theo ảnh bài học]',
+        week: week || '[chưa nhập]',
+        ppct: ppct || '[chưa nhập]',
+        lessonName: lessonName || topic || '[đọc chính xác tên bài từ ảnh]',
         topic: topic || ''
     };
 }
 
-function buildMillionaireAIPrompt() {
-    const data = getMillionaireAIPromptData();
-    return `Tôi sẽ gửi cho bạn MỘT HOẶC NHIỀU ẢNH chứa TOÀN BỘ nội dung của một bài học trong sách giáo khoa/sách giáo viên.
+function validateMillionaireAIPromptData(data) {
+    const problems = [];
+    const weekNumber = Number(data?.weekValue);
+    const ppctNumber = Number(data?.ppctValue);
 
-Đây là ngân hàng câu hỏi dùng cho các trò chơi trong Web App Quản lý học sinh V2 (Ai là triệu phú, Trắc nghiệm hình ảnh, Gọi tên + Trả lời).
+    if (!data?.weekValue || !Number.isInteger(weekNumber) || weekNumber < 1 || weekNumber > 35) {
+        problems.push('Tuần phải là số từ 1 đến 35');
+    }
+    if (!data?.ppctValue || !Number.isInteger(ppctNumber) || ppctNumber < 1 || ppctNumber > 9999) {
+        problems.push('PPCT phải là số hợp lệ');
+    }
 
+    return problems;
+}
+
+function buildMillionaireAIPrompt(data = getMillionaireAIPromptData()) {
+    return `Tôi đang cung cấp cho bạn MỘT HOẶC NHIỀU ẢNH của cùng MỘT BÀI HỌC trong sách giáo khoa hoặc sách giáo viên.
+
+QUAN TRỌNG VỀ ẢNH:
+- Các ảnh được đính kèm cùng tin nhắn chứa câu lệnh này hoặc được tôi gửi tiếp ở các tin nhắn ngay sau đây đều thuộc cùng một bài học.
+- Hãy đọc trực tiếp toàn bộ nội dung có thể nhìn thấy trong ảnh: tên bài, mục tiêu/yêu cầu cần đạt, tiêu đề các mục, nội dung kiến thức, câu hỏi/hoạt động, phần thực hành/vận dụng, hình minh họa, chú thích hình, phần ghi nhớ và nội dung an toàn nếu có.
+- Không yêu cầu tôi gõ lại nội dung đọc được rõ ràng từ ảnh.
+- Nếu có nhiều ảnh/trang, phải xem chúng là các phần liên tiếp của cùng một bài học và tổng hợp toàn bộ trước khi tạo câu hỏi.
+- Trong lúc tôi chưa xác nhận đã gửi đủ ảnh, chỉ tiếp nhận ảnh, chưa tạo ngân hàng câu hỏi.
+- CHỈ bắt đầu tạo câu hỏi khi tôi nhắn chính xác: ĐÃ GỬI ĐỦ ẢNH
+
+MỤC ĐÍCH:
+Tạo ngân hàng câu hỏi dùng cho các trò chơi trong Web App Quản lý học sinh V2: Ai là triệu phú, Trắc nghiệm hình ảnh, Gọi tên + Trả lời.
+
+THÔNG TIN BÀI HỌC:
 Chương trình: GDPT2018
 Khối dự kiến: ${data.grade}
 Môn dự kiến: ${data.subject}
@@ -5336,41 +5392,116 @@ Tuần dự kiến: ${data.week}
 PPCT dự kiến: ${data.ppct}
 Tên bài học dự kiến: ${data.lessonName}
 
-NHIỆM VỤ:
-1. Chỉ dùng kiến thức có trong đúng bài học được cung cấp; không tự mở rộng sang bài khác.
-2. Tạo số câu phù hợp với nội dung bài. Không bắt buộc 10 hay 15 câu.
-3. Câu hỏi phải phù hợp lứa tuổi, rõ ràng, có 4 phương án A/B/C/D và đúng 1 đáp án.
-4. Phương án nhiễu hợp lý, không mơ hồ; phân bố đáp án đúng tương đối cân bằng A/B/C/D.
-5. Mức độ dùng một trong ba giá trị: Dễ, Trung bình, Khó.
-6. Mọi câu của cùng một bài phải lặp lại chính xác cùng Khối, Môn, Mã môn, Tuần, PPCT và Tên bài học.
-7. Khóa bài học để trống; phần mềm sẽ tự sinh khóa ổn định khi nhập.
-8. Nếu ảnh thiếu hoặc không đủ căn cứ, phải nói rõ thay vì đoán.
+NGUYÊN TẮC XÁC ĐỊNH THÔNG TIN:
+1. Khối, Môn, Mã môn, Tuần và PPCT nếu đã có giá trị cụ thể ở trên là dữ liệu do app/người dùng cung cấp và phải được giữ nguyên; không tự thay đổi.
+2. Tên bài học phải ưu tiên đọc chính xác từ tiêu đề bài học trong ảnh. Nếu app đã cung cấp tên bài cụ thể và ảnh xác nhận đúng thì giữ nguyên tên đó.
+3. Nếu Khối hoặc Môn chưa được cung cấp nhưng ảnh thể hiện rõ thì có thể xác định từ ảnh.
+4. Không tự suy đoán Tuần, PPCT hoặc Mã môn khi ảnh và thông tin tôi cung cấp không đủ căn cứ.
+5. Nếu thiếu một trường bắt buộc như Tuần hoặc PPCT, sau khi tôi nhắn ĐÃ GỬI ĐỦ ẢNH hãy báo rõ trường còn thiếu; không tự điền số.
+6. Mọi câu trong cùng một bài phải lặp lại CHÍNH XÁC cùng Chương trình, Khối, Mã môn, Môn, Tuần, PPCT và Tên bài học.
+7. Khóa bài học luôn để trống vì phần mềm sẽ tự sinh khóa ổn định khi nhập.
 
-Trong lúc tôi đang gửi ảnh, chỉ tiếp nhận. Chỉ tạo câu hỏi khi tôi nhắn chính xác: ĐÃ GỬI ĐỦ ẢNH.
+PHÂN TÍCH BÀI HỌC TRƯỚC KHI TẠO CÂU HỎI:
+Trước khi viết câu hỏi, hãy tự tổng hợp toàn bộ ảnh để xác định:
+- Tên bài học.
+- Mục tiêu/yêu cầu cần đạt hoặc phần “Học xong bài này, em sẽ...”.
+- Các nội dung kiến thức chính.
+- Các mục, hoạt động, câu hỏi gợi mở và nhiệm vụ trong bài.
+- Kiến thức học sinh cần ghi nhớ.
+- Nội dung thực hành/vận dụng.
+- Nội dung thể hiện qua hình ảnh và chú thích hình.
+- Quy trình/thứ tự thao tác nếu bài có.
+- Quy tắc an toàn/lưu ý nếu bài có.
+Phần phân tích này chỉ dùng để xây dựng ngân hàng câu hỏi, KHÔNG xuất ra trong kết quả cuối.
 
-Khi trả kết quả, KHÔNG viết lời mở đầu, KHÔNG dùng bảng Markdown. Mỗi câu phải đúng cấu trúc:
+YÊU CẦU XÂY DỰNG NGÂN HÀNG CÂU HỎI:
+1. Chỉ sử dụng kiến thức có trong đúng bài học được cung cấp; không mở rộng sang bài khác hoặc kiến thức ngoài bài.
+2. Tạo từ 12 đến 15 câu hỏi tùy lượng kiến thức thực tế của bài. Ưu tiên độ bao quát và chất lượng; không cố đủ 15 câu nếu phải lặp ý hoặc suy diễn ngoài bài.
+3. Câu hỏi phải bám mục tiêu/yêu cầu cần đạt và bao quát hợp lý các mục/hoạt động chính của bài, không tập trung quá nhiều câu vào một chi tiết nhỏ.
+4. Khai thác đa dạng nhưng vẫn trong phạm vi bài: nhận biết; hiểu tác dụng/chức năng/đặc điểm; phân biệt; lựa chọn cách làm đúng; sắp xếp trình tự; nhận diện tình huống đúng/sai; vận dụng vào tình huống gần gũi trực tiếp dựa trên kiến thức của bài.
+5. Nếu bài có quy trình/thao tác, phải có câu hỏi về trình tự hoặc lựa chọn thao tác đúng.
+6. Nếu bài có nội dung an toàn, phải có câu hỏi về nhận biết hoặc xử lí tình huống an toàn.
+7. Có thể khai thác kiến thức từ hình minh họa, nhưng câu hỏi văn bản phải tự hiểu được sau khi nhập vào app; tránh viết kiểu “Quan sát Hình 3 ở trên...” nếu hình đó không đi kèm câu hỏi.
+8. Không tạo nhiều câu chỉ đổi cách diễn đạt nhưng kiểm tra cùng một ý kiến thức.
+9. Câu hỏi phù hợp lứa tuổi của đúng khối lớp, ngắn gọn, rõ ràng, dễ đọc trên màn hình trò chơi.
+10. Mỗi câu có đúng 4 phương án A/B/C/D và chỉ có DUY NHẤT một đáp án đúng.
+11. Phương án nhiễu phải hợp lý, cùng loại với đáp án đúng, không mơ hồ và không quá vô lý.
+12. Không dùng các phương án “Tất cả đều đúng”, “Cả A và B”, “Không có đáp án nào”.
+13. Phân bố đáp án đúng A/B/C/D tương đối cân bằng trong toàn bộ bài; tránh một chữ cái đúng xuất hiện quá nhiều lần liên tiếp.
+
+MỨC ĐỘ:
+- Chỉ sử dụng đúng một trong ba giá trị: Dễ, Trung bình, Khó.
+- Phân bố mức độ phù hợp với học sinh và nội dung thực tế của bài.
+- Câu Khó không được dùng kiến thức ngoài bài; nên khó hơn bằng cách yêu cầu phân biệt, sắp xếp, lựa chọn hoặc xử lí tình huống dựa trên kiến thức đã học.
+
+QUY TẮC CHỜ ẢNH:
+Nếu tôi chưa nhắn chính xác: ĐÃ GỬI ĐỦ ẢNH
+thì chỉ trả lời ngắn gọn:
+Đã tiếp nhận ảnh. Tôi đang chờ ảnh tiếp theo hoặc xác nhận ĐÃ GỬI ĐỦ ẢNH.
+
+KHI TÔI NHẮN “ĐÃ GỬI ĐỦ ẢNH”:
+- Kiểm tra toàn bộ ảnh đã nhận trong cuộc trò chuyện.
+- Xác định chính xác tên bài học từ ảnh.
+- Kiểm tra Khối, Môn, Tuần và PPCT.
+- Nếu Tuần hoặc PPCT còn thiếu và không có căn cứ chắc chắn, KHÔNG tự đoán; chỉ báo trường còn thiếu để tôi bổ sung.
+- Nếu thông tin đã đủ, tạo ngay ngân hàng 12-15 câu theo toàn bộ yêu cầu trên.
+
+ĐỊNH DẠNG ĐẦU RA KHI THÔNG TIN ĐÃ ĐỦ:
+KHÔNG viết lời mở đầu.
+KHÔNG giải thích.
+KHÔNG đánh số câu.
+KHÔNG dùng bảng Markdown.
+KHÔNG dùng khối mã Markdown.
+
+Mỗi câu bắt buộc đúng cấu trúc:
 
 Chương trình: GDPT2018
 Khối: [1/2/3/4/5]
-Mã môn: [mã môn nếu có]
+Mã môn: [mã môn nếu có; nếu không có thì để trống sau dấu :]
 Môn: [tên môn]
 Tuần: [1-35]
 PPCT: [số PPCT]
-Tên bài học: [đúng tên bài]
+Tên bài học: [đúng tên bài đọc từ ảnh]
 Khóa bài học:
-Chủ đề: [có thể để trống hoặc nhóm nội dung trong bài]
+Chủ đề: [nhóm nội dung cụ thể trong bài]
 Mức độ: [Dễ/Trung bình/Khó]
-Câu hỏi: [nội dung]
+Câu hỏi: [nội dung câu hỏi]
 A: [phương án A]
 B: [phương án B]
 C: [phương án C]
 D: [phương án D]
 Đáp án đúng: [A/B/C/D]
 
-Giữa hai câu để đúng 1 dòng trống. Trước khi trả kết quả, kiểm tra lại toàn bộ câu đều thuộc đúng bài học và không lặp ý không cần thiết.`;
+Giữa hai câu để ĐÚNG 1 dòng trống.
+
+TỰ KIỂM TRA TRƯỚC KHI XUẤT:
+- Có từ 12 đến 15 câu, trừ trường hợp nội dung thực tế quá ít để tạo thêm câu chất lượng mà không lặp ý.
+- Tất cả câu đều thuộc đúng bài học và bám mục tiêu/yêu cầu cần đạt.
+- Bao quát các nội dung và hoạt động chính của bài.
+- Không có câu trùng ý không cần thiết.
+- Mỗi câu chỉ có một đáp án đúng.
+- Đáp án đúng A/B/C/D phân bố tương đối cân bằng.
+- Khối, Môn, Mã môn, Tuần, PPCT và Tên bài học giống nhau tuyệt đối ở tất cả các câu.
+- Khóa bài học để trống.
+- Không tự bổ sung kiến thức ngoài bài.`;
 }
+
 async function millionaireBuildAndCopyAIPrompt() {
-    const prompt = buildMillionaireAIPrompt();
+    const data = getMillionaireAIPromptData();
+    const problems = validateMillionaireAIPromptData(data);
+
+    // Tuần và PPCT là metadata bắt buộc của câu hỏi GDPT2018 trong bộ nhập AI.
+    // Chặn ngay từ đầu để tránh ChatGPT tạo xong rồi parser mới báo lỗi.
+    if (problems.length) {
+        alert(
+            'Chưa thể tạo câu lệnh AI vì thiếu thông tin bắt buộc:\n\n' +
+            problems.map(item => `- ${item}`).join('\n') +
+            '\n\nHãy nhập đủ Tuần và PPCT rồi bấm lại “Tạo & sao chép câu lệnh AI”.'
+        );
+        return;
+    }
+
+    const prompt = buildMillionaireAIPrompt(data);
     const box = document.getElementById('millionaireAIPromptBox');
     if (box) box.value = prompt;
 
@@ -5378,7 +5509,7 @@ async function millionaireBuildAndCopyAIPrompt() {
         await navigator.clipboard.writeText(prompt);
         alert(`Đã tạo và sao chép câu lệnh AI.
 
-Bây giờ hãy dán câu lệnh này vào ChatGPT.`);
+Bây giờ hãy dán câu lệnh vào ChatGPT, đính kèm/gửi toàn bộ ảnh của bài học, sau đó nhắn ĐÃ GỬI ĐỦ ẢNH.`);
     } catch (error) {
         if (box) {
             box.removeAttribute('readonly');
@@ -5770,7 +5901,7 @@ function renderMillionaireQuestionManager() {
                     <div class="millionaire-ai-prompt-row">
                         <div class="millionaire-ai-auto-count-note">
                             <i class="fas fa-images"></i>
-                            <span><strong>Không cần nhập số câu.</strong> Hãy đưa toàn bộ ảnh bài học cho ChatGPT; AI sẽ tự xác định số câu cần thiết để bao quát nội dung.</span>
+                            <span><strong>AI tạo 12–15 câu theo nội dung bài.</strong> Hãy gửi toàn bộ ảnh; AI sẽ bám mục tiêu/yêu cầu cần đạt và các hoạt động chính, không mở rộng sang bài khác.</span>
                         </div>
                         <button type="button" class="btn millionaire-ai-copy-btn" onclick="millionaireBuildAndCopyAIPrompt()">
                             <i class="fas fa-copy"></i> Tạo & sao chép câu lệnh AI
@@ -5779,7 +5910,7 @@ function renderMillionaireQuestionManager() {
                     <textarea id="millionaireAIPromptBox" rows="9" readonly
                         placeholder="Nhấn “Tạo & sao chép câu lệnh AI”. Câu lệnh hoàn chỉnh sẽ xuất hiện tại đây và được sao chép vào clipboard."></textarea>
                     <div class="millionaire-ai-guide">
-                        <strong>Cách dùng:</strong> 1. Chọn Khối, nhập Môn, Tuần, PPCT và Tên bài học nếu đã biết → 2. Sao chép câu lệnh AI → 3. Dán vào ChatGPT → 4. Gửi lần lượt toàn bộ ảnh bài học → 5. Nhắn <b>ĐÃ GỬI ĐỦ ẢNH</b> → 6. Sao chép danh sách AI trả về, dán xuống dưới và bấm <b>Phân tích & nhập</b>.
+                        <strong>Cách dùng:</strong> 1. Chọn Khối, nhập Môn, <b>Tuần và PPCT</b> (bắt buộc); Tên bài có thể để AI đọc từ ảnh → 2. Bấm Tạo & sao chép câu lệnh AI → 3. Dán câu lệnh vào ChatGPT và đính kèm/gửi toàn bộ ảnh của cùng một bài → 4. Nhắn chính xác <b>ĐÃ GỬI ĐỦ ẢNH</b> → 5. ChatGPT tạo 12–15 câu bám mục tiêu và hoạt động của bài → 6. Sao chép kết quả, dán xuống dưới và bấm <b>Phân tích & nhập</b>.
                     </div>
                 </div>
 
