@@ -1,0 +1,36 @@
+BƯỚC 168.15 – PROMPT ÔN TẬP TOÀN BÀI THEO HOẠT ĐỘNG
+
+Nguồn sửa: quan-ly-hoc-sinh-v2(20260929-125307).zip do thầy cung cấp trước đó.
+Gói chỉ có 2 tệp mã nguồn thay đổi: script.js và index.html.
+
+CÀI ĐẶT
+1. Lưu bản script.js và index.html đang sử dụng để có thể khôi phục.
+2. Giải nén; chép đè script.js và index.html vào thư mục gốc của app, đúng vị trí các tệp cùng tên. Không xóa thư mục app.
+3. Đưa 2 tệp lên nơi đang chạy website; tải lại bằng Ctrl+F5.
+Nếu bản app hiện tại đã được sửa sau bản nguồn 29/09, cần đối chiếu trước khi chép đè để giữ các sửa đổi mới.
+
+VỊ TRÍ THAY ĐỔI
+- script.js dòng 5017: lấy thêm khóa bài học từ biểu mẫu.
+- script.js dòng 5037: prompt mới bao quát toàn bộ trang và hoạt động của một bài.
+- script.js dòng 5499: hướng dẫn ít nhất 3 câu/hoạt động.
+- script.js dòng 5550: hướng dẫn xóa và nhập lại.
+- index.html dòng 1045: cập nhật phiên bản URL script để tải mã mới.
+
+CÁCH SỬ DỤNG
+1. Vào Ai là triệu phú > Quản lý câu hỏi. Xuất Excel nếu cần giữ bản ngân hàng hiện tại.
+2. Điền Khối, Môn, Mã môn, Tuần, PPCT (số nguyên), Tên bài học và khóa bài nếu có.
+3. Bấm Tạo & sao chép câu lệnh AI; dán vào chat.
+4. Gửi đủ các trang SGK của một bài; bổ sung SGV/PPCT khi cần. Nhắn ĐÃ GỬI ĐỦ ẢNH hoặc ĐÃ GỬI ĐỦ TÀI LIỆU.
+5. AI được yêu cầu mỗi hoạt động ít nhất 3 câu. 4 hoạt động >=12; 5 >=15; 6 >=18. Tăng thêm khi cần bao quát toàn bài; không ép tổng 12.
+6. Kiểm tra nội dung và số câu từng hoạt động. Chủ đề là tên hoạt động; các câu trong cùng bài giữ chung khóa bài.
+7. Muốn thay câu cũ: chọn đúng các câu cần thay > Xóa câu đã chọn; sau đó dán kết quả AI > Phân tích & nhập.
+8. Xóa toàn bộ câu tự thêm là chức năng Admin, tác động ngân hàng dùng chung trên mọi thiết bị. Chỉ dùng khi chủ ý làm lại toàn bộ, không dùng để thay riêng một bài.
+9. Giữ nguyên Tải mẫu Excel, Nhập Excel, Xuất câu tự thêm, Xuất toàn bộ.
+
+KIỂM TRA
+- Cú pháp JavaScript ES module: đạt.
+- Prompt điền đúng metadata và giữ khóa bài có sẵn: đạt.
+- Bộ đọc nhãn nhập đủ 12/15/18 câu, giữ nhóm hoạt động và khóa bài: đạt.
+- Hàm xóa, nhập AI và xuất Excel không đổi so với nguồn.
+- Chưa thử thao tác ghi/xóa trên Supabase thật; bản cập nhật không tự xóa hay nhập dữ liệu.
+- Quy tắc >=3 câu/hoạt động được đưa vào prompt. App chưa tự đọc SGK để xác minh độ bao phủ; giáo viên cần duyệt câu hỏi AI.
