@@ -5443,127 +5443,93 @@ function millionaireSelectAllCustomQuestions(checked = true) {
 }
 
 // BƯỚC 151.49.3F.17B.10: Xóa hàng loạt trên Supabase.
-async function millionaireDeleteSelectedQuestions() {
-    const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
-    if (!selected.size) {
-        alert('Bạn chưa chọn câu hỏi nào để xóa.');
-        return;
-    }
+let millionaireBulkDeleteBusy = false;
 
-    const items = getMillionaireQuestionsBySource('custom');
-    const targets = items.filter(q => selected.has(q.id) && millionaireCanManageQuestion(q));
+function millionaireDeleteErrorText(error) {
+    return [error?.message || String(error), error?.code && `Mã lỗi: ${error.code}`, error?.details, error?.hint].filter(Boolean).join('\n');
+}
 
-    if (!targets.length) {
-        MILLIONAIRE_STATE.selectedQuestionIds = [];
-        refreshMillionaire();
-        return;
-    }
-
-    const ok = confirm(
-        `Bạn có chắc muốn xóa ${targets.length} câu hỏi đã chọn?\n\n` +
-        `Các câu này sẽ bị xóa khỏi ngân hàng dùng chung trên mọi thiết bị.\n` +
-        `Các câu hỏi mặc định của hệ thống không bị ảnh hưởng.`
-    );
-    if (!ok) return;
-
-    try {
-        const targetIds = targets.map(q => q.id);
-        const { data, error } = await supabase
-            .from('app3_millionaire_questions')
-            .delete()
-            .in('id', targetIds)
-            .select('id');
-
+async function millionaireReadDeleteTargets() {
+    const ids = [];
+    for (let offset = 0; ; offset += 500) {
+        const {data, error} = await supabase.from('app3_millionaire_questions')
+            .select('id').eq('active', true).order('id', {ascending:true}).range(offset, offset + 499);
         if (error) throw error;
-
-        const deletedIds = new Set((data || []).map(row => row.id));
-        if (!deletedIds.size) {
-            throw new Error('Không xóa được câu hỏi nào trên Supabase hoặc bạn không có quyền xóa.');
-        }
-
-        MILLIONAIRE_SUPABASE_QUESTIONS = MILLIONAIRE_SUPABASE_QUESTIONS.filter(q => !deletedIds.has(q.id));
-        millionaireSupabaseQuestionsLoaded = true;
-
-        if (MILLIONAIRE_STATE.editingQuestionId && deletedIds.has(MILLIONAIRE_STATE.editingQuestionId)) {
-            MILLIONAIRE_STATE.editingQuestionId = null;
-        }
-
-        MILLIONAIRE_STATE.selectedQuestionIds = [];
-        MILLIONAIRE_STATE.message = deletedIds.size === targets.length
-            ? `Đã xóa ${deletedIds.size} câu hỏi đã chọn khỏi Supabase.`
-            : `Đã xóa ${deletedIds.size}/${targets.length} câu hỏi. Hãy tải lại danh sách để kiểm tra.`;
-        refreshMillionaire();
-        console.log(`[151.49.3F.17B.10] Đã xóa ${deletedIds.size}/${targets.length} câu hỏi đã chọn trên Supabase.`);
-    } catch (error) {
-        console.error('[151.49.3F.17B.10] Lỗi xóa các câu đã chọn trên Supabase:', error);
-        alert(
-            'Không thể xóa các câu hỏi đã chọn trên Supabase. Dữ liệu hiện tại vẫn được giữ nguyên.\n\n' +
-            (error?.message || String(error))
-        );
+        if (!Array.isArray(data)) throw new Error('Không đọc được danh sách câu hỏi. Chưa gửi lệnh xóa.');
+        ids.push(...data.map(row => String(row.id)));
+        if (data.length < 500) break;
     }
+    return [...new Set(ids)];
 }
 
-// BƯỚC 151.49.3F.17B.10: Xóa toàn bộ câu hỏi tự thêm đang có trong ngân hàng dùng chung.
-async function millionaireDeleteAllCustomQuestions() {
-    if (!isAdmin()) {
-        alert('Chỉ Admin mới được xóa toàn bộ ngân hàng câu hỏi tự thêm.');
-        return;
+async function millionaireDeleteIdBatch(ids, deletedIds) {
+    const result = await supabase.from('app3_millionaire_questions').delete().in('id', ids).select('id');
+    if (result.error) {
+        // Chỉ thu nhỏ yêu cầu bị từ chối vì định dạng/độ dài; không bỏ qua quyền xóa.
+        if (ids.length > 1 && [400, 414].includes(Number(result.status))) {
+            const middle = Math.ceil(ids.length / 2);
+            await millionaireDeleteIdBatch(ids.slice(0, middle), deletedIds);
+            await millionaireDeleteIdBatch(ids.slice(middle), deletedIds);
+            return;
+        }
+        throw result.error;
     }
-    const items = (millionaireSupabaseQuestionsLoaded && millionaireSupabaseCurrentScope === 'all')
-        ? getMillionaireQuestionsBySource('custom')
-        : await loadMillionaireQuestionsFromSupabase();
-    if (!items.length) {
-        alert('Hiện không có câu hỏi tự thêm để xóa.');
-        return;
-    }
+    const allowed = new Set(ids);
+    const confirmed = (result.data || []).map(row => String(row.id)).filter(id => allowed.has(id));
+    confirmed.forEach(id => deletedIds.add(id));
+    const confirmedSet = new Set(confirmed);
+    MILLIONAIRE_SUPABASE_QUESTIONS = MILLIONAIRE_SUPABASE_QUESTIONS.filter(q => !confirmedSet.has(String(q.id)));
+    millionaireSupabaseTotalCount = Math.max(0, millionaireSupabaseTotalCount - confirmed.length);
+    MILLIONAIRE_STATE.selectedQuestionIds = (MILLIONAIRE_STATE.selectedQuestionIds || []).filter(id => !confirmedSet.has(String(id)));
+    if (confirmedSet.has(String(MILLIONAIRE_STATE.editingQuestionId))) MILLIONAIRE_STATE.editingQuestionId = null;
+    if (confirmed.length !== ids.length) throw new Error('Supabase chưa xác nhận xóa đủ các câu trong lô. Có thể câu đã bị xóa ở thiết bị khác hoặc tài khoản chưa có quyền xóa. Hãy tải lại danh sách để kiểm tra.');
+}
 
-    const ok = confirm(
-        `Xóa toàn bộ ${items.length} câu hỏi tự thêm?\n\n` +
-        `Các câu hỏi này sẽ bị xóa khỏi ngân hàng dùng chung trên mọi thiết bị.\n` +
-        `59 câu hỏi mặc định của hệ thống sẽ được giữ nguyên.`
-    );
-    if (!ok) return;
-
+async function millionaireRunBulkDelete(all) {
+    if (millionaireBulkDeleteBusy) { alert('Đang xử lý xóa câu hỏi. Vui lòng chờ.'); return; }
+    if (all && !isAdmin()) { alert('Chỉ Admin mới được xóa toàn bộ ngân hàng câu hỏi tự thêm.'); return; }
+    millionaireBulkDeleteBusy = true;
+    const deletedIds = new Set();
+    let targetIds = [], started = false;
     try {
-        const targetIds = items.map(q => q.id).filter(Boolean);
-        const deletedIds = new Set();
-        const BATCH_SIZE = 200;
-        for (let i = 0; i < targetIds.length; i += BATCH_SIZE) {
-            const batchIds = targetIds.slice(i, i + BATCH_SIZE);
-            const { data, error } = await supabase
-                .from('app3_millionaire_questions')
-                .delete()
-                .in('id', batchIds)
-                .select('id');
-            if (error) throw error;
-            (data || []).forEach(row => deletedIds.add(row.id));
+        if (all) {
+            // Luôn đọc lại ID từ máy chủ, không dựa vào danh sách 1000 câu hoặc bộ lọc đang xem.
+            targetIds = await millionaireReadDeleteTargets();
+        } else {
+            const selected = new Set((MILLIONAIRE_STATE.selectedQuestionIds || []).map(String));
+            targetIds = [...new Set(getMillionaireQuestionsBySource('custom')
+                .filter(q => selected.has(String(q.id)) && millionaireCanManageQuestion(q))
+                .map(q => String(q.id)).filter(Boolean))];
         }
-
-        if (!deletedIds.size && targetIds.length) {
-            throw new Error('Không xóa được câu hỏi nào trên Supabase hoặc bạn không có quyền xóa.');
+        if (!targetIds.length) { alert(all ? 'Không có câu hỏi tự thêm đang hoạt động để xóa.' : 'Chưa chọn câu hỏi có quyền xóa.'); return; }
+        if (!confirm(`Xóa ${all ? 'toàn bộ ' : ''}${targetIds.length} câu hỏi ${all ? 'tự thêm đang hoạt động của tất cả môn/khối' : 'đã chọn'}?\n\nCác câu này sẽ bị xóa khỏi ngân hàng dùng chung trên mọi thiết bị. Câu hỏi mặc định trong mã nguồn được giữ nguyên.`)) return;
+        started = true;
+        for (let i = 0; i < targetIds.length; i += 25) {
+            await millionaireDeleteIdBatch(targetIds.slice(i, i + 25), deletedIds);
+            showToast(`Đã xóa ${deletedIds.size}/${targetIds.length} câu hỏi.`, 'info', 1200);
         }
-
-        MILLIONAIRE_SUPABASE_QUESTIONS = [];
-        millionaireSupabaseQuestionsLoaded = true;
-        millionaireSupabaseCurrentScope = 'all';
-        millionaireSupabaseTotalCount = Math.max(0, millionaireSupabaseTotalCount - deletedIds.size);
-        millionaireSupabaseCountLoaded = true;
-        MILLIONAIRE_STATE.selectedQuestionIds = [];
-        MILLIONAIRE_STATE.editingQuestionId = null;
-        MILLIONAIRE_STATE.managerPage = 1;
-        MILLIONAIRE_STATE.message = deletedIds.size === items.length
-            ? `Đã xóa toàn bộ ${deletedIds.size} câu hỏi tự thêm khỏi Supabase.`
-            : `Đã xóa ${deletedIds.size}/${items.length} câu hỏi. Hãy tải lại danh sách để kiểm tra.`;
-        refreshMillionaire();
-        console.log(`[168.8A] Đã xóa ${deletedIds.size}/${items.length} câu hỏi theo từng lô ${BATCH_SIZE}.`);
+        MILLIONAIRE_STATE.message = `Đã xóa ${deletedIds.size}/${targetIds.length} câu hỏi khỏi Supabase.`;
+        alert(MILLIONAIRE_STATE.message);
     } catch (error) {
-        console.error('[151.49.3F.17B.10] Lỗi xóa toàn bộ câu hỏi trên Supabase:', error);
-        alert(
-            'Không thể xóa toàn bộ câu hỏi trên Supabase. Dữ liệu hiện tại vẫn được giữ nguyên.\n\n' +
-            (error?.message || String(error))
-        );
+        console.error('[168.17] Xóa câu hỏi:', error);
+        MILLIONAIRE_STATE.message = started ? `Đã xác nhận xóa ${deletedIds.size}/${targetIds.length} câu; chưa hoàn tất.` : 'Không đọc được danh sách để xóa.';
+        alert(MILLIONAIRE_STATE.message + '\n\n' + millionaireDeleteErrorText(error));
+    } finally {
+        millionaireBulkDeleteBusy = false;
+        if (started) {
+            // Buộc lần tải tiếp theo lấy dữ liệu thật, không đánh dấu bộ nhớ rỗng là toàn bộ ngân hàng.
+            millionaireSupabaseQuestionsLoaded = false;
+            millionaireSupabaseCurrentScope = 'none';
+            millionaireSupabaseCountLoaded = false;
+            MILLIONAIRE_STATE.managerPage = 1;
+            refreshMillionaire();
+        }
     }
 }
+
+async function millionaireDeleteSelectedQuestions() { return millionaireRunBulkDelete(false); }
+async function millionaireDeleteAllCustomQuestions() { return millionaireRunBulkDelete(true); }
+
 
 function renderMillionaireQuestionManager() {
     if (!MILLIONAIRE_STATE.managerOpen) return '';
