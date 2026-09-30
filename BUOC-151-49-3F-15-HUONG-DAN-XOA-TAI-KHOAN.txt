@@ -1,0 +1,15 @@
+BƯỚC 151.49.3F.15 - THÊM NÚT XÓA TÀI KHOẢN
+
+1. Frontend đã có nút Xóa màu đỏ ở cột Thao tác.
+2. Không hiển thị nút Xóa đối với chính tài khoản Admin đang đăng nhập.
+3. Khi xóa có hộp xác nhận.
+4. Xóa tài khoản đăng nhập Supabase Auth + app3_user_roles + app3_teacher_assignments.
+5. Không xóa dữ liệu học sinh, điểm, điểm danh và dữ liệu nghiệp vụ.
+6. Có chặn xóa Admin hoạt động cuối cùng.
+
+CẦN TRIỂN KHAI EDGE FUNCTION MỘT LẦN:
+Trong thư mục dự án, sau khi đã đăng nhập Supabase CLI và link đúng project:
+
+supabase functions deploy app3-delete-user --no-verify-jwt
+
+Sau đó tải lại web và thử xóa một tài khoản thử nghiệm không còn sử dụng.

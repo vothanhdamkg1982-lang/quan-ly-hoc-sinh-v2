@@ -1,0 +1,32 @@
+# Hệ điều hành
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# VS Code - giữ settings chung, bỏ file trạng thái cục bộ nếu có
+.vscode/*.log
+
+# File tạm / log
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+~$*
+
+# File nén tạo khi đóng gói
+*.zip
+*.rar
+*.7z
+
+# Node/Python nếu sau này có dùng công cụ phụ
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Biến môi trường cục bộ
+.env
+.env.*
+!.env.example
