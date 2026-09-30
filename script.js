@@ -16545,7 +16545,7 @@ async function showPublicMediaEditor(){
 
     <div class="table-wrapper public-media-manager-table"><table><thead><tr><th class="public-media-check-col"></th><th class="public-media-preview-col">Ảnh xem trước</th><th>Loại</th><th>Tiêu đề</th><th>Nhóm</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td class="public-media-check-col"><input class="public-media-select" type="checkbox" value="${publicEscape(String(x.id||''))}" onchange="updatePublicMediaBulkState()"></td><td class="public-media-preview-col">${publicMediaAdminPreview(x)}</td><td>${mediaTypeLabel(x.media_type)}</td><td><strong>${publicEscape(x.title||'')}</strong></td><td>${publicEscape(x.category||'')}</td><td>${x.is_published?'Công khai':'Đang ẩn'}</td><td class="public-media-row-actions"><button class="btn btn-primary btn-sm" onclick='editPublicMedia(${JSON.stringify(JSON.stringify(x))})' title="Chỉnh sửa"><i class="fas fa-pen"></i></button> <button class="btn btn-danger btn-sm" onclick="deletePublicMedia('${x.id}')" title="Xóa"><i class="fas fa-trash"></i></button></td></tr>`).join('')||'<tr><td colspan="7" class="text-muted">Chưa có hình ảnh/video.</td></tr>'}</tbody></table></div>`;
     updatePublicMediaFormByType();
-    updatePublicMediaBulkState();
+    bindPublicMediaSelection();
 }
 function publicMediaAdminPreview(item){
     if(!item) return '<span class="public-media-preview-placeholder"><i class="fas fa-photo-film"></i></span>';
@@ -16563,32 +16563,65 @@ function publicMediaAdminPreview(item){
     }
     return `<span class="public-media-preview-placeholder is-video"><i class="fas fa-play"></i></span>`;
 }
-function getSelectedPublicMediaIds(){return Array.from(document.querySelectorAll('.public-media-select:checked')).map(el=>el.value).filter(Boolean);}
-function updatePublicMediaBulkState(){
-    const all=Array.from(document.querySelectorAll('.public-media-select'));
-    const selected=all.filter(el=>el.checked);
-    const selectAll=document.getElementById('publicMediaSelectAll');
-    const btn=document.getElementById('publicMediaBulkDeleteBtn');
-    const count=document.getElementById('publicMediaSelectedCount');
-    if(count) count.textContent=`(${selected.length})`;
-    if(btn) btn.disabled=selected.length===0;
-    if(selectAll){selectAll.checked=all.length>0&&selected.length===all.length;selectAll.indeterminate=selected.length>0&&selected.length<all.length;}
+let publicMediaBulkDeleting = false;
+function publicMediaSelectionRoot(){ return document.getElementById('publicContentAdminPanel'); }
+function getSelectedPublicMediaIds(){
+    return [...new Set(Array.from(publicMediaSelectionRoot()?.querySelectorAll('.public-media-select:checked') || []).map(el=>el.value).filter(Boolean))];
 }
-function togglePublicMediaSelectAll(checked){document.querySelectorAll('.public-media-select').forEach(el=>{el.checked=!!checked;});updatePublicMediaBulkState();}
+function updatePublicMediaBulkState(){
+    const root=publicMediaSelectionRoot(); if(!root)return;
+    const all=Array.from(root.querySelectorAll('.public-media-select'));
+    const selected=all.filter(el=>el.checked && el.value);
+    const selectAll=root.querySelector('#publicMediaSelectAll');
+    const btn=root.querySelector('#publicMediaBulkDeleteBtn');
+    const count=root.querySelector('#publicMediaSelectedCount');
+    if(count)count.textContent=`(${selected.length})`;
+    if(btn)btn.disabled=publicMediaBulkDeleting || selected.length===0;
+    if(selectAll){selectAll.disabled=publicMediaBulkDeleting || all.length===0;selectAll.checked=all.length>0 && selected.length===all.length;selectAll.indeterminate=selected.length>0 && selected.length<all.length;}
+    all.forEach(el=>{el.disabled=publicMediaBulkDeleting;});
+}
+function togglePublicMediaSelectAll(checked){
+    if(publicMediaBulkDeleting)return;
+    publicMediaSelectionRoot()?.querySelectorAll('.public-media-select').forEach(el=>{el.checked=!!checked;});
+    updatePublicMediaBulkState();
+}
+function bindPublicMediaSelection(){
+    const root=publicMediaSelectionRoot(); if(!root)return;
+    root.querySelectorAll('.public-media-select').forEach(box=>{
+        box.removeAttribute('onchange');
+        box.onchange=updatePublicMediaBulkState;
+    });
+    const all=root.querySelector('#publicMediaSelectAll');
+    if(all){all.removeAttribute('onchange');all.onchange=()=>togglePublicMediaSelectAll(all.checked);}
+    const btn=root.querySelector('#publicMediaBulkDeleteBtn');
+    if(btn){btn.removeAttribute('onclick');btn.type='button';btn.onclick=deleteSelectedPublicMedia;}
+    updatePublicMediaBulkState();
+}
 async function deleteSelectedPublicMedia(){
-    if(!isAdmin())return;
+    if(publicMediaBulkDeleting)return;
+    if(!isAdmin()){showToast('Chỉ Admin được xóa ảnh/video.','warning');return;}
     const ids=getSelectedPublicMediaIds();
     if(!ids.length){showToast('Chưa chọn ảnh/video để xóa.','warning');return;}
-    if(!confirm(`Xóa vĩnh viễn ${ids.length} mục đã chọn khỏi thư viện website?`))return;
-    const btn=document.getElementById('publicMediaBulkDeleteBtn');const oldHtml=btn?.innerHTML;
-    if(btn){btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Đang xóa...';}
+    if(!confirm(`Xóa vĩnh viễn ${ids.length} mục đã chọn khỏi thư viện website? Các mục không chọn được giữ nguyên.`))return;
+    publicMediaBulkDeleting=true;updatePublicMediaBulkState();
+    let deleted=0;
     try{
-        const {data:rows,error:readError}=await supabase.from('app3_public_media').select('id,media_url').in('id',ids);if(readError)throw readError;
-        const {error:deleteError}=await supabase.from('app3_public_media').delete().in('id',ids);if(deleteError)throw deleteError;
-        for(const url of (rows||[]).map(x=>x.media_url).filter(Boolean)){try{await removePublicMediaStoredFile(url);}catch(err){console.warn('Không xóa được tệp Storage:',url,err);}}
-        showToast(`Đã xóa ${ids.length} mục khỏi thư viện.`,'success');
+        for(let i=0;i<ids.length;i+=50){
+            const batch=ids.slice(i,i+50);
+            const {data:rows,error}=await supabase.from('app3_public_media').delete().in('id',batch).select('id,media_url');
+            if(error)throw error;
+            const confirmed=(rows||[]).filter(row=>batch.includes(String(row.id)));
+            deleted+=confirmed.length;
+            for(const row of confirmed){
+                publicMediaSelectionRoot()?.querySelectorAll('.public-media-select').forEach(box=>{if(box.value===String(row.id))box.closest('tr')?.remove();});
+                if(row.media_url){try{await removePublicMediaStoredFile(row.media_url);}catch(err){console.warn('Không xóa được tệp Storage:',err);}}
+            }
+            if(confirmed.length!==batch.length)throw new Error('Một số mục chưa được xóa. Hãy kiểm tra quyền xóa hoặc tải lại danh sách.');
+        }
+        showToast(`Đã xóa ${deleted} mục đã chọn.`,'success');
         await showPublicMediaEditor();await loadPublicWebsiteContent();
-    }catch(err){showToast('Lỗi xóa hàng loạt: '+(err?.message||err),'error');if(btn){btn.disabled=false;btn.innerHTML=oldHtml||'<i class="fas fa-trash"></i> Xóa đã chọn';}}
+    }catch(err){showToast(`Đã xác nhận xóa ${deleted}/${ids.length} mục. `+(err?.message||String(err)),'error');}
+    finally{publicMediaBulkDeleting=false;updatePublicMediaBulkState();}
 }
 
 function editPublicMedia(json){
