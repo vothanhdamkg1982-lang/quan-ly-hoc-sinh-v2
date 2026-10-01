@@ -4062,6 +4062,38 @@ function millionaireCanManageQuestion(item) {
     return !!item?.createdBy && item.createdBy === APP_STATE.currentUserId;
 }
 
+// Khi danh sách toàn bộ quá lớn hoặc máy chủ giới hạn truy vấn, cho phép
+// quản lý riêng khối/môn đang được chọn trong trò chơi.
+async function millionaireOpenCurrentSelectionManager() {
+    if (MILLIONAIRE_STATE.managerLoading) return;
+    const grade = MILLIONAIRE_STATE.selectedGrade || 'all';
+    const subject = MILLIONAIRE_STATE.selectedSubject || 'all';
+    if (grade === 'all' && subject === 'all') {
+        alert('Hãy chọn ít nhất một khối hoặc môn trong phần thiết lập trò chơi trước khi tải theo bộ lọc.');
+        return;
+    }
+    MILLIONAIRE_STATE.managerOpen = true;
+    MILLIONAIRE_STATE.managerLoading = true;
+    MILLIONAIRE_STATE.managerLoadError = '';
+    MILLIONAIRE_STATE.managerPage = 1;
+    MILLIONAIRE_STATE.selectedQuestionIds = [];
+    refreshMillionaire();
+    try {
+        // Scope có mã riêng để không nhầm với ngân hàng đầy đủ.
+        const scope = millionaireSelectionScopeKey(grade, subject);
+        await loadMillionaireQuestionsForSelection(grade, subject, true);
+        if (!millionaireSupabaseQuestionsLoaded || millionaireSupabaseCurrentScope !== scope) {
+            throw new Error('Không tải được các câu hỏi theo khối và môn đã chọn. Kiểm tra kết nối hoặc quyền Supabase.');
+        }
+    } catch (error) {
+        MILLIONAIRE_STATE.managerLoadError = millionaireDeleteErrorText(error);
+    } finally {
+        MILLIONAIRE_STATE.managerLoading = false;
+        refreshMillionaire();
+    }
+}
+window.millionaireOpenCurrentSelectionManager = millionaireOpenCurrentSelectionManager;
+
 async function millionaireOpenQuestionManager() {
     if (MILLIONAIRE_STATE.managerLoading) return;
     MILLIONAIRE_STATE.managerOpen = true;
@@ -4081,7 +4113,12 @@ async function millionaireOpenQuestionManager() {
 }
 
 function millionaireManagerSetPage(page) {
-    const items = getMillionaireQuestionsBySource('custom');
+    const term = normalizeVnEduText(MILLIONAIRE_STATE.managerFilter || '').toLowerCase();
+    const scoped = millionaireSupabaseCurrentScope !== 'all';
+    const items = getMillionaireQuestionsBySource('custom').filter(q =>
+        (!scoped || MILLIONAIRE_STATE.selectedTopic === 'all' || millionaireQuestionMatchesLessonSelection(q, MILLIONAIRE_STATE.selectedTopic)) &&
+        (!term || normalizeVnEduText([q.q, q.grade, q.subject, q.lessonName, q.topic, q.week, q.ppct].join(' ')).toLowerCase().includes(term))
+    );
     const pageSize = Math.max(20, Number(MILLIONAIRE_STATE.managerPageSize || 100));
     const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
     MILLIONAIRE_STATE.managerPage = Math.max(1, Math.min(totalPages, Number(page || 1)));
@@ -5677,6 +5714,43 @@ async function millionaireRunBulkDelete(all) {
     }
 }
 
+// Chuyển chính xác các bản ghi được chọn, không xóa/tạo lại UUID hoặc đáp án.
+async function millionaireMoveSelectedToTinHoc() {
+    if (millionaireBulkDeleteBusy) { alert('Đang có thao tác khác. Vui lòng chờ.'); return; }
+    const ids = new Set((MILLIONAIRE_STATE.selectedQuestionIds || []).map(String));
+    const targets = getMillionaireQuestionsBySource('custom')
+        .filter(q => ids.has(String(q.id)) && millionaireCanManageQuestion(q) && q.subject !== 'Tin học');
+    if (!targets.length) { alert('Chưa chọn câu hỏi khác môn Tin học mà bạn có quyền chỉnh sửa.'); return; }
+    if (!confirm(`Chuyển ${targets.length} câu hỏi đã chọn sang môn Tin học?\n\nGiữ nguyên khối, tuần, PPCT, tên bài, câu hỏi và các đáp án. Mã môn và khóa bài học sẽ được cập nhật. Hãy kiểm tra danh sách trước khi xác nhận.`)) return;
+    millionaireBulkDeleteBusy = true;
+    let moved = 0;
+    try {
+        for (const old of targets) {
+            const revised = { ...old, subject: 'Tin học', subjectCode: 'TINHOC', lessonKey: '' };
+            const key = millionaireBuildLessonKey(revised);
+            const { data, error } = await supabase.from('app3_millionaire_questions')
+                .update({ subject: 'Tin học', subject_code: 'TINHOC', lesson_key: key || null, updated_at: new Date().toISOString() })
+                .eq('id', old.id).select('*').single();
+            if (error) throw error;
+            const updated = mapMillionaireQuestionFromSupabase(data);
+            const pos = MILLIONAIRE_SUPABASE_QUESTIONS.findIndex(q => q.id === old.id);
+            if (pos >= 0) MILLIONAIRE_SUPABASE_QUESTIONS[pos] = updated;
+            moved++;
+        }
+        MILLIONAIRE_STATE.selectedQuestionIds = [];
+        alert(`Đã chuyển ${moved} câu sang môn Tin học. Hãy tải lại khối/môn Tin học để kiểm tra.`);
+    } catch (error) {
+        alert(`Đã chuyển ${moved}/${targets.length} câu; quá trình dừng do lỗi Supabase: ${millionaireDeleteErrorText(error)}. Tải lại danh sách để kiểm tra trước khi thử tiếp.`);
+    } finally {
+        millionaireBulkDeleteBusy = false;
+        // Bộ lọc hiện tại có thể không còn khớp sau khi chuyển môn.
+        millionaireSupabaseQuestionsLoaded = false;
+        millionaireSupabaseCurrentScope = 'none';
+        await millionaireOpenCurrentSelectionManager();
+    }
+}
+window.millionaireMoveSelectedToTinHoc = millionaireMoveSelectedToTinHoc;
+
 async function millionaireDeleteSelectedQuestions() { return millionaireRunBulkDelete(false); }
 async function millionaireDeleteAllCustomQuestions() { return millionaireRunBulkDelete(true); }
 
@@ -5779,11 +5853,29 @@ function millionaireHandleQuestionMetaChange(kind = '') {
     millionaireRefreshQuestionFormDatalists({ autoFillLesson: true });
 }
 
+function millionaireSetManagerSearch(value) {
+    MILLIONAIRE_STATE.managerFilter = String(value || '');
+    MILLIONAIRE_STATE.managerPage = 1;
+    const box = document.getElementById('millionaireManagerSearch');
+    const position = box?.selectionStart ?? MILLIONAIRE_STATE.managerFilter.length;
+    refreshMillionaire();
+    const updated = document.getElementById('millionaireManagerSearch');
+    if (updated) { updated.focus(); try { updated.setSelectionRange(position, position); } catch (_) {} }
+}
+window.millionaireSetManagerSearch = millionaireSetManagerSearch;
+
 function renderMillionaireQuestionManager() {
     if (!MILLIONAIRE_STATE.managerOpen) return '';
 
     const custom = getMillionaireQuestionsBySource('custom');
-    const managerUnavailable = !millionaireSupabaseQuestionsLoaded || millionaireSupabaseCurrentScope !== 'all';
+    const managerUnavailable = !millionaireSupabaseQuestionsLoaded || millionaireSupabaseCurrentScope === 'none';
+    const scopedManager = !managerUnavailable && millionaireSupabaseCurrentScope !== 'all';
+    const searchText = normalizeVnEduText(MILLIONAIRE_STATE.managerFilter || '').toLowerCase();
+    const shown = custom.filter(item => {
+        const lessonOk = !scopedManager || MILLIONAIRE_STATE.selectedTopic === 'all' || millionaireQuestionMatchesLessonSelection(item, MILLIONAIRE_STATE.selectedTopic);
+        const textOk = !searchText || normalizeVnEduText([item.q, item.grade, item.subject, item.lessonName, item.topic, item.week, item.ppct].join(' ')).toLowerCase().includes(searchText);
+        return lessonOk && textOk;
+    });
     const canCreate = millionaireCanCreateQuestion();
     const manageable = custom.filter(millionaireCanManageQuestion);
     const manageableIds = new Set(manageable.map(q => q.id));
@@ -5809,11 +5901,11 @@ function renderMillionaireQuestionManager() {
     MILLIONAIRE_STATE.selectedQuestionIds = [...selectedIds];
 
     const pageSize = Math.max(20, Number(MILLIONAIRE_STATE.managerPageSize || 100));
-    const totalPages = Math.max(1, Math.ceil(custom.length / pageSize));
+    const totalPages = Math.max(1, Math.ceil(shown.length / pageSize));
     const currentPage = Math.max(1, Math.min(totalPages, Number(MILLIONAIRE_STATE.managerPage || 1)));
     MILLIONAIRE_STATE.managerPage = currentPage;
     const pageStart = (currentPage - 1) * pageSize;
-    const pageItems = custom.slice(pageStart, pageStart + pageSize);
+    const pageItems = shown.slice(pageStart, pageStart + pageSize);
 
     const rows = MILLIONAIRE_STATE.managerLoading
         ? '<tr><td colspan="8" class="millionaire-manager-empty">Đang tải toàn bộ ngân hàng để quản lý...</td></tr>'
@@ -5821,7 +5913,7 @@ function renderMillionaireQuestionManager() {
         ? `<tr><td colspan="8">Không tải được ngân hàng: ${escapeHtml(MILLIONAIRE_STATE.managerLoadError)}. Bấm Tải lại danh sách.</td></tr>`
         : managerUnavailable
         ? '<tr><td colspan="8">Danh sách chưa được tải đầy đủ. Bấm Tải lại danh sách.</td></tr>'
-        : custom.length
+        : shown.length
         ? pageItems.map((item, index) => `
             <tr>
                 <td class="millionaire-select-cell">
@@ -5846,7 +5938,7 @@ function renderMillionaireQuestionManager() {
                 </td>
             </tr>
         `).join('')
-        : '<tr><td colspan="8" class="millionaire-manager-empty">Chưa có câu hỏi tự thêm.</td></tr>';
+        : '<tr><td colspan="8" class="millionaire-manager-empty">Không có câu hỏi khớp với bộ lọc / tìm kiếm.</td></tr>';
 
     return `
         <div class="millionaire-manager-panel">
@@ -5856,7 +5948,8 @@ function renderMillionaireQuestionManager() {
                     <span>Ngân hàng câu hỏi dùng chung trên Supabase · ${isAdmin() ? 'Admin' : isTeacher() ? 'Giáo viên' : 'Chỉ xem'}.</span>
                 </div>
                 <div class="millionaire-manager-head-actions">
-                    <button type="button" onclick="millionaireOpenQuestionManager()" title="Tải lại danh sách từ Supabase"><i class="fas fa-rotate"></i> Tải lại danh sách</button>
+                    <button type="button" onclick="millionaireOpenQuestionManager()" title="Tải toàn bộ danh sách từ Supabase"><i class="fas fa-rotate"></i> Tải toàn bộ</button>
+                    <button type="button" onclick="millionaireOpenCurrentSelectionManager()" title="Tải đúng khối và môn đang chọn trong trò chơi"><i class="fas fa-filter"></i> Tải theo khối/môn đã chọn</button>
                     ${canCreate ? `
                     <button onclick="millionaireDownloadExcelTemplate()" title="Tải file mẫu Excel">
                         <i class="fas fa-file-arrow-down"></i>
@@ -6058,11 +6151,11 @@ D: ...
             </div>
             `}
 
-            ${!MILLIONAIRE_STATE.managerLoading && custom.length > pageSize ? `
+            ${!MILLIONAIRE_STATE.managerLoading && shown.length > pageSize ? `
             <div class="millionaire-manager-pager" style="display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0;">
                 <button class="btn" onclick="millionaireManagerSetPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>← Trang trước</button>
                 <strong>Trang ${currentPage}/${totalPages}</strong>
-                <span>Hiển thị ${pageStart + 1}–${Math.min(pageStart + pageSize, custom.length)} / ${custom.length} câu</span>
+                <span>Hiển thị ${pageStart + 1}–${Math.min(pageStart + pageSize, shown.length)} / ${shown.length} câu</span>
                 <button class="btn" onclick="millionaireManagerSetPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>Trang sau →</button>
             </div>` : ''}
 
@@ -6094,10 +6187,13 @@ D: ...
                 </div>
                 <div class="millionaire-bulk-right">
                     <span>Đã chọn: <strong>${selectedIds.size}</strong></span>
+                    <button class="btn" onclick="millionaireMoveSelectedToTinHoc()" title="Chỉ đổi môn và khóa bài học, giữ nguyên nội dung câu hỏi">
+                        <i class="fas fa-right-left"></i> Chuyển câu đã chọn sang Tin học
+                    </button>
                     <button class="btn danger" onclick="millionaireDeleteSelectedQuestions()">
                         <i class="fas fa-trash"></i> Xóa câu đã chọn
                     </button>
-                    ${isAdmin() ? `
+                    ${isAdmin() && !scopedManager ? `
                     <button class="btn danger-outline" onclick="millionaireDeleteAllCustomQuestions()">
                         <i class="fas fa-trash-can"></i> Xóa toàn bộ câu tự thêm
                     </button>` : ''}
@@ -6106,10 +6202,14 @@ D: ...
             ` : ''}
 
             <div class="millionaire-manager-table-wrap">
+                ${scopedManager ? `<p style="margin:8px 0; color:#ffd983;">Đang quản lý theo phạm vi: ${escapeHtml(MILLIONAIRE_STATE.selectedGrade === 'all' ? 'mọi khối' : 'Khối ' + MILLIONAIRE_STATE.selectedGrade)} / ${escapeHtml(MILLIONAIRE_STATE.selectedSubject === 'all' ? 'mọi môn' : MILLIONAIRE_STATE.selectedSubject)}${MILLIONAIRE_STATE.selectedTopic !== 'all' ? ' / bài đang chọn' : ''}. Chỉ các câu trong phạm vi này được hiển thị.</p>` : ''}
+                <label style="display:block; margin:8px 0;">Tìm theo nội dung câu hỏi, môn, bài, tuần hoặc PPCT
+                    <input type="search" id="millionaireManagerSearch" placeholder="Nhập từ khóa để tìm câu hỏi..." value="${escapeHtml(MILLIONAIRE_STATE.managerFilter || '')}" oninput="millionaireSetManagerSearch(this.value)" style="display:block; width:100%; max-width:550px; padding:9px; margin-top:5px;">
+                </label>
                 <div class="millionaire-manager-count">
                     Câu hỏi mặc định: <strong>${MILLIONAIRE_QUESTION_BANK.length}</strong> ·
-                    Tự thêm: <strong>${MILLIONAIRE_STATE.managerLoading ? 'Đang tải' : MILLIONAIRE_STATE.managerLoadError ? 'Tải lỗi' : managerUnavailable ? 'Chưa tải đủ' : custom.length}</strong> ·
-                    Tổng: <strong>${managerUnavailable || MILLIONAIRE_STATE.managerLoadError || MILLIONAIRE_STATE.managerLoading ? '—' : MILLIONAIRE_QUESTION_BANK.length + custom.length}</strong>
+                    Tự thêm: <strong>${MILLIONAIRE_STATE.managerLoading ? 'Đang tải' : MILLIONAIRE_STATE.managerLoadError ? 'Tải lỗi' : managerUnavailable ? 'Chưa tải đủ' : (scopedManager ? custom.length + ' (phạm vi đang chọn)' : custom.length)}</strong> ·
+                    Tổng: <strong>${managerUnavailable || MILLIONAIRE_STATE.managerLoadError || MILLIONAIRE_STATE.managerLoading || scopedManager ? '—' : MILLIONAIRE_QUESTION_BANK.length + custom.length}</strong>
                 </div>
                 <table class="millionaire-manager-table">
                     <thead>
