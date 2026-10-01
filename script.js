@@ -5584,21 +5584,38 @@ D: Tắt máy tính
 
 // BƯỚC 151.49.3F.16B: Cập nhật trạng thái chọn ngay trên DOM, không render lại toàn bộ
 // module. Nhờ đó thanh cuộn của danh sách câu hỏi giữ nguyên vị trí khi tích từng câu.
+// Phạm vi thực sự đang hiển thị, dùng chung cho bảng và nút Chọn tất cả.
+function millionaireGetManagerVisibleQuestions() {
+    const scoped = millionaireSupabaseQuestionsLoaded &&
+        millionaireSupabaseCurrentScope !== 'none' && millionaireSupabaseCurrentScope !== 'all';
+    const term = normalizeVnEduText(MILLIONAIRE_STATE.managerFilter || '').toLowerCase();
+    return getMillionaireQuestionsBySource('custom').filter(item => {
+        const lessonOk = !scoped || MILLIONAIRE_STATE.selectedTopic === 'all' ||
+            millionaireQuestionMatchesLessonSelection(item, MILLIONAIRE_STATE.selectedTopic);
+        const textOk = !term || normalizeVnEduText([
+            item.q, item.grade, item.subject, item.lessonName, item.topic, item.week, item.ppct
+        ].join(' ')).toLowerCase().includes(term);
+        return lessonOk && textOk;
+    });
+}
+
 function millionaireRefreshQuestionSelectionUI() {
     const panel = document.querySelector('.millionaire-manager-panel');
     if (!panel) return;
 
     const selected = new Set(MILLIONAIRE_STATE.selectedQuestionIds || []);
     // BƯỚC 151.49.3F.17B.8B: số lượng phải theo nguồn dùng chung Supabase khi đã tải xong.
-    const customCount = getMillionaireQuestionsBySource('custom').length;
+    const visibleIds = new Set(millionaireGetManagerVisibleQuestions()
+        .filter(millionaireCanManageQuestion).map(q => String(q.id)));
+    const visibleSelectedCount = [...selected].filter(id => visibleIds.has(String(id))).length;
 
     const countStrong = panel.querySelector('.millionaire-bulk-right > span strong');
     if (countStrong) countStrong.textContent = String(selected.size);
 
     const headerCheckbox = panel.querySelector('.millionaire-manager-table thead .millionaire-select-cell input[type="checkbox"]');
     if (headerCheckbox) {
-        headerCheckbox.checked = customCount > 0 && selected.size === customCount;
-        headerCheckbox.indeterminate = selected.size > 0 && selected.size < customCount;
+        headerCheckbox.checked = visibleIds.size > 0 && visibleSelectedCount === visibleIds.size;
+        headerCheckbox.indeterminate = visibleSelectedCount > 0 && visibleSelectedCount < visibleIds.size;
     }
 }
 
@@ -5613,9 +5630,8 @@ function millionaireToggleQuestionSelection(id, checked) {
 function millionaireSelectAllCustomQuestions(checked = true) {
     if (checked) {
         // BƯỚC 151.49.3F.17B.8B: chọn các câu đang hiển thị từ nguồn dùng chung.
-        MILLIONAIRE_STATE.selectedQuestionIds = getMillionaireQuestionsBySource('custom')
-            .filter(millionaireCanManageQuestion)
-            .map(q => q.id);
+        MILLIONAIRE_STATE.selectedQuestionIds = millionaireGetManagerVisibleQuestions()
+            .filter(millionaireCanManageQuestion).map(q => q.id);
     } else {
         MILLIONAIRE_STATE.selectedQuestionIds = [];
     }
@@ -5714,22 +5730,37 @@ async function millionaireRunBulkDelete(all) {
     }
 }
 
-// Chuyển chính xác các bản ghi được chọn, không xóa/tạo lại UUID hoặc đáp án.
-async function millionaireMoveSelectedToTinHoc() {
+// Chuyển hai chiều giữa Tin học và Công nghệ; giữ nguyên UUID, nội dung và đáp án.
+// Chỉ chuyển các câu đúng môn nguồn và thuộc quyền chỉnh sửa của người dùng.
+async function millionaireMoveSelectedToSubject(targetSubject) {
     if (millionaireBulkDeleteBusy) { alert('Đang có thao tác khác. Vui lòng chờ.'); return; }
+    if (!['Tin học', 'Công nghệ'].includes(targetSubject)) {
+        alert('Chỉ hỗ trợ chuyển giữa môn Tin học và Công nghệ.');
+        return;
+    }
+    const sourceSubject = targetSubject === 'Tin học' ? 'Công nghệ' : 'Tin học';
+    const sourceId = getCanonicalSubjectId(sourceSubject);
+    const subjectCode = targetSubject === 'Tin học' ? 'TINHOC' : 'CONGNGHE';
     const ids = new Set((MILLIONAIRE_STATE.selectedQuestionIds || []).map(String));
     const targets = getMillionaireQuestionsBySource('custom')
-        .filter(q => ids.has(String(q.id)) && millionaireCanManageQuestion(q) && q.subject !== 'Tin học');
-    if (!targets.length) { alert('Chưa chọn câu hỏi khác môn Tin học mà bạn có quyền chỉnh sửa.'); return; }
-    if (!confirm(`Chuyển ${targets.length} câu hỏi đã chọn sang môn Tin học?\n\nGiữ nguyên khối, tuần, PPCT, tên bài, câu hỏi và các đáp án. Mã môn và khóa bài học sẽ được cập nhật. Hãy kiểm tra danh sách trước khi xác nhận.`)) return;
+        .filter(q => ids.has(String(q.id)) && millionaireCanManageQuestion(q) &&
+            getCanonicalSubjectId(q.subject || q.subjectCode) === sourceId);
+    if (!targets.length) {
+        alert(`Chưa chọn câu hỏi thuộc môn ${sourceSubject} mà bạn có quyền chỉnh sửa. Hãy chọn môn ${sourceSubject}, tải danh sách rồi tích chọn câu hỏi cần chuyển.`);
+        return;
+    }
+    const skipped = ids.size - targets.length;
+    if (!confirm(`Chuyển ${targets.length} câu hỏi từ ${sourceSubject} sang ${targetSubject}?` +
+        (skipped ? `\n${skipped} câu đã chọn khác môn nguồn hoặc không có quyền sửa sẽ được bỏ qua.` : '') +
+        '\n\nGiữ nguyên khối, tuần, PPCT, tên bài, nội dung và đáp án. Mã môn và khóa bài học sẽ được cập nhật.')) return;
     millionaireBulkDeleteBusy = true;
     let moved = 0;
     try {
         for (const old of targets) {
-            const revised = { ...old, subject: 'Tin học', subjectCode: 'TINHOC', lessonKey: '' };
+            const revised = { ...old, subject: targetSubject, subjectCode, lessonKey: '' };
             const key = millionaireBuildLessonKey(revised);
             const { data, error } = await supabase.from('app3_millionaire_questions')
-                .update({ subject: 'Tin học', subject_code: 'TINHOC', lesson_key: key || null, updated_at: new Date().toISOString() })
+                .update({ subject: targetSubject, subject_code: subjectCode, lesson_key: key || null, updated_at: new Date().toISOString() })
                 .eq('id', old.id).select('*').single();
             if (error) throw error;
             const updated = mapMillionaireQuestionFromSupabase(data);
@@ -5738,18 +5769,21 @@ async function millionaireMoveSelectedToTinHoc() {
             moved++;
         }
         MILLIONAIRE_STATE.selectedQuestionIds = [];
-        alert(`Đã chuyển ${moved} câu sang môn Tin học. Hãy tải lại khối/môn Tin học để kiểm tra.`);
+        alert(`Đã chuyển ${moved} câu sang môn ${targetSubject}. Hãy chọn môn ${targetSubject} và tải lại danh sách để kiểm tra.`);
     } catch (error) {
-        alert(`Đã chuyển ${moved}/${targets.length} câu; quá trình dừng do lỗi Supabase: ${millionaireDeleteErrorText(error)}. Tải lại danh sách để kiểm tra trước khi thử tiếp.`);
+        alert(`Đã chuyển ${moved}/${targets.length} câu; quá trình dừng do lỗi Supabase: ${millionaireDeleteErrorText(error)}. Hãy tải lại danh sách trước khi thử tiếp.`);
     } finally {
         millionaireBulkDeleteBusy = false;
-        // Bộ lọc hiện tại có thể không còn khớp sau khi chuyển môn.
+        // Nạp lại dữ liệu thật vì câu vừa chuyển không còn thuộc phạm vi môn cũ.
         millionaireSupabaseQuestionsLoaded = false;
         millionaireSupabaseCurrentScope = 'none';
         await millionaireOpenCurrentSelectionManager();
     }
 }
+function millionaireMoveSelectedToTinHoc() { return millionaireMoveSelectedToSubject('Tin học'); }
+function millionaireMoveSelectedToCongNghe() { return millionaireMoveSelectedToSubject('Công nghệ'); }
 window.millionaireMoveSelectedToTinHoc = millionaireMoveSelectedToTinHoc;
+window.millionaireMoveSelectedToCongNghe = millionaireMoveSelectedToCongNghe;
 
 async function millionaireDeleteSelectedQuestions() { return millionaireRunBulkDelete(false); }
 async function millionaireDeleteAllCustomQuestions() { return millionaireRunBulkDelete(true); }
@@ -5870,14 +5904,9 @@ function renderMillionaireQuestionManager() {
     const custom = getMillionaireQuestionsBySource('custom');
     const managerUnavailable = !millionaireSupabaseQuestionsLoaded || millionaireSupabaseCurrentScope === 'none';
     const scopedManager = !managerUnavailable && millionaireSupabaseCurrentScope !== 'all';
-    const searchText = normalizeVnEduText(MILLIONAIRE_STATE.managerFilter || '').toLowerCase();
-    const shown = custom.filter(item => {
-        const lessonOk = !scopedManager || MILLIONAIRE_STATE.selectedTopic === 'all' || millionaireQuestionMatchesLessonSelection(item, MILLIONAIRE_STATE.selectedTopic);
-        const textOk = !searchText || normalizeVnEduText([item.q, item.grade, item.subject, item.lessonName, item.topic, item.week, item.ppct].join(' ')).toLowerCase().includes(searchText);
-        return lessonOk && textOk;
-    });
+    const shown = millionaireGetManagerVisibleQuestions();
     const canCreate = millionaireCanCreateQuestion();
-    const manageable = custom.filter(millionaireCanManageQuestion);
+    const manageable = shown.filter(millionaireCanManageQuestion);
     const manageableIds = new Set(manageable.map(q => q.id));
     const editing = custom.find(q => q.id === MILLIONAIRE_STATE.editingQuestionId) || null;
     const form = editing || {
@@ -6187,8 +6216,11 @@ D: ...
                 </div>
                 <div class="millionaire-bulk-right">
                     <span>Đã chọn: <strong>${selectedIds.size}</strong></span>
-                    <button class="btn" onclick="millionaireMoveSelectedToTinHoc()" title="Chỉ đổi môn và khóa bài học, giữ nguyên nội dung câu hỏi">
-                        <i class="fas fa-right-left"></i> Chuyển câu đã chọn sang Tin học
+                    <button class="btn" onclick="millionaireMoveSelectedToTinHoc()" title="Chuyển câu thuộc môn Công nghệ sang Tin học, giữ nguyên nội dung và đáp án">
+                        <i class="fas fa-right-left"></i> Chuyển sang Tin học
+                    </button>
+                    <button class="btn" onclick="millionaireMoveSelectedToCongNghe()" title="Chuyển câu thuộc môn Tin học sang Công nghệ, giữ nguyên nội dung và đáp án">
+                        <i class="fas fa-right-left"></i> Chuyển sang Công nghệ
                     </button>
                     <button class="btn danger" onclick="millionaireDeleteSelectedQuestions()">
                         <i class="fas fa-trash"></i> Xóa câu đã chọn
