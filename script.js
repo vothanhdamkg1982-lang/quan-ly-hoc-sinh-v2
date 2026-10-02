@@ -5730,61 +5730,6 @@ async function millionaireRunBulkDelete(all) {
     }
 }
 
-// Chuyển hai chiều giữa Tin học và Công nghệ; giữ nguyên UUID, nội dung và đáp án.
-// Chỉ chuyển các câu đúng môn nguồn và thuộc quyền chỉnh sửa của người dùng.
-async function millionaireMoveSelectedToSubject(targetSubject) {
-    if (millionaireBulkDeleteBusy) { alert('Đang có thao tác khác. Vui lòng chờ.'); return; }
-    if (!['Tin học', 'Công nghệ'].includes(targetSubject)) {
-        alert('Chỉ hỗ trợ chuyển giữa môn Tin học và Công nghệ.');
-        return;
-    }
-    const sourceSubject = targetSubject === 'Tin học' ? 'Công nghệ' : 'Tin học';
-    const sourceId = getCanonicalSubjectId(sourceSubject);
-    const subjectCode = targetSubject === 'Tin học' ? 'TINHOC' : 'CONGNGHE';
-    const ids = new Set((MILLIONAIRE_STATE.selectedQuestionIds || []).map(String));
-    const targets = getMillionaireQuestionsBySource('custom')
-        .filter(q => ids.has(String(q.id)) && millionaireCanManageQuestion(q) &&
-            getCanonicalSubjectId(q.subject || q.subjectCode) === sourceId);
-    if (!targets.length) {
-        alert(`Chưa chọn câu hỏi thuộc môn ${sourceSubject} mà bạn có quyền chỉnh sửa. Hãy chọn môn ${sourceSubject}, tải danh sách rồi tích chọn câu hỏi cần chuyển.`);
-        return;
-    }
-    const skipped = ids.size - targets.length;
-    if (!confirm(`Chuyển ${targets.length} câu hỏi từ ${sourceSubject} sang ${targetSubject}?` +
-        (skipped ? `\n${skipped} câu đã chọn khác môn nguồn hoặc không có quyền sửa sẽ được bỏ qua.` : '') +
-        '\n\nGiữ nguyên khối, tuần, PPCT, tên bài, nội dung và đáp án. Mã môn và khóa bài học sẽ được cập nhật.')) return;
-    millionaireBulkDeleteBusy = true;
-    let moved = 0;
-    try {
-        for (const old of targets) {
-            const revised = { ...old, subject: targetSubject, subjectCode, lessonKey: '' };
-            const key = millionaireBuildLessonKey(revised);
-            const { data, error } = await supabase.from('app3_millionaire_questions')
-                .update({ subject: targetSubject, subject_code: subjectCode, lesson_key: key || null, updated_at: new Date().toISOString() })
-                .eq('id', old.id).select('*').single();
-            if (error) throw error;
-            const updated = mapMillionaireQuestionFromSupabase(data);
-            const pos = MILLIONAIRE_SUPABASE_QUESTIONS.findIndex(q => q.id === old.id);
-            if (pos >= 0) MILLIONAIRE_SUPABASE_QUESTIONS[pos] = updated;
-            moved++;
-        }
-        MILLIONAIRE_STATE.selectedQuestionIds = [];
-        alert(`Đã chuyển ${moved} câu sang môn ${targetSubject}. Hãy chọn môn ${targetSubject} và tải lại danh sách để kiểm tra.`);
-    } catch (error) {
-        alert(`Đã chuyển ${moved}/${targets.length} câu; quá trình dừng do lỗi Supabase: ${millionaireDeleteErrorText(error)}. Hãy tải lại danh sách trước khi thử tiếp.`);
-    } finally {
-        millionaireBulkDeleteBusy = false;
-        // Nạp lại dữ liệu thật vì câu vừa chuyển không còn thuộc phạm vi môn cũ.
-        millionaireSupabaseQuestionsLoaded = false;
-        millionaireSupabaseCurrentScope = 'none';
-        await millionaireOpenCurrentSelectionManager();
-    }
-}
-function millionaireMoveSelectedToTinHoc() { return millionaireMoveSelectedToSubject('Tin học'); }
-function millionaireMoveSelectedToCongNghe() { return millionaireMoveSelectedToSubject('Công nghệ'); }
-window.millionaireMoveSelectedToTinHoc = millionaireMoveSelectedToTinHoc;
-window.millionaireMoveSelectedToCongNghe = millionaireMoveSelectedToCongNghe;
-
 async function millionaireDeleteSelectedQuestions() { return millionaireRunBulkDelete(false); }
 async function millionaireDeleteAllCustomQuestions() { return millionaireRunBulkDelete(true); }
 
@@ -5976,25 +5921,10 @@ function renderMillionaireQuestionManager() {
                     <strong><i class="fas fa-list-check"></i> Quản lý câu hỏi</strong>
                     <span>Ngân hàng câu hỏi dùng chung trên Supabase · ${isAdmin() ? 'Admin' : isTeacher() ? 'Giáo viên' : 'Chỉ xem'}.</span>
                 </div>
-                <div class="millionaire-manager-head-actions">
-                    <button type="button" onclick="millionaireOpenQuestionManager()" title="Tải toàn bộ danh sách từ Supabase"><i class="fas fa-rotate"></i> Tải toàn bộ</button>
-                    <button type="button" onclick="millionaireOpenCurrentSelectionManager()" title="Tải đúng khối và môn đang chọn trong trò chơi"><i class="fas fa-filter"></i> Tải theo khối/môn đã chọn</button>
-                    ${canCreate ? `
-                    <button onclick="millionaireDownloadExcelTemplate()" title="Tải file mẫu Excel">
-                        <i class="fas fa-file-arrow-down"></i>
-                    </button>
-                    <button onclick="millionairePickExcelFile()" title="Nhập câu hỏi từ Excel">
-                        <i class="fas fa-file-import"></i>
-                    </button>` : ''}
-                    <button onclick="exportMillionaireQuestionsToExcel('custom')" title="Xuất câu hỏi tự thêm">
-                        <i class="fas fa-file-export"></i>
-                    </button>
-                    <button onclick="exportMillionaireQuestionsToExcel('all')" title="Xuất toàn bộ ngân hàng">
-                        <i class="fas fa-table-list"></i>
-                    </button>
-                    <button onclick="millionaireCloseQuestionManager()" title="Đóng">
-                        <i class="fas fa-xmark"></i>
-                    </button>
+                <div class="millionaire-manager-head-actions" style="flex-wrap:wrap;justify-content:flex-end;max-width:100%;gap:8px;">
+                    <button type="button" class="btn" onclick="millionaireOpenQuestionManager()" title="Tải toàn bộ ngân hàng câu hỏi" style="min-height:36px;padding:7px 10px;white-space:nowrap;">Tải tất cả</button>
+                    <button type="button" class="btn" onclick="millionaireOpenCurrentSelectionManager()" title="Tải câu hỏi theo khối và môn đã chọn" style="min-height:36px;padding:7px 10px;white-space:nowrap;">Tải theo khối/môn</button>
+                    <button type="button" class="btn" onclick="millionaireCloseQuestionManager()" title="Đóng phần quản lý câu hỏi" style="min-height:36px;padding:7px 10px;white-space:nowrap;">Đóng</button>
                 </div>
             </div>
 
@@ -6216,19 +6146,9 @@ D: ...
                 </div>
                 <div class="millionaire-bulk-right">
                     <span>Đã chọn: <strong>${selectedIds.size}</strong></span>
-                    <button class="btn" onclick="millionaireMoveSelectedToTinHoc()" title="Chuyển câu thuộc môn Công nghệ sang Tin học, giữ nguyên nội dung và đáp án">
-                        <i class="fas fa-right-left"></i> Chuyển sang Tin học
-                    </button>
-                    <button class="btn" onclick="millionaireMoveSelectedToCongNghe()" title="Chuyển câu thuộc môn Tin học sang Công nghệ, giữ nguyên nội dung và đáp án">
-                        <i class="fas fa-right-left"></i> Chuyển sang Công nghệ
-                    </button>
                     <button class="btn danger" onclick="millionaireDeleteSelectedQuestions()">
                         <i class="fas fa-trash"></i> Xóa câu đã chọn
                     </button>
-                    ${isAdmin() && !scopedManager ? `
-                    <button class="btn danger-outline" onclick="millionaireDeleteAllCustomQuestions()">
-                        <i class="fas fa-trash-can"></i> Xóa toàn bộ câu tự thêm
-                    </button>` : ''}
                 </div>
             </div>
             ` : ''}
@@ -7856,7 +7776,12 @@ const IMAGE_CALLER_STATE = {
     winner: null,
     calledKeys: new Set(),
     audioContext: null,
-    spinSound: null
+    spinSound: null,
+    attendanceRequestId: 0,
+    attendanceLoading: false,
+    attendanceSynced: false,
+    attendanceDate: '',
+    absentCount: 0
 };
 
 function getImageCallerClasses() {
@@ -7937,6 +7862,8 @@ function initImageCaller() {
     // khi giáo viên chuyển module rồi quay lại. Không xóa calledKeys ở đây.
     if (IMAGE_CALLER_STATE.classId && IMAGE_CALLER_STATE.students.length) {
         imageCallerRestoreSession();
+        // Khi quay lại trò chơi, đối chiếu lại điểm danh thay vì giữ danh sách đã cũ.
+        imageCallerSyncAttendanceForClass(IMAGE_CALLER_STATE.classId, { preserveSession: true });
     }
 }
 
@@ -7995,6 +7922,108 @@ function imageCallerStudentKey(student) {
     return String(student?.db_uuid || student?.id || student?.student_code || student?.fullName || '').trim();
 }
 
+// Chỉ người có mặt / đi muộn mới được đưa vào lượt gọi. Ngày phải trùng
+// với ngày đang dùng tại module Điểm danh và Vòng quay.
+const IMAGE_CALLER_ABSENT_STATUSES = new Set(['Vắng', 'Phép', 'Không phép']);
+
+async function imageCallerSyncAttendanceForClass(classId, { preserveSession = true } = {}) {
+    if (!classId || !getImageCallerClasses().some(cls => String(cls.id) === String(classId))) return false;
+    const requestId = ++IMAGE_CALLER_STATE.attendanceRequestId;
+    IMAGE_CALLER_STATE.attendanceLoading = true;
+    IMAGE_CALLER_STATE.attendanceSynced = false;
+    imageCallerSetActionState();
+    const status = document.querySelector('.image-caller-status');
+    const description = document.querySelector('.image-caller-result p');
+    if (status) status.textContent = 'Đang đối chiếu điểm danh...';
+    if (description) description.textContent = 'Đang tải danh sách học sinh có mặt trong ngày.';
+
+    const day = new Date().toISOString().split('T')[0];
+    try {
+        const { data, error } = await supabase.from('app3_attendance')
+            .select('student_id,status')
+            .eq('class_id', classId)
+            .eq('attendance_date', day);
+        if (error) throw error;
+        if (requestId !== IMAGE_CALLER_STATE.attendanceRequestId ||
+            String(IMAGE_CALLER_STATE.classId) !== String(classId)) return false;
+
+        const allStudents = getImageCallerStudents(classId);
+        const absentIds = new Set((data || [])
+            .filter(row => IMAGE_CALLER_ABSENT_STATUSES.has(String(row.status || '').trim()))
+            .map(row => String(row.student_id || '').trim())
+            .filter(Boolean));
+        const eligible = allStudents.filter(student => !absentIds.has(String(student.db_uuid || '').trim()));
+        IMAGE_CALLER_STATE.students = eligible;
+        IMAGE_CALLER_STATE.absentCount = allStudents.length - eligible.length;
+        IMAGE_CALLER_STATE.attendanceSynced = true;
+        IMAGE_CALLER_STATE.attendanceLoading = false;
+
+        // Sang ngày điểm danh mới phải bắt đầu lượt gọi mới.
+        const keepHistory = preserveSession && (!IMAGE_CALLER_STATE.attendanceDate || IMAGE_CALLER_STATE.attendanceDate === day);
+        if (keepHistory) {
+            const allowed = new Set(eligible.map(imageCallerStudentKey));
+            IMAGE_CALLER_STATE.calledKeys = new Set([...IMAGE_CALLER_STATE.calledKeys].filter(key => allowed.has(key)));
+            if (IMAGE_CALLER_STATE.winner && !allowed.has(imageCallerStudentKey(IMAGE_CALLER_STATE.winner))) {
+                IMAGE_CALLER_STATE.winner = null;
+            }
+        } else {
+            IMAGE_CALLER_STATE.calledKeys.clear();
+            IMAGE_CALLER_STATE.winner = null;
+        }
+
+        IMAGE_CALLER_STATE.attendanceDate = day;
+        const cls = getImageCallerClasses().find(item => String(item.id) === String(classId));
+        const title = document.querySelector('.image-caller-result h3');
+        if (status) status.textContent = 'Đã đồng bộ điểm danh';
+        if (title) title.textContent = IMAGE_CALLER_STATE.winner?.fullName || cls?.name || 'Lớp đã chọn';
+        if (description) description.textContent = eligible.length
+            ? `${eligible.length} học sinh có thể gọi · ${IMAGE_CALLER_STATE.absentCount} học sinh vắng/phép.`
+            : `Không có học sinh có mặt để gọi · ${IMAGE_CALLER_STATE.absentCount} học sinh vắng/phép.`;
+        renderImageCallerStudentList(eligible);
+        updateImageCallerStats();
+        imageCallerSetActionState(eligible.length > 0);
+        // Khôi phục ảnh người đã gọi khi quay lại module.
+        if (preserveSession && IMAGE_CALLER_STATE.winner) imageCallerRestoreWinnerDisplay();
+        else imageCallerPrepareStudentImages(eligible);
+        return true;
+    } catch (error) {
+        if (requestId !== IMAGE_CALLER_STATE.attendanceRequestId) return false;
+        IMAGE_CALLER_STATE.attendanceLoading = false;
+        IMAGE_CALLER_STATE.attendanceSynced = false;
+        console.warn('[Gọi tên hình ảnh] Không tải được điểm danh:', error);
+        if (status) status.textContent = 'Chưa đồng bộ điểm danh';
+        if (description) description.textContent = 'Không tải được điểm danh. Bấm “Tải lại điểm danh” để thử lại; tạm khóa gọi tên để tránh gọi học sinh vắng.';
+        imageCallerSetActionState();
+        showToast('Không tải được điểm danh: ' + (error?.message || String(error)), 'error');
+        return false;
+    }
+}
+
+function imageCallerReloadAttendance() {
+    if (!IMAGE_CALLER_STATE.classId || IMAGE_CALLER_STATE.isSpinning || IMAGE_CALLER_STATE.attendanceLoading) return;
+    imageCallerSyncAttendanceForClass(IMAGE_CALLER_STATE.classId, { preserveSession: true });
+}
+
+function imageCallerRestoreWinnerDisplay() {
+    const winner = IMAGE_CALLER_STATE.winner;
+    const students = IMAGE_CALLER_STATE.students;
+    imageCallerPrepareStudentImages(students).then(() => {
+        if (!winner || IMAGE_CALLER_STATE.winner !== winner || !document.getElementById('imageCallerArena')) return;
+        const index = students.findIndex(student => imageCallerStudentKey(student) === imageCallerStudentKey(winner));
+        if (index < 0) return;
+        const arena = document.getElementById('imageCallerArena');
+        const bubbles = [...arena.querySelectorAll('.image-caller-bubble')];
+        const winnerBubble = bubbles[index];
+        bubbles.forEach((bubble, i) => { if (i !== index) bubble.classList.add('is-dimmed'); });
+        if (winnerBubble) {
+            winnerBubble.classList.add('is-winner');
+            const {width,height} = imageCallerGetArenaSize();
+            const size = window.innerWidth <= 760 ? 190 : 240;
+            winnerBubble.style.transform = `translate(${Math.max(8,(width-size)/2)}px, ${Math.max(8,(height-size)/2)}px) scale(1)`;
+        }
+    });
+}
+
 function renderImageCallerStudentList(students = []) {
     const list = document.getElementById('imageCallerStudentList');
     if (!list) return;
@@ -8024,6 +8053,8 @@ function updateImageCallerStats(total = IMAGE_CALLER_STATE.students.length) {
     if (totalEl) totalEl.textContent = String(total);
     if (calledEl) calledEl.textContent = String(called);
     if (remainingEl) remainingEl.textContent = String(remaining);
+    const absentEl = document.getElementById('imageCallerAbsentCount');
+    if (absentEl) absentEl.textContent = String(IMAGE_CALLER_STATE.absentCount || 0);
 }
 
 function imageCallerGetRemainingIndexes() {
@@ -8044,16 +8075,20 @@ function imageCallerSetActionState(hasStudents = IMAGE_CALLER_STATE.students.len
     const called = IMAGE_CALLER_STATE.calledKeys.size;
     const remaining = imageCallerGetRemainingIndexes().length;
     const spinning = IMAGE_CALLER_STATE.isSpinning;
+    const loading = IMAGE_CALLER_STATE.attendanceLoading;
+    const ready = IMAGE_CALLER_STATE.attendanceSynced;
     const activeSession = called > 0;
 
-    if (randomBtn) randomBtn.disabled = !hasStudents || spinning || called > 0 || remaining === 0;
-    if (nextBtn) nextBtn.disabled = !hasStudents || spinning || called === 0 || remaining === 0;
-    if (resetBtn) resetBtn.disabled = !hasStudents || spinning || called === 0;
-    if (endBtn) endBtn.disabled = !hasStudents || spinning;
+    if (randomBtn) randomBtn.disabled = !hasStudents || spinning || loading || !ready || called > 0 || remaining === 0;
+    if (nextBtn) nextBtn.disabled = !hasStudents || spinning || loading || !ready || called === 0 || remaining === 0;
+    if (resetBtn) resetBtn.disabled = !hasStudents || spinning || loading || called === 0;
+    if (endBtn) endBtn.disabled = !IMAGE_CALLER_STATE.classId || spinning || loading;
+    const reloadBtn = document.getElementById('imageCallerReloadAttendanceBtn');
+    if (reloadBtn) reloadBtn.disabled = !IMAGE_CALLER_STATE.classId || spinning || loading;
 
     // Khi đã bắt đầu gọi tên, khóa Khối/Lớp để phiên chỉ kết thúc bằng nút Kết thúc gọi tên.
-    if (gradeSelect) gradeSelect.disabled = spinning || activeSession;
-    if (classSelect) classSelect.disabled = spinning || activeSession;
+    if (gradeSelect) gradeSelect.disabled = spinning || loading || activeSession;
+    if (classSelect) classSelect.disabled = spinning || loading || activeSession;
 }
 
 function imageCallerPlayTone(frequency = 520, duration = 0.06, volume = 0.035) {
@@ -8272,8 +8307,12 @@ function imageCallerRevealWinner(winnerIndex) {
     imageCallerSetActionState(true);
 }
 
-function imageCallerStartRandom() {
-    if (IMAGE_CALLER_STATE.isSpinning || !IMAGE_CALLER_STATE.students.length) return;
+async function imageCallerStartRandom() {
+    if (IMAGE_CALLER_STATE.isSpinning || IMAGE_CALLER_STATE.attendanceLoading ||
+        !IMAGE_CALLER_STATE.classId) return;
+    // Đối chiếu ngay trước mỗi lượt vì điểm danh có thể đã đổi trong lúc chơi.
+    const synced = await imageCallerSyncAttendanceForClass(IMAGE_CALLER_STATE.classId, { preserveSession: true });
+    if (!synced || IMAGE_CALLER_STATE.isSpinning || !IMAGE_CALLER_STATE.students.length) return;
 
     const remainingIndexes = imageCallerGetRemainingIndexes();
     if (!remainingIndexes.length) {
@@ -8421,6 +8460,10 @@ function imageCallerEndSession() {
     imageCallerStopSpinSound();
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 
+    IMAGE_CALLER_STATE.attendanceRequestId++;
+    IMAGE_CALLER_STATE.attendanceLoading = false;
+    IMAGE_CALLER_STATE.attendanceSynced = false;
+    IMAGE_CALLER_STATE.absentCount = 0;
     IMAGE_CALLER_STATE.classId = '';
     IMAGE_CALLER_STATE.students = [];
     IMAGE_CALLER_STATE.winner = null;
@@ -8451,6 +8494,10 @@ function resetImageCallerStudentList() {
     const list = document.getElementById('imageCallerStudentList');
     if (list) list.innerHTML = `<div class="image-caller-empty"><i class="fas fa-image"></i><strong>Chưa có danh sách</strong><span>Chọn khối và lớp để nạp danh sách học sinh.</span></div>`;
     updateImageCallerStats(0);
+    IMAGE_CALLER_STATE.attendanceRequestId++;
+    IMAGE_CALLER_STATE.attendanceLoading = false;
+    IMAGE_CALLER_STATE.attendanceSynced = false;
+    IMAGE_CALLER_STATE.absentCount = 0;
     IMAGE_CALLER_STATE.classId = '';
     IMAGE_CALLER_STATE.students = [];
     IMAGE_CALLER_STATE.winner = null;
@@ -8474,23 +8521,21 @@ function imageCallerHandleClassChange(classId) {
         return;
     }
 
-    const cls = getImageCallerClasses().find(item => item.id === classId);
-    const students = getImageCallerStudents(classId);
+    const cls = getImageCallerClasses().find(item => String(item.id) === String(classId));
     IMAGE_CALLER_STATE.classId = classId;
-    IMAGE_CALLER_STATE.students = students;
+    IMAGE_CALLER_STATE.students = [];
     IMAGE_CALLER_STATE.winner = null;
     IMAGE_CALLER_STATE.calledKeys.clear();
+    IMAGE_CALLER_STATE.absentCount = 0;
+    IMAGE_CALLER_STATE.attendanceSynced = false;
 
-    status.textContent = 'Đã chọn lớp';
+    status.textContent = 'Đang tải điểm danh';
     title.textContent = cls?.name || 'Lớp đã chọn';
-    description.textContent = students.length > 0
-        ? `${students.length} học sinh đã sẵn sàng. Bấm “Gọi ngẫu nhiên” để bắt đầu.`
-        : 'Lớp này hiện chưa có học sinh trong dữ liệu.';
-
-    renderImageCallerStudentList(students);
-    updateImageCallerStats(students.length);
-    imageCallerSetActionState(students.length > 0);
-    imageCallerPrepareStudentImages(students);
+    description.textContent = 'Đang đối chiếu học sinh vắng/phép...';
+    renderImageCallerStudentList([]);
+    updateImageCallerStats(0);
+    imageCallerRenderBubbles([]);
+    imageCallerSyncAttendanceForClass(classId, { preserveSession: false });
 }
 
 window.imageCallerHandleGradeChange = imageCallerHandleGradeChange;
@@ -8499,6 +8544,7 @@ window.imageCallerStartRandom = imageCallerStartRandom;
 window.imageCallerNext = imageCallerNext;
 window.imageCallerResetRound = imageCallerResetRound;
 window.imageCallerEndSession = imageCallerEndSession;
+window.imageCallerReloadAttendance = imageCallerReloadAttendance;
 
 // ============================================================
 // BƯỚC 153.4 - TRẮC NGHIỆM HÌNH ẢNH: HIỂN THỊ 1 CÂU HỎI THẬT
@@ -10332,12 +10378,13 @@ function renderImageCaller() {
                         <button id="imageCallerRandomBtn" type="button" class="btn btn-primary" onclick="imageCallerStartRandom()" disabled><i class="fas fa-shuffle"></i> Gọi ngẫu nhiên</button>
                         <button id="imageCallerNextBtn" type="button" class="btn btn-secondary" onclick="imageCallerNext()" disabled><i class="fas fa-forward-step"></i> Gọi tiếp</button>
                         <button id="imageCallerResetBtn" type="button" class="btn btn-secondary" onclick="imageCallerResetRound()" disabled><i class="fas fa-rotate-left"></i> Đặt lại</button>
+                        <button id="imageCallerReloadAttendanceBtn" type="button" class="btn btn-secondary" onclick="imageCallerReloadAttendance()" disabled title="Đồng bộ lại điểm danh của ngày hiện tại"><i class="fas fa-user-check"></i> Tải lại điểm danh</button>
                         <button id="imageCallerEndBtn" type="button" class="btn btn-danger" onclick="imageCallerEndSession()" disabled><i class="fas fa-stop"></i> Kết thúc gọi tên</button>
                     </div>
                 </div>
                 <aside class="image-caller-side">
                     <div class="image-caller-side-card"><div class="image-caller-side-title"><i class="fas fa-users"></i> Danh sách gọi tên</div><div class="student-list-scroll" id="imageCallerStudentList"><div class="image-caller-empty"><i class="fas fa-image"></i><strong>Chưa có danh sách</strong><span>Chọn khối và lớp để nạp danh sách học sinh.</span></div></div></div>
-                    <div class="image-caller-stats"><div><strong id="imageCallerTotalCount">0</strong><span>Tổng học sinh</span></div><div><strong id="imageCallerCalledCount">0</strong><span>Đã gọi</span></div><div><strong id="imageCallerRemainingCount">0</strong><span>Còn lại</span></div></div>
+                    <div class="image-caller-stats"><div><strong id="imageCallerTotalCount">0</strong><span>Có thể gọi</span></div><div><strong id="imageCallerCalledCount">0</strong><span>Đã gọi</span></div><div><strong id="imageCallerRemainingCount">0</strong><span>Còn lại</span></div><div><strong id="imageCallerAbsentCount">0</strong><span>Vắng / Phép</span></div></div>
                 </aside>
             </div>
         </section>
@@ -12883,8 +12930,10 @@ function getAuthorizedAttendanceClass({ className = '', classId = '' } = {}) {
 
 function renderAttendance() {
     const today = new Date().toISOString().split('T')[0];
-    const attendanceClasses = hasAssignedScope() ? getAccessibleClassesForSubject('') : APP_STATE.classes;
-    const classOptions = (attendanceClasses || []).map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+    const attendanceClasses = (hasAssignedScope() ? getAccessibleClassesForSubject('') : (APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes) || [])
+        .filter(c => !!getAuthorizedAttendanceClass({ classId: c.id }));
+    const classOptions = attendanceClasses.map((c, i) => `<option value="${escapeHtml(c.name)}" ${i === 0 ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+    const allClassOption = '<option value="__all__">Tất cả lớp (tìm kiếm toàn bộ)</option>';
 
     return `
         <section class="attendance-pro-page">
@@ -12905,7 +12954,7 @@ function renderAttendance() {
             <div class="attendance-filter-card">
                 <div class="attendance-filter-item">
                     <label>Chọn lớp</label>
-                    <select id="attendanceClass" onchange="loadAttendance()">${classOptions}</select>
+                    <select id="attendanceClass" onchange="attendanceChangeClass()">${allClassOption}${classOptions}</select>
                 </div>
                 <div class="attendance-filter-item">
                     <label>Ngày điểm danh</label>
@@ -12973,7 +13022,8 @@ function renderAttendance() {
                 </div>
                 <div class="attendance-search-bar" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:16px;">
                     <label for="attendanceSearch"><i class="fas fa-search"></i> Tìm học sinh</label>
-                    <input type="search" id="attendanceSearch" placeholder="Nhập tên hoặc mã học sinh (có dấu/không dấu)" oninput="applyAttendanceFilters()" style="flex:1;min-width:240px;padding:10px;border:1px solid var(--border-color,#cbd5e1);border-radius:8px;">
+                    <input type="search" id="attendanceSearch" placeholder="Tìm tên, mã hoặc lớp (có dấu/không dấu)" oninput="applyAttendanceFilters()" style="flex:1;min-width:240px;padding:10px;border:1px solid var(--border-color,#cbd5e1);border-radius:8px;">
+                    <button type="button" id="attendanceSearchAllButton" class="btn btn-primary" onclick="attendanceToggleAllClassSearch()" aria-pressed="false" title="Tìm học sinh trong tất cả lớp được cấp quyền"><i class="fas fa-users"></i> Tìm tất cả lớp</button>
                     <button type="button" class="btn btn-secondary" onclick="clearAttendanceSearch()">Xóa tìm kiếm</button>
                     <span id="attendanceSearchCount" role="status" aria-live="polite"></span>
                 </div>
@@ -12990,70 +13040,116 @@ function renderAttendance() {
     `;
 }
 
+// Nút tìm tất cả lớp hiển thị ngay cạnh ô tìm kiếm để không phụ thuộc
+// vị trí cuộn của danh sách lớp gốc trong trình duyệt.
+let attendancePreviousClass = '';
+function attendanceUpdateSearchScopeButton() {
+    const select = document.getElementById('attendanceClass');
+    const button = document.getElementById('attendanceSearchAllButton');
+    if (!select || !button) return;
+    const all = select.value === '__all__';
+    button.innerHTML = all
+        ? '<i class="fas fa-arrow-left"></i> Quay về một lớp'
+        : '<i class="fas fa-users"></i> Tìm tất cả lớp';
+    button.setAttribute('aria-pressed', String(all));
+    button.title = all ? 'Quay về lớp đang làm việc trước đó' : 'Tìm học sinh ở mọi lớp được cấp quyền';
+}
+function attendanceChangeClass() {
+    const selected = document.getElementById('attendanceClass')?.value;
+    if (selected && selected !== '__all__') attendancePreviousClass = selected;
+    attendanceUpdateSearchScopeButton();
+    return loadAttendance();
+}
+function attendanceToggleAllClassSearch() {
+    const select = document.getElementById('attendanceClass');
+    if (!select) return;
+    if (select.value === '__all__') {
+        const valid = [...select.options].filter(o => o.value && o.value !== '__all__');
+        select.value = valid.find(o => o.value === attendancePreviousClass)?.value || valid[0]?.value || '__all__';
+    } else {
+        attendancePreviousClass = select.value;
+        select.value = '__all__';
+    }
+    attendanceUpdateSearchScopeButton();
+    const result = loadAttendance();
+    document.getElementById('attendanceSearch')?.focus();
+    return result;
+}
+window.attendanceChangeClass = attendanceChangeClass;
+window.attendanceToggleAllClassSearch = attendanceToggleAllClassSearch;
+
 async function loadAttendance() {
-    const clsName = document.getElementById('attendanceClass').value;
-    const date = document.getElementById('attendanceDate').value;
+    const clsName = document.getElementById('attendanceClass')?.value || '';
+    const date = document.getElementById('attendanceDate')?.value || '';
     const wrapper = document.getElementById('attendanceTableWrapper');
+    if (!wrapper) return;
+    attendanceUpdateSearchScopeButton();
     const summary = document.getElementById('attendanceSearchCount');
     if (summary) summary.textContent = '';
     const empty = document.getElementById('attendanceSearchEmpty');
     if (empty) empty.hidden = true;
     if (!clsName || !date) {
-        wrapper.innerHTML = '<div class="attendance-empty-state"><i class="fas fa-calendar-check"></i><strong>Vui lòng chọn lớp và ngày</strong><span>Chọn đầy đủ thông tin phía trên để tải danh sách.</span></div>';
+        wrapper.innerHTML = '<div class="attendance-empty-state">Vui lòng chọn lớp và ngày.</div>';
         return;
     }
 
-    const classObj = getAuthorizedAttendanceClass({ className: clsName });
-    if (!classObj) {
-        wrapper.innerHTML = '<div class="attendance-empty-state"><i class="fas fa-circle-exclamation"></i><strong>Lớp không tồn tại</strong><span>Vui lòng chọn lại lớp từ danh sách.</span></div>';
+    const isAllClasses = clsName === '__all__';
+    const allowedClasses = (hasAssignedScope() ? getAccessibleClassesForSubject('') : (APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes) || [])
+        .filter(c => !!getAuthorizedAttendanceClass({ classId: c.id }));
+    const selectedClasses = isAllClasses ? allowedClasses : allowedClasses.filter(c => c.name === clsName);
+    if (!selectedClasses.length) {
+        wrapper.innerHTML = '<div class="attendance-empty-state">Bạn không có lớp phù hợp hoặc không có quyền truy cập.</div>';
+        return;
+    }
+    const classById = new Map(selectedClasses.map(c => [String(c.id), c]));
+    const classByName = new Map(selectedClasses.map(c => [String(c.name), c]));
+    const students = (APP_STATE.students || []).filter(student =>
+        classById.has(String(student.class_id || '')) ||
+        (!student.class_id && classByName.has(String(student.class || '')))
+    ).sort((a,b) => String(a.class || '').localeCompare(String(b.class || ''),'vi',{numeric:true}) ||
+        String(a.fullName || '').localeCompare(String(b.fullName || ''),'vi'));
+    if (!students.length) {
+        wrapper.innerHTML = '<div class="attendance-empty-state">Chưa có học sinh trong phạm vi đã chọn.</div>';
         return;
     }
 
-    const students = APP_STATE.students.filter(s => s.class === clsName);
-    if (students.length === 0) {
-        wrapper.innerHTML = '<div class="attendance-empty-state"><i class="fas fa-user-slash"></i><strong>Lớp này chưa có học sinh</strong><span>Chưa có dữ liệu học sinh để điểm danh.</span></div>';
-        return;
-    }
-
-    const { data: records, error } = await supabase
-        .from('app3_attendance')
-        .select('*')
-        .eq('class_id', classObj.id)
-        .eq('attendance_date', date);
-
+    // Chỉ tải điểm danh thuộc các lớp người dùng được phân quyền.
+    const query = supabase.from('app3_attendance').select('student_id,status')
+        .in('class_id', selectedClasses.map(c => c.id)).eq('attendance_date',date);
+    const { data: records, error } = await query;
     if (error) {
-        showToast('Lỗi tải điểm danh: ' + error.message, 'error');
+        wrapper.innerHTML = '<div class="attendance-empty-state">Không tải được điểm danh. Hãy thử tải lại.</div>';
+        showToast('Lỗi tải điểm danh: ' + error.message,'error');
         return;
     }
-
-    const statusOptions = ['Có mặt', 'Vắng', 'Phép', 'Không phép', 'Muộn'];
-    let html = `
-        <div class="table-wrapper attendance-table-wrapper">
-            <table class="attendance-table">
-                <thead><tr><th>STT</th><th>Mã HS</th><th>Họ tên</th><th>Trạng thái</th></tr></thead>
-                <tbody>
-    `;
-    students.forEach((s, idx) => {
-        const record = records.find(r => r.student_id === s.db_uuid);
-        const status = record ? record.status : 'Có mặt';
-        const options = statusOptions.map(opt => `<option value="${opt}" ${opt === status ? 'selected' : ''}>${opt}</option>`).join('');
-        html += `
-            <tr class="attendance-student-row" data-attendance-status="${status}">
-                <td>${idx + 1}</td>
-                <td>${s.id}</td>
-                <td>${s.fullName}</td>
-                <td>
-                    <select class="attendance-status" data-student="${s.db_uuid}" onchange="updateAttendanceStatus('${date}','${classObj.id}','${s.db_uuid}',this.value)">
-                        ${options}
-                    </select>
-                </td>
-            </tr>
-        `;
+    // Bỏ qua kết quả trả về trễ nếu người dùng đã đổi ngày/lớp.
+    if (document.getElementById('attendanceClass')?.value !== clsName ||
+        document.getElementById('attendanceDate')?.value !== date) return;
+    const byStudent = new Map((records || []).map(r => [String(r.student_id), r.status]));
+    const statusOptions = ['Có mặt','Vắng','Phép','Không phép','Muộn'];
+    let html = `<div class="table-wrapper attendance-table-wrapper"><table class="attendance-table"><thead><tr>
+        <th>STT</th><th>Mã HS</th><th>Họ tên</th>${isAllClasses ? '<th>Lớp</th>' : ''}<th>Trạng thái</th></tr></thead><tbody>`;
+    students.forEach((student, idx) => {
+        const cls = classById.get(String(student.class_id || '')) || classByName.get(String(student.class || ''));
+        if (!cls) return;
+        const status = byStudent.get(String(student.db_uuid)) || 'Có mặt';
+        const options = statusOptions.map(option => `<option value="${option}" ${option === status ? 'selected' : ''}>${option}</option>`).join('');
+        html += `<tr class="attendance-student-row" data-attendance-status="${escapeHtml(status)}" data-class-name="${escapeHtml(cls.name)}">
+            <td>${idx + 1}</td><td>${escapeHtml(String(student.id || ''))}</td><td>${escapeHtml(String(student.fullName || ''))}</td>
+            ${isAllClasses ? `<td>${escapeHtml(cls.name)}</td>` : ''}
+            <td><select class="attendance-status" data-student="${escapeHtml(String(student.db_uuid))}"
+                data-class-id="${escapeHtml(String(cls.id))}"
+                onchange="updateAttendanceStatus('${date}','${escapeHtml(String(cls.id))}','${escapeHtml(String(student.db_uuid))}',this.value)">
+                ${options}</select></td></tr>`;
     });
-    html += `</tbody></table></div>`;
-    wrapper.innerHTML = html;
+    wrapper.innerHTML = html + '</tbody></table></div>';
     applyViewerReadOnlyUI();
     applyAttendanceFilters();
+    const saveBtn = document.querySelector('.attendance-save-btn');
+    if (saveBtn) {
+        saveBtn.disabled = isAllClasses;
+        saveBtn.title = isAllClasses ? 'Để lưu hàng loạt, chọn một lớp cụ thể. Ở chế độ tất cả, bạn vẫn có thể sửa từng học sinh.' : '';
+    }
 }
 
 
@@ -13070,7 +13166,7 @@ function applyAttendanceFilters() {
     let found = 0;
     rows.forEach(row => {
         const status = row.querySelector('.attendance-status')?.value || row.dataset.attendanceStatus || 'Có mặt';
-        const text = normalizeAttendanceSearch((row.cells[1]?.textContent || '') + ' ' + (row.cells[2]?.textContent || ''));
+        const text = normalizeAttendanceSearch((row.cells[1]?.textContent || '') + ' ' + (row.cells[2]?.textContent || '') + ' ' + (row.dataset.className || ''));
         const matchesStatus = filter === 'all' || (filter === 'present' && status === 'Có mặt') || (filter === 'absent' && ['Vắng', 'Phép', 'Không phép'].includes(status)) || (filter === 'late' && status === 'Muộn');
         const visible = matchesStatus && terms.every(term => text.includes(term));
         row.style.display = visible ? '' : 'none';
@@ -13128,11 +13224,17 @@ async function updateAttendanceStatus(date, classId, studentUuid, status) {
         showToast('Cập nhật trạng thái thành công!', 'success', 1500);
     } catch (err) {
         showToast('Lỗi cập nhật: ' + err.message, 'error');
+        // Trả ô chọn về trạng thái thực tế nếu Supabase không lưu được.
+        await loadAttendance();
     }
 }
 
 async function saveAttendance() {
     if (!requireEditPermission('lưu điểm danh')) return;
+    if (document.getElementById('attendanceClass')?.value === '__all__') {
+        showToast('Chọn một lớp cụ thể để lưu hàng loạt; ở chế độ Tất cả lớp, bạn có thể sửa trạng thái từng học sinh.', 'warning');
+        return;
+    }
 
     const clsName = document.getElementById('attendanceClass')?.value;
     const date = document.getElementById('attendanceDate')?.value;
@@ -13477,6 +13579,10 @@ function exportAttendanceExcel() {
         return;
     }
 
+    if (cls === '__all__') {
+        showToast('Hãy chọn một lớp cụ thể trước khi xuất Excel điểm danh.', 'warning');
+        return;
+    }
     if (!getAuthorizedAttendanceClass({ className: cls })) {
         showToast('Bạn không có quyền truy cập lớp này.', 'warning');
         return;
