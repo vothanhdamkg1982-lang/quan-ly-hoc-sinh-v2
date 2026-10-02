@@ -15904,83 +15904,6 @@ const PUBLIC_MEDIA_VIDEO_MAX_BYTES = 1024 * 1024 * 1024; // 1 GB
 let PUBLIC_POST_CACHE = [];
 let PUBLIC_NEWS_CATEGORY = 'Tất cả';
 let PUBLIC_MEDIA_CACHE = [];
-
-// ============================================================
-// NỘI DUNG MINH HỌA WEBSITE (KHÔNG GHI VÀO SUPABASE)
-// Đổi PUBLIC_DEMO_ENABLED = false khi đã nhập đủ nội dung chính thức.
-// Mẫu chỉ bù những mục thiếu. Không thay bài viết/ảnh/video đã công khai.
-// ============================================================
-const PUBLIC_DEMO_ENABLED = true;
-const PUBLIC_DEMO_POSTS = [
-    {
-        id:'sample-news-01', __demo:true, category:'Hoạt động nhà trường',
-        title:'Gợi ý bài viết: Niềm vui ngày đầu năm học',
-        summary:'Mẫu bố cục bài viết giới thiệu không khí ngày khai giảng, những khoảnh khắc của thầy cô và học sinh tại phân hiệu Tiểu học.',
-        content:'Đây là bài viết mẫu dùng để thử bố cục khu vực Tin tức – Sự kiện. Có thể thay bằng nội dung đã được nhà trường xác nhận về ngày khai giảng, chương trình và hình ảnh thực tế.\n\nGợi ý nội dung: lời chào năm học mới, cảm xúc ngày tựu trường, các tiết mục văn nghệ, những hoạt động tiêu biểu và lời nhắn gửi đến học sinh.\n\nQuản trị viên có thể đăng bài chính thức tại mục Nội dung website trong hệ thống quản lý.',
-        image_url:'assets/gallery/hoat-dong-05.jpg', published_at:null, created_at:null
-    },
-    {
-        id:'sample-news-02', __demo:true, category:'Hoạt động giáo dục',
-        title:'Gợi ý chuyên mục: Sinh hoạt tập thể và rèn luyện kỹ năng',
-        summary:'Không gian giới thiệu hoạt động tập thể, kỹ năng giao tiếp, tinh thần hợp tác và những trải nghiệm của học sinh.',
-        content:'Bài mẫu dành cho các hoạt động giáo dục ngoài giờ lên lớp. Khi có nội dung thực tế, hãy ghi rõ tên hoạt động, thời gian, lớp tham gia, mục đích và kết quả.\n\nƯu tiên dùng ảnh được phép công khai, không đăng thông tin cá nhân hoặc kết quả học tập riêng của học sinh.',
-        image_url:'assets/gallery/hoat-dong-02.jpg', published_at:null, created_at:null
-    },
-    {
-        id:'sample-news-03', __demo:true, category:'Đồng hành',
-        title:'Góc gia đình: Phối hợp cùng con trong học tập',
-        summary:'Những gợi ý đơn giản giúp phụ huynh đồng hành cùng học sinh tiểu học và xây dựng thói quen tự học tại nhà.',
-        content:'Gợi ý cho phụ huynh: dành thời gian hỏi con về một điều thú vị đã học; chuẩn bị góc học tập gọn gàng; động viên con đọc sách và trao đổi với giáo viên khi cần.\n\nNội dung này mang tính tham khảo, không phải thông báo hoặc yêu cầu bắt buộc của nhà trường.',
-        image_url:'assets/banners/banner-05-truong-hoc-than-thien.webp', published_at:null, created_at:null
-    },
-    {
-        id:'sample-news-04', __demo:true, category:'Góc học tập',
-        title:'Góc kỹ năng số: Sử dụng Internet an toàn',
-        summary:'Nhắc học sinh bảo vệ thông tin cá nhân, lựa chọn nguồn học liệu phù hợp và nhờ người lớn trợ giúp khi gặp nội dung lạ.',
-        content:'Không chia sẻ mật khẩu, địa chỉ hoặc hình ảnh riêng tư với người lạ. Khi gặp đường dẫn đáng ngờ, thông tin gây lo lắng hoặc lời mời không phù hợp, hãy báo ngay cho phụ huynh hoặc giáo viên.\n\nHãy cân đối thời gian sử dụng thiết bị với học tập, vui chơi và vận động. Đây là nội dung minh họa cho chuyên mục kỹ năng số.',
-        image_url:'assets/banners/banner-07-chuyen-doi-so.jpg', published_at:null, created_at:null
-    }
-];
-const PUBLIC_DEMO_DOCUMENTS = [
-    {id:'sample-doc-01',__demo:true,category:'Hướng dẫn mẫu',title:'Hướng dẫn xem tin tức và thông báo',description:'Các bước tra cứu bài viết, xem tin mới và tìm thông tin liên hệ trên website.',file_url:'public-guides/xem-tin-thong-bao.html'},
-    {id:'sample-doc-02',__demo:true,category:'Hướng dẫn mẫu',title:'Gợi ý học tập và an toàn số',description:'Một số thói quen học tập, quy tắc bảo vệ thông tin và sử dụng Internet phù hợp với lứa tuổi tiểu học.',file_url:'public-guides/hoc-tap-an-toan-so.html'},
-    {id:'sample-doc-03',__demo:true,category:'Hướng dẫn mẫu',title:'Hướng dẫn trao đổi với nhà trường',description:'Cách chuẩn bị nội dung khi cần liên hệ với giáo viên hoặc bộ phận phụ trách.',file_url:'public-guides/lien-he-nha-truong.html'}
-];
-const PUBLIC_DEMO_IMAGES = [
-    {id:'sample-img-01',__demo:true,media_type:'image',category:'Ảnh có sẵn trong dự án',title:'Hình ảnh sinh hoạt tập thể (ảnh minh họa)',description:'Ảnh có sẵn trong thư mục assets/gallery; thay tiêu đề bằng thông tin đã xác nhận.',media_url:'assets/gallery/hoat-dong-01.jpg'},
-    {id:'sample-img-02',__demo:true,media_type:'image',category:'Ảnh có sẵn trong dự án',title:'Học sinh tham gia hoạt động (ảnh minh họa)',description:'Ảnh có sẵn trong dự án, dùng để minh họa bố cục.',media_url:'assets/gallery/hoat-dong-02.jpg'},
-    {id:'sample-img-03',__demo:true,media_type:'image',category:'Ảnh có sẵn trong dự án',title:'Khoảnh khắc tập thể (ảnh minh họa)',description:'Ảnh có sẵn trong dự án, dùng để minh họa bố cục.',media_url:'assets/gallery/hoat-dong-03.jpg'},
-    {id:'sample-img-04',__demo:true,media_type:'image',category:'Ảnh có sẵn trong dự án',title:'Hình ảnh trong ngày khai giảng (ảnh minh họa)',description:'Ảnh có sẵn trong dự án, thay nội dung theo sự kiện chính thức.',media_url:'assets/gallery/hoat-dong-04.jpg'}
-];
-const PUBLIC_DEMO_ANNOUNCEMENTS = [
-    {id:'sample-ann-01',__demo:true,title:'Mẫu: Thông báo lịch hoạt động trong tuần',is_pinned:true},
-    {id:'sample-ann-02',__demo:true,title:'Mẫu: Phối hợp giữa phụ huynh và nhà trường'},
-    {id:'sample-ann-03',__demo:true,title:'Mẫu: Cập nhật tài liệu hướng dẫn học tập'}
-];
-function publicDemoStrip(target, text='Nội dung minh họa — thay bằng dữ liệu công khai trong mục Nội dung website'){
-    const container = document.getElementById(target);
-    if(!container) return;
-    const prior = container.parentElement?.querySelector('.public-demo-strip[data-for="'+target+'"]');
-    if(prior) prior.remove();
-    if(!container.querySelector('[data-demo="true"]') && !container.querySelector('.public-demo-card') && !container.querySelector('.public-demo-video-card')) return;
-    const tag=document.createElement('p');
-    tag.className='public-demo-strip';tag.dataset.for=target;
-    tag.innerHTML='<i class="fas fa-circle-info" aria-hidden="true"></i> '+publicEscape(text);
-    container.before(tag);
-}
-function renderPublicDemoVideos(){
-    const grid=document.getElementById('publicVideoGrid'), toolbar=document.getElementById('publicVideoToolbar');
-    if(!grid) return;
-    if(toolbar) toolbar.innerHTML='<span class="public-video-count"><i class="fas fa-film"></i> 3 ý tưởng video mẫu — chưa có tệp phát</span>';
-    const previews=[
-        ['Một ngày đến trường','Gợi ý video ghi lại không gian học tập, sinh hoạt của học sinh.','assets/gallery/hoat-dong-01.jpg'],
-        ['Khoảnh khắc hoạt động tập thể','Gợi ý video tổng hợp hoạt động và sự kiện đã được phép công khai.','assets/gallery/hoat-dong-02.jpg'],
-        ['Góc học tập và trải nghiệm','Gợi ý video giới thiệu những tiết học hoặc hoạt động trải nghiệm.','assets/gallery/hoat-dong-03.jpg']
-    ];
-    grid.innerHTML=previews.map(([title,description,src])=>`<article class="public-video-card public-demo-video-card" data-demo="true"><div class="public-video-cover"><img src="${src}" alt="${publicEscape(title)}" loading="lazy"><span class="public-demo-video-icon"><i class="fas fa-video-slash"></i></span><span class="public-video-source">VIDEO MẪU</span></div><div class="public-video-info"><small>Chưa đính kèm tệp video</small><h3>${publicEscape(title)}</h3><p>${publicEscape(description)}</p><span class="public-demo-await"><i class="fas fa-circle-info"></i> Đăng video thật để thay thế</span></div></article>`).join('');
-    publicDemoStrip('publicVideoGrid');
-}
-
 function publicEscape(value) {
     return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 }
@@ -16044,7 +15967,7 @@ function updatePublicTodayLabel(){
 }
 function publicPostThumb(post, compact=false) {
     const imageUrl = publicSafeImageUrl(post.image_url);
-    if (imageUrl) return `<div class="${compact?'news-mini-thumb':'news-thumb news-thumb-image'}"><img src="${imageUrl}" alt="${publicEscape(post.title || 'Tin tức')}" loading="lazy"><span>${post.__demo?'BÀI MẪU · ':''}${publicEscape(post.category || 'TIN TỨC')}</span></div>`;
+    if (imageUrl) return `<div class="${compact?'news-mini-thumb':'news-thumb news-thumb-image'}"><img src="${imageUrl}" alt="${publicEscape(post.title || 'Tin tức')}" loading="lazy"><span>${publicEscape(post.category || 'TIN TỨC')}</span></div>`;
     if (compact) return `<div class="news-mini-icon"><i class="fas fa-bullhorn"></i></div>`;
     return `<div class="news-thumb"><i class="fas fa-school-flag"></i><span>${publicEscape(post.category || 'TIN TỨC')}</span></div>`;
 }
@@ -16060,17 +15983,15 @@ function renderPublicNews(posts=PUBLIC_POST_CACHE){
     const categories=['Tất cả',...new Set(all.map(x=>String(x.category||'Tin tức').trim()).filter(Boolean))];
     if(PUBLIC_NEWS_CATEGORY!=='Tất cả'&&!categories.includes(PUBLIC_NEWS_CATEGORY)) PUBLIC_NEWS_CATEGORY='Tất cả';
     if(toolbar){
-        toolbar.innerHTML=`<div class="public-news-filter-label"><i class="fas fa-filter"></i><span>Chuyên mục</span></div><div class="public-news-filter-chips">${categories.map(cat=>`<button type="button" class="${cat===PUBLIC_NEWS_CATEGORY?'active':''}" onclick="setPublicNewsCategory('${publicEscape(cat).replace(/'/g,'&#39;')}')">${publicEscape(cat)}</button>`).join('')}</div><span class="public-news-count">${all.filter(x=>!x.__demo).length} bài chính thức${all.some(x=>x.__demo)?` · ${all.filter(x=>x.__demo).length} mẫu`:``}</span>`;
+        toolbar.innerHTML=`<div class="public-news-filter-label"><i class="fas fa-filter"></i><span>Chuyên mục</span></div><div class="public-news-filter-chips">${categories.map(cat=>`<button type="button" class="${cat===PUBLIC_NEWS_CATEGORY?'active':''}" onclick="setPublicNewsCategory('${publicEscape(cat).replace(/'/g,'&#39;')}')">${publicEscape(cat)}</button>`).join('')}</div><span class="public-news-count">${all.length} bài viết</span>`;
     }
     const filtered=PUBLIC_NEWS_CATEGORY==='Tất cả'?all:all.filter(x=>String(x.category||'Tin tức').trim()===PUBLIC_NEWS_CATEGORY);
     if(!filtered.length){
-        grid.parentElement?.querySelector('.public-demo-strip[data-for="publicNewsGrid"]')?.remove();
         grid.innerHTML='<div class="public-empty-state"><i class="fas fa-newspaper"></i><strong>Chưa có tin trong chuyên mục này</strong><span>Vui lòng chọn chuyên mục khác hoặc quay lại Tất cả.</span></div>';
         return;
     }
     const [first,...rest]=filtered;
-    grid.innerHTML=`<article class="news-card news-featured public-post-clickable ${first.__demo?'public-demo-card':''}" data-demo="${!!first.__demo}" role="button" tabindex="0" onclick="openPublicPostDetail('${first.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPublicPostDetail('${first.id}')}" aria-label="Xem bài ${publicEscape(first.title)}">${publicPostThumb(first)}<div class="news-body"><div class="news-meta-row"><span>${publicEscape(first.category||'TIN TỨC')}</span><small><i class="far fa-calendar"></i> ${first.__demo?'Nội dung mẫu':publicDate(first.published_at||first.created_at)}</small></div><h3>${publicEscape(first.title)}</h3><p>${publicEscape(publicPostExcerpt(first,190))}</p><span class="news-read-more">Đọc chi tiết <i class="fas fa-arrow-right"></i></span></div></article><div class="news-side-list">${rest.map(item=>`<article class="news-mini public-post-clickable ${item.__demo?'public-demo-card':''}" data-demo="${!!item.__demo}" role="button" tabindex="0" onclick="openPublicPostDetail('${item.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPublicPostDetail('${item.id}')}" aria-label="Xem bài ${publicEscape(item.title)}">${publicPostThumb(item,true)}<div class="news-mini-copy"><div class="news-mini-meta"><span>${publicEscape(item.category||'TIN TỨC')}</span><small>${item.__demo?'Nội dung mẫu':publicDate(item.published_at||item.created_at)}</small></div><h3>${publicEscape(item.title)}</h3><p>${publicEscape(publicPostExcerpt(item,105))}</p><b>Đọc tin <i class="fas fa-chevron-right"></i></b></div></article>`).join('')}</div>`;
-    if(all.some(x=>x.__demo)) publicDemoStrip('publicNewsGrid');
+    grid.innerHTML=`<article class="news-card news-featured public-post-clickable" role="button" tabindex="0" onclick="openPublicPostDetail('${first.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPublicPostDetail('${first.id}')}" aria-label="Xem bài ${publicEscape(first.title)}">${publicPostThumb(first)}<div class="news-body"><div class="news-meta-row"><span>${publicEscape(first.category||'TIN TỨC')}</span><small><i class="far fa-calendar"></i> ${publicDate(first.published_at||first.created_at)}</small></div><h3>${publicEscape(first.title)}</h3><p>${publicEscape(publicPostExcerpt(first,190))}</p><span class="news-read-more">Đọc chi tiết <i class="fas fa-arrow-right"></i></span></div></article><div class="news-side-list">${rest.map(item=>`<article class="news-mini public-post-clickable" role="button" tabindex="0" onclick="openPublicPostDetail('${item.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPublicPostDetail('${item.id}')}" aria-label="Xem bài ${publicEscape(item.title)}">${publicPostThumb(item,true)}<div class="news-mini-copy"><div class="news-mini-meta"><span>${publicEscape(item.category||'TIN TỨC')}</span><small>${publicDate(item.published_at||item.created_at)}</small></div><h3>${publicEscape(item.title)}</h3><p>${publicEscape(publicPostExcerpt(item,105))}</p><b>Đọc tin <i class="fas fa-chevron-right"></i></b></div></article>`).join('')}</div>`;
 }
 function setPublicNewsCategory(category='Tất cả'){
     PUBLIC_NEWS_CATEGORY=String(category||'Tất cả');
@@ -16110,18 +16031,17 @@ function renderPublicDocuments(items=PUBLIC_DOCUMENT_CACHE){
         const hay=[x.title,x.description,x.category].map(v=>String(v||'').toLocaleLowerCase('vi')).join(' ');
         return okCat&&(!q||hay.includes(q));
     });
-    if(toolbar) toolbar.innerHTML=`<div class="public-document-search"><i class="fas fa-magnifying-glass"></i><input type="search" value="${publicEscape(PUBLIC_DOCUMENT_SEARCH)}" placeholder="Tìm tài liệu..." oninput="setPublicDocumentSearch(this.value)" aria-label="Tìm tài liệu"></div><div class="public-document-filter-chips">${categories.map(cat=>`<button type="button" class="${cat===PUBLIC_DOCUMENT_CATEGORY?'active':''}" onclick="setPublicDocumentCategory('${publicEscape(cat).replace(/'/g,'&#39;')}')">${publicEscape(cat)}</button>`).join('')}</div><span class="public-document-count">${filtered.length}/${all.length} mục${all.some(x=>x.__demo)?' (có mẫu)':''}</span>`;
-    if(!filtered.length){grid.parentElement?.querySelector('.public-demo-strip[data-for="publicDocumentGrid"]')?.remove();grid.innerHTML='<div class="public-empty-state"><i class="fas fa-folder-open"></i><strong>Không tìm thấy tài liệu phù hợp</strong><span>Hãy đổi từ khóa hoặc chọn chuyên mục khác.</span></div>';return;}
+    if(toolbar) toolbar.innerHTML=`<div class="public-document-search"><i class="fas fa-magnifying-glass"></i><input type="search" value="${publicEscape(PUBLIC_DOCUMENT_SEARCH)}" placeholder="Tìm tài liệu..." oninput="setPublicDocumentSearch(this.value)" aria-label="Tìm tài liệu"></div><div class="public-document-filter-chips">${categories.map(cat=>`<button type="button" class="${cat===PUBLIC_DOCUMENT_CATEGORY?'active':''}" onclick="setPublicDocumentCategory('${publicEscape(cat).replace(/'/g,'&#39;')}')">${publicEscape(cat)}</button>`).join('')}</div><span class="public-document-count">${filtered.length}/${all.length} tài liệu</span>`;
+    if(!filtered.length){grid.innerHTML='<div class="public-empty-state"><i class="fas fa-folder-open"></i><strong>Không tìm thấy tài liệu phù hợp</strong><span>Hãy đổi từ khóa hoặc chọn chuyên mục khác.</span></div>';return;}
     grid.innerHTML=filtered.map(item=>{
-        const url=(item.__demo && /^public-guides\/[a-z-]+\.html$/.test(item.file_url||'')) ? publicEscape(item.file_url) : publicSafeExternalUrl(item.file_url||'');
+        const url=publicSafeExternalUrl(item.file_url||'');
         const cat=publicEscape(item.category||'Tài liệu');
         const title=publicEscape(item.title||'Tài liệu');
         const rawDescription=String(item.description||'Tài liệu công khai của nhà trường.').trim();
         const description=publicEscape(rawDescription);
         const hasMore=rawDescription.length>220;
-        return `<article class="public-document-card ${item.__demo?'public-demo-card':''}" data-demo="${!!item.__demo}"><div class="public-document-icon"><i class="fas ${publicDocumentIcon(item)}"></i></div><div class="public-document-copy"><div class="public-document-meta"><span>${cat}</span><small>${item.__demo?'NỘI DUNG MẪU':publicDocumentType(item)+' · '+publicDate(item.created_at)}</small></div><h3>${title}</h3><p class="public-document-description${hasMore?' is-collapsible':''}">${description}</p>${hasMore?`<button type="button" class="public-document-more" onclick="togglePublicDocumentPreview(this)"><span>Xem thêm</span><i class="fas fa-chevron-down"></i></button>`:''}</div><div class="public-document-actions">${url?`<a class="public-doc-link" href="${url}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i> ${item.__demo?'Xem hướng dẫn mẫu':'Mở tài liệu'}</a>${item.__demo?'':`<a class="public-doc-download" href="${url}" download target="_blank" rel="noopener" aria-label="Tải ${title}"><i class="fas fa-download"></i></a>`}`:'<span class="public-doc-unavailable"><i class="fas fa-clock"></i> Đang cập nhật tệp</span>'}</div></article>`;
+        return `<article class="public-document-card"><div class="public-document-icon"><i class="fas ${publicDocumentIcon(item)}"></i></div><div class="public-document-copy"><div class="public-document-meta"><span>${cat}</span><small>${publicDocumentType(item)} · ${publicDate(item.created_at)}</small></div><h3>${title}</h3><p class="public-document-description${hasMore?' is-collapsible':''}">${description}</p>${hasMore?`<button type="button" class="public-document-more" onclick="togglePublicDocumentPreview(this)"><span>Xem thêm</span><i class="fas fa-chevron-down"></i></button>`:''}</div><div class="public-document-actions">${url?`<a class="public-doc-link" href="${url}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i> Mở tài liệu</a><a class="public-doc-download" href="${url}" download target="_blank" rel="noopener" aria-label="Tải ${title}"><i class="fas fa-download"></i></a>`:'<span class="public-doc-unavailable"><i class="fas fa-clock"></i> Đang cập nhật tệp</span>'}</div></article>`;
     }).join('');
-    if(all.some(x=>x.__demo)) publicDemoStrip('publicDocumentGrid');
 }
 
 function togglePublicDocumentPreview(button){
@@ -16139,7 +16059,6 @@ function setPublicDocumentCategory(category='Tất cả'){PUBLIC_DOCUMENT_CATEGO
 function setPublicDocumentSearch(value=''){PUBLIC_DOCUMENT_SEARCH=String(value||'');renderPublicDocuments();}
 
 async function loadPublicWebsiteContent() {
-    document.querySelectorAll('#publicSite .public-demo-strip').forEach(x=>x.remove());
     const newsGrid = document.getElementById('publicNewsGrid');
     const docGrid = document.getElementById('publicDocumentGrid');
     const galleryGrid = document.getElementById('publicGalleryGrid');
@@ -16176,9 +16095,11 @@ async function loadPublicWebsiteContent() {
         if (newsGrid) newsGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-circle-exclamation"></i><strong>Chưa tải được tin tức</strong><span>Quyền đọc công khai chưa được kích hoạt đầy đủ.</span></div>';
     } else {
         const posts = postsRes.data || [];
-        PUBLIC_POST_CACHE = PUBLIC_DEMO_ENABLED && posts.length<4
-            ? [...posts,...PUBLIC_DEMO_POSTS.slice(0,4-posts.length)] : posts;
-        if (newsGrid) renderPublicNews(PUBLIC_POST_CACHE);
+        PUBLIC_POST_CACHE = posts;
+        if (newsGrid) {
+            if (!posts.length) newsGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-newspaper"></i><strong>Chưa có tin tức công khai</strong><span>Nội dung sẽ được cập nhật bởi nhà trường.</span></div>';
+            else renderPublicNews(posts);
+        }
     }
 
     if (docsRes.error) {
@@ -16187,9 +16108,11 @@ async function loadPublicWebsiteContent() {
         if (docGrid) docGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-circle-exclamation"></i><strong>Chưa tải được tài liệu</strong><span>Quyền đọc công khai chưa được kích hoạt đầy đủ.</span></div>';
     } else {
         const docs = docsRes.data || [];
-        PUBLIC_DOCUMENT_CACHE = PUBLIC_DEMO_ENABLED && docs.length<3
-            ? [...docs,...PUBLIC_DEMO_DOCUMENTS.slice(0,3-docs.length)] : docs;
-        if (docGrid) renderPublicDocuments(PUBLIC_DOCUMENT_CACHE);
+        PUBLIC_DOCUMENT_CACHE = docs;
+        if (docGrid) {
+            if (!docs.length) docGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-folder-open"></i><strong>Chưa có tài liệu công khai</strong><span>Tài liệu sẽ được cập nhật bởi nhà trường.</span></div>';
+            else renderPublicDocuments(docs);
+        }
     }
 
     if (mediaRes.error) {
@@ -16200,14 +16123,11 @@ async function loadPublicWebsiteContent() {
         if (videoGrid) videoGrid.innerHTML = '<div class="public-empty-state"><i class="fas fa-circle-play"></i><strong>Chưa tải được thư viện video</strong><span>Quyền đọc công khai chưa được kích hoạt đầy đủ.</span></div>';
     } else {
         const media = mediaRes.data || [];
+        PUBLIC_MEDIA_CACHE = media;
         const publicImages = media.filter(x => x.media_type === 'image');
-        const liveVideos = media.filter(x => x.media_type === 'video' || x.media_type === 'youtube');
-        PUBLIC_MEDIA_CACHE = PUBLIC_DEMO_ENABLED && !publicImages.length
-            ? [...media,...PUBLIC_DEMO_IMAGES] : media;
-        renderPublicGallery(publicImages.length ? publicImages : (PUBLIC_DEMO_ENABLED ? PUBLIC_DEMO_IMAGES : []));
+        renderPublicGallery(publicImages);
         setupPublicHero(publicImages);
-        if(PUBLIC_DEMO_ENABLED && !liveVideos.length) renderPublicDemoVideos();
-        else renderPublicVideos(liveVideos);
+        renderPublicVideos(media.filter(x => x.media_type === 'video' || x.media_type === 'youtube'));
     }
 
     await loadPublicUtilityContent();
@@ -16285,7 +16205,7 @@ function renderPublicGallery(items=[]) {
                 `).join('')}
             </div>
             <span class="public-gallery-count">
-                <i class="far fa-images"></i> ${PUBLIC_GALLERY_VISIBLE.length} ảnh${PUBLIC_GALLERY_VISIBLE.some(x=>x.__demo)?' mẫu':''}
+                <i class="far fa-images"></i> ${PUBLIC_GALLERY_VISIBLE.length} ảnh
             </span>`;
     }
 
@@ -16309,7 +16229,7 @@ function renderPublicGallery(items=[]) {
         const title=publicEscape(item.title||'Hoạt động nhà trường');
         const cat=publicEscape(item.category||'Hoạt động');
         return `
-            <figure class="public-gallery-card public-gallery-preview-card ${item.__demo?'public-demo-card':''}" data-demo="${!!item.__demo}"
+            <figure class="public-gallery-card public-gallery-preview-card"
                     role="button"
                     tabindex="0"
                     onclick="openPublicMediaModal('${item.id}')"
@@ -16322,7 +16242,6 @@ function renderPublicGallery(items=[]) {
                 </figcaption>
             </figure>`;
     }).join('');
-    if(PUBLIC_GALLERY_VISIBLE.some(x=>x.__demo)) publicDemoStrip('publicGalleryGrid','Ảnh có sẵn trong dự án — tiêu đề và album chỉ để minh họa');
 
     if(PUBLIC_GALLERY_VISIBLE.length>4){
         grid.insertAdjacentHTML('afterend',`
@@ -16529,7 +16448,7 @@ async function openPublicPostDetail(id) {
     const paragraphs = content ? content.split(/\n{2,}|\r?\n/).filter(Boolean).map(t=>`<p>${publicEscape(t)}</p>`).join('') : '<p>Nội dung bài viết đang được cập nhật.</p>';
     body.innerHTML = `<article class="public-post-detail">
         <button class="public-post-back" onclick="closePublicPostDetail()"><i class="fas fa-arrow-left"></i> Quay lại trang chủ</button>
-        <div class="public-post-meta"><span>${publicEscape(post.category || 'TIN TỨC')}</span><small><i class="far fa-calendar"></i> ${post.__demo?'Bài viết mẫu — chưa phải thông tin chính thức':publicDate(post.published_at || post.created_at)}</small></div>
+        <div class="public-post-meta"><span>${publicEscape(post.category || 'TIN TỨC')}</span><small><i class="far fa-calendar"></i> ${publicDate(post.published_at || post.created_at)}</small></div>
         <h1>${publicEscape(post.title)}</h1>
         ${post.summary ? `<p class="public-post-lead">${publicEscape(post.summary)}</p>` : ''}
         ${imageUrl ? `<figure class="public-post-hero"><img src="${imageUrl}" alt="${publicEscape(post.title)}"></figure>` : ''}
@@ -16765,14 +16684,14 @@ function renderPublicAnnouncements(items=[]) {
     if(!box) return;
     const list=(items||[]).slice(0,3);
     if(!list.length){
-        if(!PUBLIC_DEMO_ENABLED){box.innerHTML='<span class="u-utility-empty">Chưa có thông báo mới.</span>';return;}
-        list.push(...PUBLIC_DEMO_ANNOUNCEMENTS);
+        box.innerHTML='<span class="u-utility-empty">Chưa có thông báo mới.</span>';
+        return;
     }
     box.innerHTML=list.map(x=>{
         const href=publicSafeExternalUrl(x.link_url);
         const tag=x.is_pinned?'<i class="fas fa-thumbtack" title="Đã ghim"></i>':'';
-        const body=`<span class="u-announcement-title">${tag}${publicEscape(x.title||'Thông báo')}</span><small>${x.__demo?'Nội dung mẫu':publicDate(x.published_at||x.created_at)}</small>`;
-        return href?`<a class="u-announcement-item ${x.__demo?'public-demo-notice':''}" href="${href}" target="_blank" rel="noopener noreferrer">${body}</a>`:`<div class="u-announcement-item ${x.__demo?'public-demo-notice':''}">${body}</div>`;
+        const body=`<span class="u-announcement-title">${tag}${publicEscape(x.title||'Thông báo')}</span><small>${publicDate(x.published_at||x.created_at)}</small>`;
+        return href?`<a class="u-announcement-item" href="${href}" target="_blank" rel="noopener noreferrer">${body}</a>`:`<div class="u-announcement-item">${body}</div>`;
     }).join('');
 }
 let PUBLIC_QUICK_LINKS_TIMER=null;
@@ -16864,8 +16783,7 @@ async function loadPublicUtilityContent(){
 
     if(annRes.error){
         console.warn('[166.3.3] Chưa tải được thông báo công khai:',annRes.error);
-        const box=document.getElementById('publicAnnouncementList');
-        if(box) box.innerHTML='<span class="u-utility-empty">Chưa tải được thông báo. Vui lòng kiểm tra kết nối dữ liệu.</span>';
+        renderPublicAnnouncements([]);
     }else{
         renderPublicAnnouncements(annRes.data||[]);
     }
