@@ -32,7 +32,7 @@ create index if not exists app3_game_results_student_date_idx on public.app3_gam
 create index if not exists app3_game_results_session_idx on public.app3_game_results(session_id,student_id);
 alter table public.app3_game_results enable row level security;
 revoke all on public.app3_game_results from anon;
-grant select,insert on public.app3_game_results to authenticated;
+grant select,insert to authenticated on public.app3_game_results;
 grant update(linked_comment_id) on public.app3_game_results to authenticated;
 
 create or replace function public.app3_game_is_admin() returns boolean
@@ -70,10 +70,8 @@ using ((created_by=auth.uid() or public.app3_game_is_admin())
 with check ((created_by=auth.uid() or public.app3_game_is_admin())
  and public.app3_game_can_record(class_id,subject_id,student_id)
  and (linked_comment_id is null or exists(
-  select 1 from public.app3_learning_comments c where c.id=app3_game_results.linked_comment_id
-   and c.student_id=app3_game_results.student_id
-   and c.class_id=app3_game_results.class_id
-   and c.subject_id::text is not distinct from app3_game_results.subject_id)));
+  select 1 from public.app3_learning_comments c where c.id=linked_comment_id
+   and c.student_id=student_id and c.class_id=class_id and c.subject_id::text=subject_id)));
 
 -- Tạo nhận xét và nối minh chứng trong MỘT giao dịch: nếu bước nào lỗi đều rollback.
 create or replace function public.app3_create_game_comment(

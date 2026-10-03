@@ -1,0 +1,31 @@
+NÂNG CẤP v172.0 – GẮN HỌC SINH ĐANG ĐƯỢC CHỌN TỪ VÒNG QUAY / GỌI TÊN HÌNH ẢNH
+
+1. Mục tiêu
+- Giảm thao tác phải mở danh sách dài để chọn học sinh thủ công trước khi lưu kết quả trò chơi.
+- Khi chọn được học sinh ở Vòng quay hoặc Gọi tên bằng hình ảnh, ứng dụng sẽ ghi nhớ học sinh đó.
+- Khi chuyển sang Ai là triệu phú hoặc Trắc nghiệm hình ảnh, giáo viên chỉ cần bấm “Dùng học sinh vừa chọn”.
+
+2. Các thay đổi chính
+- Thêm trạng thái dùng chung: “Học sinh đang được gọi”.
+- Vòng quay: khi có người trúng, hệ thống tự ghi nhớ học sinh vừa chọn.
+- Gọi tên bằng hình ảnh: khi có kết quả, hệ thống tự ghi nhớ học sinh vừa chọn.
+- Gọi tên + Trả lời: khi chọn được học sinh, hệ thống cũng cập nhật trạng thái dùng chung.
+- Ai là triệu phú:
+  + Có khối thông báo học sinh đang được gọi.
+  + Có nút “Dùng học sinh vừa chọn”.
+  + Phần chọn lớp/học sinh thủ công được thu gọn trong mục “Chọn thủ công (khi cần)”.
+- Trắc nghiệm hình ảnh:
+  + Có khối thông báo học sinh đang được gọi.
+  + Tự ưu tiên gắn học sinh vừa được chọn nếu phù hợp khối/lớp/môn.
+  + Vẫn giữ chọn tay làm phương án dự phòng.
+
+3. Cách dùng nhanh
+- Bước 1: Chọn học sinh bằng Vòng quay hoặc Gọi tên bằng hình ảnh.
+- Bước 2: Mở Ai là triệu phú hoặc Trắc nghiệm hình ảnh.
+- Bước 3: Bấm “Dùng học sinh vừa chọn” (hoặc hệ thống tự gắn sẵn ở Trắc nghiệm hình ảnh nếu hợp lệ).
+- Bước 4: Cho học sinh chơi.
+- Bước 5: Bấm lưu minh chứng như bình thường.
+
+4. Ghi chú
+- Nếu học sinh được chọn không cùng khối hoặc không thuộc phạm vi lớp/môn đang mở, hệ thống sẽ báo và không gắn sai.
+- Cơ chế chọn tay vẫn còn để phòng trường hợp giáo viên cần đổi học sinh.
