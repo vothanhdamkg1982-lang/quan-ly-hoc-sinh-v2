@@ -16897,10 +16897,10 @@ function publicPostExcerpt(post, max=145){
 function renderPublicNews(posts=PUBLIC_POST_CACHE){
     const grid=document.getElementById('publicNewsGrid');
     const toolbar=document.getElementById('publicNewsToolbar');
-    if(!grid)return;
+    if(!grid) return;
     const all=Array.isArray(posts)?posts:[];
     const categories=['Tất cả',...new Set(all.map(x=>String(x.category||'Tin tức').trim()).filter(Boolean))];
-    if(PUBLIC_NEWS_CATEGORY!=='Tất cả'&&!categories.includes(PUBLIC_NEWS_CATEGORY))PUBLIC_NEWS_CATEGORY='Tất cả';
+    if(PUBLIC_NEWS_CATEGORY!=='Tất cả'&&!categories.includes(PUBLIC_NEWS_CATEGORY)) PUBLIC_NEWS_CATEGORY='Tất cả';
     if(toolbar){
         toolbar.innerHTML=`<div class="public-news-filter-label"><i class="fas fa-filter"></i><span>Chuyên mục</span></div><div class="public-news-filter-chips">${categories.map(cat=>`<button type="button" class="${cat===PUBLIC_NEWS_CATEGORY?'active':''}" onclick="setPublicNewsCategory('${publicEscape(cat).replace(/'/g,'&#39;')}')">${publicEscape(cat)}</button>`).join('')}</div><span class="public-news-count">${all.filter(x=>!x.__demo).length} bài chính thức${all.some(x=>x.__demo)?` · ${all.filter(x=>x.__demo).length} mẫu`:``}</span>`;
     }
@@ -16910,25 +16910,9 @@ function renderPublicNews(posts=PUBLIC_POST_CACHE){
         grid.innerHTML='<div class="public-empty-state"><i class="fas fa-newspaper"></i><strong>Chưa có tin trong chuyên mục này</strong><span>Vui lòng chọn chuyên mục khác hoặc quay lại Tất cả.</span></div>';
         return;
     }
-    // Chỉ dữ liệu chính thức được ưu tiên chiếm ô Nổi bật. Mẫu chỉ làm nổi bật
-    // khi chưa có bất kỳ bài chính thức nào (giữ cấu trúc mẫu trang chủ).
-    const hasOfficial=filtered.some(x=>!x.__demo);
-    const featured=filtered.filter(x=>!x.__demo && ['featured','both'].includes(publicPostPlacement(x)));
-    if(!featured.length && !hasOfficial){
-        const sample=filtered.find(x=>x.__demo);
-        if(sample)featured.push(sample);
-    }
-    const featuredIds=new Set(featured.map(x=>x.id));
-    const news=filtered.filter(x=>{
-        if(x.__demo && featuredIds.has(x.id))return false;
-        return x.__demo || ['news','both'].includes(publicPostPlacement(x));
-    }).slice(0,12);
-    const featureCards=featured.map(post=>`<article class="news-card news-featured public-post-clickable ${post.__demo?'public-demo-card':''}" data-demo="${!!post.__demo}" role="button" tabindex="0" onclick="openPublicPostDetail('${post.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPublicPostDetail('${post.id}')}" aria-label="Xem bài ${publicEscape(post.title)}">${publicPostThumb(post)}<div class="news-body"><div class="news-meta-row"><span>${publicEscape(post.category||'TIN TỨC')}</span><small><i class="far fa-calendar"></i> ${post.__demo?'Nội dung mẫu':publicDate(post.published_at||post.created_at)}</small></div><h3>${publicEscape(post.title)}</h3><p>${publicEscape(publicPostExcerpt(post,190))}</p><span class="news-read-more">Đọc chi tiết <i class="fas fa-arrow-right"></i></span></div></article>`).join('');
-    const newsCards=news.map(item=>`<article class="news-mini public-post-clickable ${item.__demo?'public-demo-card':''}" data-demo="${!!item.__demo}" role="button" tabindex="0" onclick="openPublicPostDetail('${item.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPublicPostDetail('${item.id}')}" aria-label="Xem bài ${publicEscape(item.title)}">${publicPostThumb(item,true)}<div class="news-mini-copy"><div class="news-mini-meta"><span>${publicEscape(item.category||'TIN TỨC')}</span><small>${item.__demo?'Nội dung mẫu':publicDate(item.published_at||item.created_at)}</small></div><h3>${publicEscape(item.title)}</h3><p>${publicEscape(publicPostExcerpt(item,105))}</p><b>Đọc tin <i class="fas fa-chevron-right"></i></b></div></article>`).join('');
-    grid.classList.toggle('public-news-grid--only-list',!featured.length);
-    grid.classList.toggle('public-news-grid--only-featured',!news.length);
-    grid.innerHTML=`${featureCards?`<div class="public-featured-stack">${featureCards}</div>`:''}${newsCards?`<div class="news-side-list">${newsCards}</div>`:''}`;
-    if(all.some(x=>x.__demo))publicDemoStrip('publicNewsGrid');
+    const [first,...rest]=filtered;
+    grid.innerHTML=`<article class="news-card news-featured public-post-clickable ${first.__demo?'public-demo-card':''}" data-demo="${!!first.__demo}" role="button" tabindex="0" onclick="openPublicPostDetail('${first.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPublicPostDetail('${first.id}')}" aria-label="Xem bài ${publicEscape(first.title)}">${publicPostThumb(first)}<div class="news-body"><div class="news-meta-row"><span>${publicEscape(first.category||'TIN TỨC')}</span><small><i class="far fa-calendar"></i> ${first.__demo?'Nội dung mẫu':publicDate(first.published_at||first.created_at)}</small></div><h3>${publicEscape(first.title)}</h3><p>${publicEscape(publicPostExcerpt(first,190))}</p><span class="news-read-more">Đọc chi tiết <i class="fas fa-arrow-right"></i></span></div></article><div class="news-side-list">${rest.map(item=>`<article class="news-mini public-post-clickable ${item.__demo?'public-demo-card':''}" data-demo="${!!item.__demo}" role="button" tabindex="0" onclick="openPublicPostDetail('${item.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPublicPostDetail('${item.id}')}" aria-label="Xem bài ${publicEscape(item.title)}">${publicPostThumb(item,true)}<div class="news-mini-copy"><div class="news-mini-meta"><span>${publicEscape(item.category||'TIN TỨC')}</span><small>${item.__demo?'Nội dung mẫu':publicDate(item.published_at||item.created_at)}</small></div><h3>${publicEscape(item.title)}</h3><p>${publicEscape(publicPostExcerpt(item,105))}</p><b>Đọc tin <i class="fas fa-chevron-right"></i></b></div></article>`).join('')}</div>`;
+    if(all.some(x=>x.__demo)) publicDemoStrip('publicNewsGrid');
 }
 function setPublicNewsCategory(category='Tất cả'){
     PUBLIC_NEWS_CATEGORY=String(category||'Tất cả');
@@ -17007,13 +16991,11 @@ async function loadPublicWebsiteContent() {
     // is_published=true. Cách này tách hoàn toàn quyền đọc công khai khỏi RLS
     // của bảng quản trị và không làm lộ các bản nháp/chưa công khai.
     // Mỗi nhóm dữ liệu được tải độc lập: một bảng lỗi không làm trắng các mục khác.
-    // Có thể chọn Nổi bật cho bài cũ hơn 12 tin gần nhất;
-    // nạp đến 100 bài để không mất vị trí Nổi bật khi có nhiều bài đăng.
     const postsPromise = supabase
         .from('app3_public_posts_live')
         .select('*')
         .order('published_at', { ascending:false })
-        .limit(100);
+        .limit(12);
 
     const docsPromise = supabase
         .from('app3_public_documents_live')
@@ -17405,64 +17387,6 @@ function closePublicPostDetail() {
     modal.setAttribute('aria-hidden','true');
     document.body.classList.remove('public-modal-open');
 }
-// BƯỚC 174: Vị trí hiển thị thật của bài viết trên website (khác với Nhóm/chuyên mục).
-// Không ghi dữ liệu trong trình duyệt: vị trí được lưu trong app3_public_posts.placement.
-const PUBLIC_POST_PLACEMENTS = Object.freeze({
-    featured: 'Thông tin nổi bật · thẻ lớn',
-    news: 'Tin tức – Sự kiện · danh sách tin',
-    both: 'Cả hai vị trí'
-});
-let PUBLIC_POST_EDITOR_MODE='form';
-function setPublicPostEditorMode(mode='form') {
-    PUBLIC_POST_EDITOR_MODE=mode==='list'?'list':'form';
-    const form=document.getElementById('publicPostFormSection');
-    const list=document.getElementById('publicPostListSection');
-    if(form)form.hidden=PUBLIC_POST_EDITOR_MODE!=='form';
-    if(list)list.hidden=PUBLIC_POST_EDITOR_MODE!=='list';
-    document.querySelectorAll('[data-public-post-mode]').forEach(button=>{
-        const active=button.dataset.publicPostMode===PUBLIC_POST_EDITOR_MODE;
-        button.classList.toggle('btn-primary',active);
-        button.classList.toggle('btn-secondary',!active);
-        button.setAttribute('aria-pressed',String(active));
-    });
-}
-window.setPublicPostEditorMode=setPublicPostEditorMode;
-function publicPostPlacement(post) {
-    const value=String(post?.placement||'news').trim().toLowerCase();
-    return Object.hasOwn(PUBLIC_POST_PLACEMENTS,value)?value:'news';
-}
-function publicPostPlacementLabel(post) {
-    return PUBLIC_POST_PLACEMENTS[publicPostPlacement(post)];
-}
-function filterPublicPostAdminList() {
-    const query=String(document.getElementById('publicPostListSearch')?.value||'').trim().toLocaleLowerCase('vi');
-    const placement=String(document.getElementById('publicPostListPlacement')?.value||'');
-    const status=String(document.getElementById('publicPostListStatus')?.value||'');
-    let shown=0;
-    document.querySelectorAll('#publicPostsDataList tbody tr[data-post-row]').forEach(row=>{
-        const matchName=!query||String(row.dataset.search||'').toLocaleLowerCase('vi').includes(query);
-        const current=String(row.dataset.placement||'news');
-        const matchPlacement=!placement||current===placement||(placement==='featured'&&current==='both')||(placement==='news'&&current==='both');
-        const matchStatus=!status||String(row.dataset.status||'')===status;
-        const visible=matchName&&matchPlacement&&matchStatus;
-        row.hidden=!visible;
-        if(visible)shown++;
-    });
-    const counter=document.getElementById('publicPostListCount');
-    if(counter)counter.textContent=`Đang hiển thị ${shown} bài viết`;
-    const none=document.getElementById('publicPostListFilteredEmpty');
-    if(none)none.hidden=shown>0;
-}
-async function viewPublicManagedPost(id) {
-    if(!id)return;
-    showPublicSite();
-    await loadPublicWebsiteContent();
-    document.getElementById('tin-tuc')?.scrollIntoView({behavior:'smooth',block:'start'});
-    await openPublicPostDetail(id);
-}
-window.filterPublicPostAdminList=filterPublicPostAdminList;
-window.viewPublicManagedPost=viewPublicManagedPost;
-
 async function showPublicContentEditor(type='post') {
     if (!isAdmin()) return;
     setPublicManagerActiveTab(type);
@@ -17471,59 +17395,27 @@ async function showPublicContentEditor(type='post') {
     panel.innerHTML='<p class="text-muted"><i class="fas fa-spinner fa-spin"></i> Đang tải...</p>';
     const {data,error}=await supabase.from(table).select('*').order('created_at',{ascending:false});
     if(error){panel.innerHTML=`<p class="text-danger">Lỗi: ${publicEscape(error.message)}</p>`;return;}
-    const list=Array.isArray(data)?data:[];
-    const placementOptions=Object.entries(PUBLIC_POST_PLACEMENTS).map(([key,label])=>`<option value="${key}">${publicEscape(label)}</option>`).join('');
-    const placementEditorOptions=Object.entries(PUBLIC_POST_PLACEMENTS).map(([key,label])=>`<option value="${key}" ${key==='news'?'selected':''}>${publicEscape(label)}</option>`).join('');
-    const records=isPost?`<section class="public-data-list" aria-label="Danh sách dữ liệu bài viết">
-        <div class="public-data-list-heading"><div><h3><i class="fas fa-table-list"></i> DATA LIST · Danh sách bài viết</h3>
-          <p>Xem vị trí hiển thị, nhóm, tình trạng công khai và mở bài trên website. Bài cũ mặc định ở Danh sách tin.</p></div>
-          <span class="public-list-total">${list.length} bài viết</span></div>
-        <div class="public-data-list-controls">
-           <label>Tìm bài viết<input id="publicPostListSearch" type="search" placeholder="Tìm theo tiêu đề hoặc nhóm" oninput="filterPublicPostAdminList()"></label>
-           <label>Vị trí<select id="publicPostListPlacement" onchange="filterPublicPostAdminList()"><option value="">Tất cả vị trí</option>${placementOptions}</select></label>
-           <label>Trạng thái<select id="publicPostListStatus" onchange="filterPublicPostAdminList()"><option value="">Tất cả trạng thái</option><option value="published">Đã công khai</option><option value="draft">Chưa công khai</option></select></label>
-           <span id="publicPostListCount" class="public-list-total" role="status">Đang hiển thị ${list.length} bài viết</span>
-        </div>
-        <div id="publicPostsDataList" class="table-wrapper"><table><thead><tr><th>Tiêu đề</th><th>Nhóm</th><th>Vị trí trên website</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
-        ${list.map(x=>`<tr data-post-row data-search="${escapeHtmlAttr(`${x.title||''} ${x.category||''}`)}" data-placement="${publicPostPlacement(x)}" data-status="${x.is_published?'published':'draft'}">
-           <td><strong>${publicEscape(x.title)}</strong></td><td>${publicEscape(x.category||'Tin tức')}</td>
-           <td><span class="public-placement-badge public-placement-${publicPostPlacement(x)}">${publicEscape(publicPostPlacementLabel(x))}</span></td>
-           <td><span class="public-status-tag ${x.is_published?'published':'draft'}">${x.is_published?'Đã công khai':'Chưa công khai'}</span></td>
-           <td class="public-data-actions"><button class="btn btn-primary btn-sm" data-payload="${escapeHtmlAttr(encodeURIComponent(JSON.stringify(x)))}" onclick="editPublicContent(decodeURIComponent(this.dataset.payload),'post')" title="Sửa bài viết"><i class="fas fa-pen"></i> Sửa</button>
-           ${x.is_published?`<button class="btn btn-secondary btn-sm" onclick="viewPublicManagedPost('${x.id}')" title="Xem bài đã công khai"><i class="fas fa-eye"></i> Xem</button>`:''}
-           <button class="btn btn-danger btn-sm" onclick="deletePublicContent('${x.id}','post')" title="Xóa bài viết"><i class="fas fa-trash"></i> Xóa</button></td></tr>`).join('')||'<tr><td colspan="5" class="text-muted">Chưa có bài viết.</td></tr>'}
-        </tbody></table></div>
-        <p id="publicPostListFilteredEmpty" class="text-muted" hidden>Không có bài viết phù hợp với bộ lọc.</p>
-      </section>`:`<div class="table-wrapper mt-2"><table><thead><tr><th>Tiêu đề</th><th>Nhóm</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>${list.map(x=>`<tr><td><strong>${publicEscape(x.title)}</strong></td><td>${publicEscape(x.category||'')}</td><td>${x.is_published?'Công khai':'Đang ẩn'}</td><td><button class="btn btn-primary btn-sm" onclick='editPublicContent(${JSON.stringify(JSON.stringify(x))},"document")'><i class="fas fa-pen"></i></button> <button class="btn btn-danger btn-sm" onclick="deletePublicContent('${x.id}','document')"><i class="fas fa-trash"></i></button></td></tr>`).join('')||'<tr><td colspan="4" class="text-muted">Chưa có dữ liệu.</td></tr>'}</tbody></table></div>`;
-    panel.innerHTML=`${isPost?`<div class="public-post-editor-switch" role="group" aria-label="Chuyển giữa biên tập và danh sách bài viết"><button type="button" class="btn btn-primary" data-public-post-mode="form" onclick="setPublicPostEditorMode('form')"><i class="fas fa-pen-to-square"></i> Thêm / Sửa bài viết</button><button type="button" class="btn btn-secondary" data-public-post-mode="list" onclick="setPublicPostEditorMode('list')"><i class="fas fa-table-list"></i> DATA LIST · Vị trí bài viết (${list.length})</button></div><div id="publicPostFormSection">`:''}<div class="public-admin-form">
+    panel.innerHTML=`<div class="public-admin-form">
       <input type="hidden" id="publicEditId"><input type="hidden" id="publicEditType" value="${type}">
-      <div class="form-grid"><div class="form-group"><label>Tiêu đề</label><input id="publicEditTitle" placeholder="Nhập tiêu đề"></div><div class="form-group"><label>Nhóm / Chuyên mục</label><input id="publicEditCategory" list="publicPostCategorySuggestions" placeholder="Ví dụ: Hoạt động nhà trường"><datalist id="publicPostCategorySuggestions"><option value="Hoạt động nhà trường"><option value="Hoạt động giáo dục"><option value="Tin tức"><option value="Góc học tập"><option value="Thông báo"></datalist></div></div>
-      ${isPost?`<div class="form-group public-placement-selector">
-         <label for="publicEditPlacement">Vị trí hiển thị trên website</label>
-         <select id="publicEditPlacement" onchange="publicPostUpdatePlacementHelp()">${placementEditorOptions}</select>
-         <small id="publicPostPlacementHelp" class="public-placement-help">Xuất hiện ở danh sách tin nhỏ trong mục Tin tức – Sự kiện.</small>
-         <div class="public-location-legend"><span><i class="fas fa-star"></i> Nổi bật: thẻ lớn</span><span><i class="fas fa-list"></i> Tin tức: thẻ nhỏ</span><span><i class="fas fa-layer-group"></i> Cả hai: xuất hiện ở hai khu vực</span></div>
-       </div>`:''}
+      <div class="form-grid"><div class="form-group"><label>Tiêu đề</label><input id="publicEditTitle" placeholder="Nhập tiêu đề"></div><div class="form-group"><label>Nhóm</label><input id="publicEditCategory" placeholder="Ví dụ: THÔNG BÁO"></div></div>
       <div class="form-group"><label>${isPost?'Tóm tắt ngắn':'Mô tả'}</label><textarea id="publicEditDescription" rows="3" placeholder="${isPost?'Nội dung ngắn hiển thị trên thẻ tin ở trang chủ.':''}"></textarea></div>
       ${isPost?`<div class="form-group"><label>Nội dung đầy đủ bài viết</label><textarea id="publicEditContent" rows="8" placeholder="Nhập nội dung chi tiết. Có thể xuống dòng để chia đoạn."></textarea></div>
-      <div class="form-group public-image-upload-group"><label>Ảnh đại diện</label>
+      <div class="form-group public-image-upload-group">
+        <label>Ảnh đại diện</label>
         <input id="publicEditImageUrl" type="hidden" data-original-url="" data-remove="false">
-        <div class="public-image-upload-box"><div id="publicImagePreview" class="public-image-preview empty"><i class="fas fa-image"></i><span>Chưa chọn ảnh</span></div>
-          <div class="public-image-upload-actions"><label class="btn btn-secondary btn-sm public-image-file-label"><i class="fas fa-upload"></i> Chọn ảnh từ máy<input id="publicEditImageFile" type="file" accept="image/jpeg,image/png,image/webp" onchange="handlePublicPostImageSelection(this)"></label>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="clearPublicPostImage()"><i class="fas fa-xmark"></i> Bỏ ảnh</button><small>JPG, PNG hoặc WebP · tối đa 5 MB</small></div></div></div>`:`<div class="form-group"><label>Liên kết tài liệu (URL)</label><input id="publicEditUrl" type="url" placeholder="https://..."></div>`}
+        <div class="public-image-upload-box">
+          <div id="publicImagePreview" class="public-image-preview empty"><i class="fas fa-image"></i><span>Chưa chọn ảnh</span></div>
+          <div class="public-image-upload-actions">
+            <label class="btn btn-secondary btn-sm public-image-file-label"><i class="fas fa-upload"></i> Chọn ảnh từ máy<input id="publicEditImageFile" type="file" accept="image/jpeg,image/png,image/webp" onchange="handlePublicPostImageSelection(this)"></label>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="clearPublicPostImage()"><i class="fas fa-xmark"></i> Bỏ ảnh</button>
+            <small>JPG, PNG hoặc WebP · tối đa 5 MB</small>
+          </div>
+        </div>
+      </div>`:`<div class="form-group"><label>Liên kết tài liệu (URL)</label><input id="publicEditUrl" type="url" placeholder="https://..."></div>`}
       <label class="switch-inline"><input type="checkbox" id="publicEditPublished" checked> <span>Công khai trên website</span></label>
       <div class="flex gap-2 mt-2"><button class="btn btn-primary btn-sm" onclick="savePublicContent()"><i class="fas fa-save"></i> Lưu</button><button class="btn btn-secondary btn-sm" onclick="resetPublicContentForm()">Làm mới</button></div>
-    </div>${isPost?`</div><div id="publicPostListSection" hidden>${records}</div>`:records}`;
-    publicPostUpdatePlacementHelp();
-    if(isPost)setPublicPostEditorMode(PUBLIC_POST_EDITOR_MODE);
+    </div><div class="table-wrapper mt-2"><table><thead><tr><th>Tiêu đề</th><th>Nhóm</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td><strong>${publicEscape(x.title)}</strong></td><td>${publicEscape(x.category||'')}</td><td>${x.is_published?'Công khai':'Đang ẩn'}</td><td><button class="btn btn-primary btn-sm" onclick='editPublicContent(${JSON.stringify(JSON.stringify(x))},"${type}")'><i class="fas fa-pen"></i></button> <button class="btn btn-danger btn-sm" onclick="deletePublicContent('${x.id}','${type}')"><i class="fas fa-trash"></i></button></td></tr>`).join('')||'<tr><td colspan="4" class="text-muted">Chưa có dữ liệu.</td></tr>'}</tbody></table></div>`;
 }
-function publicPostUpdatePlacementHelp(){
-    const select=document.getElementById('publicEditPlacement'),help=document.getElementById('publicPostPlacementHelp');
-    if(!select||!help)return;
-    const hints={featured:'Bài xuất hiện dưới dạng thẻ lớn ở khu vực Thông tin nổi bật.',news:'Bài xuất hiện ở danh sách thẻ nhỏ trong mục Tin tức – Sự kiện.',both:'Bài xuất hiện ở cả thẻ nổi bật và danh sách tin. Bài nổi bật mới nhất sẽ lên vị trí đầu.'};
-    help.textContent=hints[select.value]||hints.news;
-}
-window.publicPostUpdatePlacementHelp=publicPostUpdatePlacementHelp;
 function setPublicPostImagePreview(url='') {
     const box=document.getElementById('publicImagePreview');
     if(!box) return;
@@ -17596,9 +17488,6 @@ function editPublicContent(json,type){
     document.getElementById('publicEditDescription').value=x.summary||x.description||'';
     document.getElementById('publicEditPublished').checked=x.is_published!==false;
     if(type==='post'){
-        const placementSelect=document.getElementById('publicEditPlacement');
-        if(placementSelect) placementSelect.value=publicPostPlacement(x);
-        publicPostUpdatePlacementHelp();
         document.getElementById('publicEditContent').value=x.content||'';
         const imageHidden=document.getElementById('publicEditImageUrl');
         imageHidden.value=x.image_url||'';
@@ -17607,8 +17496,6 @@ function editPublicContent(json,type){
         const file=document.getElementById('publicEditImageFile'); if(file) file.value='';
         setPublicPostImagePreview(x.image_url||'');
     }else document.getElementById('publicEditUrl').value=x.file_url||'';
-    if(type==='post')setPublicPostEditorMode('form');
-    document.getElementById('publicContentAdminPanel')?.scrollIntoView?.({behavior:'smooth',block:'start'});
 }
 function resetPublicContentForm(){const type=document.getElementById('publicEditType')?.value||'post';showPublicContentEditor(type);}
 async function savePublicContent(){
@@ -17620,7 +17507,6 @@ async function savePublicContent(){
     let oldImageUrl='';
     let uploadedImageUrl='';
     if(type==='post'){
-        payload.placement=publicPostPlacement({placement:document.getElementById('publicEditPlacement')?.value||'news'});
         payload.summary=description;
         payload.content=document.getElementById('publicEditContent').value.trim()||null;
         const imageHidden=document.getElementById('publicEditImageUrl');
@@ -17646,10 +17532,7 @@ async function savePublicContent(){
     const {error}=await q;
     if(error){
         if(uploadedImageUrl) await removePublicPostStoredImage(uploadedImageUrl);
-        const message=type==='post' && /placement|column/i.test(error.message||'')
-            ? 'Chưa có cột vị trí hiển thị. Hãy chạy tệp BUOC-174-VI-TRI-BAI-VIET.sql trong Supabase trước khi lưu. '
-            : 'Lỗi lưu nội dung: ';
-        showToast(message+error.message,'error',6500);return;
+        showToast('Lỗi lưu nội dung: '+error.message,'error');return;
     }
     if(type==='post' && oldImageUrl){
         const imageHidden=document.getElementById('publicEditImageUrl');
