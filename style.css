@@ -11884,3 +11884,20 @@ tbody tr:hover td{
 #publicSite .public-faq-list details a{color:#176bce;font-weight:800}
 @media(max-width:900px){#publicSite .public-learning-grid{gap:12px}#publicSite .public-learning-card{padding:21px 19px}#publicSite .public-faq-wrap{gap:24px}}
 @media(max-width:700px){#publicSite .public-learning-grid{grid-template-columns:1fr}#publicSite .public-learning-card{min-height:0}#publicSite .public-learning-banner{align-items:flex-start;flex-wrap:wrap}#publicSite .public-learning-banner a{width:100%}#publicSite .public-faq-wrap{grid-template-columns:1fr}#publicSite .public-faq-intro h2{font-size:26px}#publicSite .public-demo-strip{font-size:11px}}
+
+/* BƯỚC 170 – Minh chứng trò chơi và nhận xét; không thay đổi các bảng cũ. */
+.game-link-panel{background:var(--card-bg,#fff);border:1px solid var(--border-color,#d9e1ec);border-radius:16px;padding:20px;margin:20px 0;box-shadow:0 5px 18px rgba(15,23,42,.04)}
+.game-link-heading,.game-link-filters,.game-link-save-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between}
+.game-link-heading h3{margin:0 0 5px;color:var(--text-color,#172554);font-size:19px}
+.game-link-heading p{margin:0;color:var(--text-muted,#64748b);line-height:1.5;font-size:13px}
+.game-link-filters{margin:15px 0;color:var(--text-muted,#64748b);font-size:13px;justify-content:flex-start}
+.game-link-filters select,.game-link-pickers select{width:100%;min-height:40px;padding:8px;border:1px solid var(--border-color,#cbd5e1);border-radius:8px;background:var(--card-bg,#fff);color:var(--text-color,#172554)}
+.game-link-panel table{min-width:720px}.game-link-panel td{vertical-align:top;white-space:normal;overflow-wrap:anywhere;font-size:13px}.game-link-panel td button{margin:2px}
+.game-link-evidence{max-height:255px;overflow-y:auto;border:1px solid var(--border-color,#e5e7eb);padding:8px 12px;margin:12px 0;border-radius:9px;text-align:left}
+.game-link-evidence p{line-height:1.55;border-bottom:1px solid var(--border-color,#e5e7eb);padding:8px 0;margin:0;font-size:13px}
+.game-link-evidence p:last-child{border-bottom:0}
+.game-link-save-bar{padding:11px 12px;margin:11px 0;border:1px solid var(--border-color,#d9e1ec);border-radius:12px;justify-content:flex-start;background:var(--card-bg,#fff);font-size:12px}
+.game-link-save-bar span{color:var(--text-muted,#64748b)}
+.game-link-pickers{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:10px 0;font-size:13px;font-weight:700}
+.game-link-note{padding:12px;border:1px solid var(--border-color,#e5e7eb);border-radius:10px}
+@media(max-width:600px){.game-link-panel{padding:12px}.game-link-pickers{grid-template-columns:1fr}}

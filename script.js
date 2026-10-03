@@ -2616,6 +2616,212 @@ document.getElementById('modalClose').addEventListener('click', () => {
 function showLoading() { document.getElementById('loadingOverlay').classList.remove('hidden'); }
 function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
 
+
+// ============================================================
+// BƯỚC 170: Kết nối ngân hàng câu hỏi -> kết quả -> nhận xét học tập.
+// Chỉ lưu khi giáo viên chủ động bấm Lưu minh chứng, không ghi vào bảng điểm.
+// ============================================================
+const GAME_LINK = {rows: [], loading:false, error:'', request:0, saving:false};
+function gameLinkUUID(){
+    if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+    // Trình duyệt HTTPS có crypto.randomUUID; HTTP localhost dùng getRandomValues.
+    const a=new Uint8Array(16); crypto.getRandomValues(a);a[6]=(a[6]&15)|64;a[8]=(a[8]&63)|128;
+    const h=[...a].map(x=>x.toString(16).padStart(2,'0')).join('');
+    return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
+function gameLinkSubject(name){return (APP_STATE.subjectCatalog||[]).find(x=>x.name===name&&x.active!==false);}
+function gameLinkWarnUnsaved(state){return !(state.results?.length&&!state.sessionSaved) || confirm('Kết quả phiên này chưa được lưu. Tiếp tục sẽ bỏ các kết quả chưa lưu.');}
+function gameLinkQuestionSnapshot(q){return {
+    questionId:String(q?.id||''), questionKey:imageQuizQuestionKey(q,0),
+    question:String(q?.q||''), correctIndex:Number(q?.c),
+    answerOptions:Array.isArray(q?.a)?q.a.slice(0,4).map(String):[],
+    curriculumCode:String(q?.curriculumCode||q?.curriculum_code||''),
+    week:q?.week==null||q.week===''?null:Number(q.week),
+    ppct:q?.ppct==null||q.ppct===''?null:Number(q.ppct),
+    lessonKey:String(q?.lessonKey||q?.lesson_key||''),
+    lessonName:String(q?.lessonName||q?.lesson_name||millionaireQuestionLessonLabel(q)||'')
+};}
+function gameLinkUpdateImageQuizStudentPickers(keepClass=false){
+    const classEl=document.getElementById('imageQuizRecordClass'),studentEl=document.getElementById('imageQuizRecordStudent');
+    if(!classEl||!studentEl)return;
+    // Không cho đổi đối tượng giữa lúc lượt trắc nghiệm chưa kết thúc.
+    if(IMAGE_QUIZ_STATE.sessionActive && IMAGE_QUIZ_STATE.phase!=='idle'){
+       classEl.disabled=true;studentEl.disabled=true;
+    }else{classEl.disabled=false;}
+    const grade=IMAGE_QUIZ_STATE.grade,oldClass=keepClass?classEl.value:IMAGE_QUIZ_STATE.recordClassId;
+    const classes=filterGameClassesByAccess(getImageCallerClasses(),grade).filter(x=>grade&&String(getImageCallerClassGrade(x))===String(grade));
+    classEl.innerHTML='<option value="">-- Chỉ chơi, không lưu --</option>'+classes.map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join('');
+    classEl.value=classes.some(x=>x.id===oldClass)?oldClass:'';
+    const oldStudent=keepClass?'':IMAGE_QUIZ_STATE.recordStudentId;
+    const students=classEl.value?getImageCallerStudents(classEl.value):[];
+    studentEl.innerHTML='<option value="">-- Chọn học sinh --</option>'+students.map(x=>`<option value="${escapeHtml(x.db_uuid)}">${escapeHtml(x.fullName)}</option>`).join('');
+    studentEl.value=students.some(x=>x.db_uuid===oldStudent)?oldStudent:'';
+    studentEl.disabled=!classEl.value||(IMAGE_QUIZ_STATE.sessionActive && IMAGE_QUIZ_STATE.phase!=='idle');
+}
+window.gameLinkUpdateImageQuizStudentPickers=gameLinkUpdateImageQuizStudentPickers;
+function gameLinkReviewPanel(){
+    if(!canEditData())return '<p class="game-link-note">Tài khoản chỉ xem không được truy cập minh chứng cá nhân của học sinh.</p>';
+    return `<section class="game-link-panel" aria-label="Minh chứng từ trò chơi">
+      <div class="game-link-heading"><div><h3><i class="fas fa-link"></i> Minh chứng hoạt động tương tác</h3>
+        <p>Kết quả đã được giáo viên lưu từ ngân hàng câu hỏi. Xem minh chứng trước khi tạo nhận xét; không tự động chấm điểm hay nhận xét.</p></div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="gameLinkLoadResults()"><i class="fas fa-sync"></i> Làm mới</button></div>
+      <div class="game-link-filters"><label>Lọc học sinh <select id="gameLinkStudentFilter" onchange="gameLinkRenderRows()">
+      <option value="">Tất cả học sinh</option>${(APP_STATE.students||[]).map(x=>`<option value="${escapeHtml(x.db_uuid)}">${escapeHtml(x.fullName||'')}</option>`).join('')}</select></label>
+      <span id="gameLinkStatus" role="status">Bấm Làm mới để tải các kết quả đã lưu.</span></div>
+      <div class="table-wrapper"><table class="learning-comments-table"><thead><tr><th>Học sinh</th><th>Lớp / Môn</th><th>Bài / Trò chơi</th><th>Đúng / Đã làm</th><th>Thời điểm</th><th>Liên kết</th><th>Thao tác</th></tr></thead>
+      <tbody id="gameLinkRows"><tr><td colspan="7">Đang chờ tải minh chứng...</td></tr></tbody></table></div></section>`;
+}
+function gameLinkGroupRows(){
+    const groups=new Map();
+    for(const r of GAME_LINK.rows){
+        const k=`${r.session_id}|${r.student_id}`;
+        if(!groups.has(k))groups.set(k,{sessionId:r.session_id,studentId:r.student_id,rows:[],first:r});
+        groups.get(k).rows.push(r);
+    }
+    return [...groups.values()].sort((a,b)=>new Date(b.first.recorded_at)-new Date(a.first.recorded_at));
+}
+function gameLinkRenderRows(){
+    const target=document.getElementById('gameLinkRows'); if(!target)return;
+    const filter=document.getElementById('gameLinkStudentFilter')?.value||'';
+    const groups=gameLinkGroupRows().filter(g=>!filter||g.studentId===filter);
+    const status=document.getElementById('gameLinkStatus');
+    if(status)status.textContent=GAME_LINK.loading?'Đang tải...':GAME_LINK.error?GAME_LINK.error:`${groups.length} lượt học (hiển thị tối đa 1.000 kết quả gần nhất)`;
+    target.innerHTML=groups.length?groups.map(g=>{
+        const r=g.first,student=APP_STATE.students.find(x=>x.db_uuid===g.studentId);
+        const done=g.rows.filter(x=>x.status==='correct').length;
+        const linked=g.rows.some(x=>x.linked_comment_id);
+        const activity=r.activity_type==='call-answer'?'Gọi tên + Trả lời':'Trắc nghiệm hình ảnh';
+        return `<tr><td>${escapeHtml(student?.fullName||'Không xác định')}</td><td>${escapeHtml(getContextClassName(r.class_id))}<br>${escapeHtml(r.subject_name||'')}</td>
+          <td>${escapeHtml(r.lesson_name||'Bài học')}<br><small>${activity}</small></td>
+          <td>${done} / ${g.rows.length}</td><td>${new Date(r.recorded_at).toLocaleString('vi-VN')}</td>
+          <td>${linked?'Đã tạo nhận xét':'Chưa nhận xét'}</td>
+          <td><button class="btn btn-info btn-sm" onclick="gameLinkView('${g.sessionId}','${g.studentId}')">Xem</button>
+            ${!linked&&canEditData()?`<button class="btn btn-primary btn-sm" onclick="gameLinkComposeComment('${g.sessionId}','${g.studentId}')">Tạo nhận xét</button>`:''}</td></tr>`;
+    }).join(''):`<tr><td colspan="7">${GAME_LINK.error?escapeHtml(GAME_LINK.error):'Chưa có kết quả đã lưu phù hợp.'}</td></tr>`;
+}
+async function gameLinkLoadResults(){
+    if(!canEditData())return;
+    const request=++GAME_LINK.request;GAME_LINK.loading=true;GAME_LINK.error='';gameLinkRenderRows();
+    try{
+        const {data,error}=await supabase.from('app3_game_results').select('*').order('recorded_at',{ascending:false}).limit(1000);
+        if(error)throw error;
+        if(request!==GAME_LINK.request)return;
+        GAME_LINK.rows=data||[];
+    }catch(e){if(request===GAME_LINK.request){GAME_LINK.error='Không tải được minh chứng. Kiểm tra đã chạy tệp SQL bước 170 và phân quyền. '+(e?.message||'');GAME_LINK.rows=[];}}
+    finally{if(request===GAME_LINK.request){GAME_LINK.loading=false;gameLinkRenderRows();}}
+}
+function gameLinkFindGroup(sessionId,studentId){return gameLinkGroupRows().find(g=>g.sessionId===sessionId&&g.studentId===studentId);}
+function gameLinkEvidenceHtml(g){
+    return `<div class="game-link-evidence">${g.rows.map((r,i)=>`<p><b>${i+1}. ${escapeHtml(r.question_text||'')}</b><br>
+    ${r.status==='correct'?'✓ Đúng':r.status==='timeout'?'⏱ Hết giờ':'✕ Chưa đúng'}<br>
+    Đã chọn: ${r.selected_index==null?'—':`${'ABCD'[r.selected_index]||'—'}. ${escapeHtml((r.answer_options||[])[r.selected_index]||'')}`}<br>
+    Đáp án đúng: ${'ABCD'[r.correct_index]||'—'}. ${escapeHtml((r.answer_options||[])[r.correct_index]||'')}
+    ${r.week!=null?' · Tuần '+r.week:''}${r.ppct!=null?' · PPCT '+r.ppct:''}</p>`).join('')}</div>`;
+}
+function gameLinkView(sessionId,studentId){
+    const g=gameLinkFindGroup(sessionId,studentId);if(!g)return;
+    const student=APP_STATE.students.find(x=>x.db_uuid===studentId);
+    showModal('Minh chứng: '+(student?.fullName||'Học sinh'),gameLinkEvidenceHtml(g),'Đóng','Đóng');
+}
+async function gameLinkComposeComment(sessionId,studentId){
+    if(!requireEditPermission('tạo nhận xét từ minh chứng'))return;
+    const g=gameLinkFindGroup(sessionId,studentId);if(!g||g.rows.some(r=>r.linked_comment_id))return;
+    const r=g.first,student=APP_STATE.students.find(x=>x.db_uuid===studentId);
+    if(!student||!isClassSubjectStudentContextAccessible(r.class_id,r.subject_id,studentId)){
+       showToast('Không có quyền nhận xét học sinh này trong lớp và môn đã ghi.','warning');return;
+    }
+    const right=g.rows.filter(x=>x.status==='correct').length;
+    const wrong=g.rows.filter(x=>x.status==='wrong').length;
+    const timeout=g.rows.filter(x=>x.status==='timeout').length;
+    const suggested=`Trong hoạt động ${r.activity_type==='call-answer'?'Gọi tên + Trả lời':'Trắc nghiệm hình ảnh'} – ${r.lesson_name||'bài đã học'}, em trả lời đúng ${right}/${g.rows.length} câu${wrong?', chưa đúng '+wrong+' câu':''}${timeout?', hết giờ '+timeout+' câu':''}. Giáo viên sẽ tiếp tục theo dõi và hỗ trợ phù hợp.`;
+    const confirmed=showModal('Duyệt nhận xét: '+(student.fullName||''),
+        `<p>Đây là gợi ý dựa trên kết quả một phiên; giáo viên phải kiểm tra và sửa trước khi lưu.</p>
+        ${gameLinkEvidenceHtml(g)}<div class="form-group"><label>Diễn biến học tập</label>
+        <select id="glCommentType"><option value="Nhận xét khác">Nhận xét khác</option><option value="Tiến bộ">Tiến bộ</option><option value="Cần cố gắng">Cần cố gắng</option><option value="Học tập sa sút">Học tập sa sút</option></select></div>
+        <div class="form-group"><label>Nội dung nhận xét</label><textarea id="glCommentContent" rows="5" maxlength="3000">${escapeHtml(suggested)}</textarea></div>`,
+        'Xác nhận và lưu nhận xét','Hủy');
+    // Lấy các giá trị trước khi showModal đóng và xóa các nút (cùng cách xử lý của form hiện tại).
+    const typeInput=document.getElementById('glCommentType');
+    const contentInput=document.getElementById('glCommentContent');
+    // Modal gốc chỉ trả về trạng thái; giữ nội dung qua sự kiện input/change.
+    let selectedType=typeInput?.value||'Nhận xét khác',editedContent=contentInput?.value||suggested;
+    typeInput?.addEventListener('change',e=>{selectedType=e.target.value;});
+    contentInput?.addEventListener('input',e=>{editedContent=e.target.value;});
+    if(!await confirmed)return;
+    if(!editedContent.trim()){showToast('Nội dung nhận xét không được để trống.','warning');return;}
+    try{
+      const {data,error}=await supabase.rpc('app3_create_game_comment',{
+        p_session_id:sessionId,p_student_id:studentId,p_comment_type:selectedType,
+        p_content:editedContent.trim(),p_teacher_name:APP_STATE.currentUserDisplayName||APP_STATE.settings?.teacherName||null
+      });
+      if(error)throw error;
+      const {data:row,error:readError}=await supabase.from('app3_learning_comments').select('*').eq('id',data).single();
+      if(!readError&&row&&!APP_STATE.learningComments.some(x=>x.id===row.id))APP_STATE.learningComments.unshift({
+        id:row.id,studentId:row.student_id,classId:row.class_id,subjectId:row.subject_id,
+        commentDatetime:row.comment_datetime,subject:row.subject,commentType:row.comment_type,
+        content:row.content,teacherName:row.teacher_name,createdAt:row.created_at,updatedAt:row.updated_at
+      });
+      showToast('Đã tạo nhận xét và liên kết minh chứng.','success');
+      if(APP_STATE.currentPage==='learning-comments')renderPage('learning-comments');
+    }catch(e){showToast('Không lưu được nhận xét: '+(e?.message||e),'error');}
+}
+function gameLinkSaveRows(activityType){
+    const state=activityType==='call-answer'?CALL_ANSWER_STATE:IMAGE_QUIZ_STATE;
+    const subject=gameLinkSubject(state.subject);
+    const classId=activityType==='call-answer'?state.classId:state.recordClassId;
+    const studentId=activityType==='call-answer'?null:state.recordStudentId;
+    if(!subject||!classId)throw new Error('Chưa xác định được lớp hoặc môn học.');
+    if(!state.results?.length)throw new Error('Chưa có kết quả để lưu.');
+    if(!state.sessionId)state.sessionId=gameLinkUUID();
+    return state.results.map(x=>{
+      const student=x.studentId||studentId;
+      if(!student||!isClassSubjectStudentContextAccessible(classId,subject.id,student))
+        throw new Error('Thiếu học sinh hoặc không có quyền ghi kết quả của học sinh trong lớp/môn này.');
+      return {
+        session_id:state.sessionId,activity_type:activityType,student_id:student,class_id:classId,
+        subject_id:String(subject.id),subject_name:String(subject.name),grade:String(state.grade||''),
+        lesson_name:String(x.lessonName||millionaireLessonSelectionLabel(state.questions,state.topic)||'').slice(0,500),
+        question_id:x.questionId||null,question_key:String(x.questionKey||'').slice(0,1000),
+        question_text:String(x.question||'').slice(0,4000),
+        answer_options:x.answerOptions||[],curriculum_code:x.curriculumCode||null,
+        week:Number.isInteger(Number(x.week))&&x.week!=null?Number(x.week):null,
+        ppct:Number.isInteger(Number(x.ppct))&&x.ppct!=null?Number(x.ppct):null,
+        lesson_key:x.lessonKey||null,
+        selected_index:x.selectedIndex==null?null:Number(x.selectedIndex),
+        correct_index:Number(x.correctIndex),status:x.status
+      };
+    });
+}
+async function gameLinkSave(activityType){
+    const state=activityType==='call-answer'?CALL_ANSWER_STATE:IMAGE_QUIZ_STATE;
+    if(GAME_LINK.saving||state.sessionSaved)return;
+    if(!requireEditPermission('lưu kết quả trò chơi'))return;
+    let rows;try{rows=gameLinkSaveRows(activityType);}catch(e){showToast(e.message,'warning');return;}
+    if(!confirm(`Lưu ${rows.length} kết quả vào minh chứng học tập? Chưa tạo nhận xét hoặc ghi điểm.`))return;
+    GAME_LINK.saving=true;
+    const btn=document.getElementById(activityType==='call-answer'?'caSaveEvidence':'iqSaveEvidence');
+    if(btn){btn.disabled=true;btn.textContent='Đang lưu...';}
+    try{
+       const {error}=await supabase.from('app3_game_results').upsert(rows,{onConflict:'session_id,student_id,question_key',ignoreDuplicates:true});
+       if(error)throw error;
+       state.sessionSaved=true;
+       showToast('Đã lưu minh chứng. Mở Nhận xét học tập để duyệt và tạo nhận xét.','success',3500);
+       if(btn){btn.textContent='✓ Đã lưu minh chứng';btn.disabled=true;}
+    }catch(e){showToast('Không lưu được: '+(e?.message||e)+'. Kiểm tra SQL bước 170.','error',5500);
+       if(btn){btn.disabled=false;btn.textContent='Lưu minh chứng';}}
+    finally{GAME_LINK.saving=false;}
+}
+window.gameLinkLoadResults=gameLinkLoadResults;
+window.gameLinkRenderRows=gameLinkRenderRows;
+window.gameLinkView=gameLinkView;
+window.gameLinkComposeComment=gameLinkComposeComment;
+window.gameLinkSave=gameLinkSave;
+window.addEventListener('beforeunload',event=>{
+    // Cảnh báo khi tải lại trang lúc kết quả chưa được lưu; không ghi dữ liệu HS vào localStorage.
+    const pending=[CALL_ANSWER_STATE,IMAGE_QUIZ_STATE].some(st=>st.results?.length&&!st.sessionSaved);
+    if(pending){event.preventDefault();event.returnValue='';}
+});
+
 function renderLearningComments() {
     const comments = APP_STATE.learningComments || [];
     const studentMap = new Map((APP_STATE.students || []).map(student => [student.db_uuid, student]));
@@ -2651,6 +2857,7 @@ function renderLearningComments() {
                 </div>
             </div>
 
+            ${gameLinkReviewPanel()}
             <div class="learning-comments-table-card">
                 <div class="learning-comments-table-heading">
                     <span class="learning-comments-table-icon"><i class="fas fa-list-check"></i></span>
@@ -8568,7 +8775,7 @@ const IMAGE_QUIZ_STATE = {
     timerWasRunning: false,
     // BƯỚC 156.1: bộ câu giáo viên chọn chỉ tồn tại trong phiên chơi hiện tại.
     selectedQuestionKeys: new Set(),
-    selectionConfirmed: false
+    selectionConfirmed: false, recordClassId:'', recordStudentId:'', sessionId:null,sessionSaved:false
 };
 
 function imageQuizUniqueValues(items, field) {
@@ -8819,7 +9026,7 @@ function imageQuizResetQuestionView() {
 
 function imageQuizResetStats(total = 0) {
     IMAGE_QUIZ_STATE.stats = { total, answered: 0, correct: 0, wrong: 0, timeout: 0 };
-    IMAGE_QUIZ_STATE.results = [];
+    IMAGE_QUIZ_STATE.results = [];IMAGE_QUIZ_STATE.sessionId=null;IMAGE_QUIZ_STATE.sessionSaved=false;
 }
 
 function imageQuizStatsHtml() {
@@ -8888,6 +9095,9 @@ function imageQuizShowResult() {
               <th style="width:52px;padding:10px 8px;white-space:normal;">STT</th><th style="width:38%;padding:10px 8px;white-space:normal;">Câu hỏi</th><th style="width:23%;padding:10px 8px;white-space:normal;">Đáp án đã chọn</th><th style="width:23%;padding:10px 8px;white-space:normal;">Đáp án đúng</th><th style="width:16%;padding:10px 8px;white-space:normal;">Kết quả</th>
             </tr></thead><tbody>${detailRows}</tbody>
           </table></div>` : ''}
+        <div class="game-link-save-bar"><button id="iqSaveEvidence" type="button" class="btn btn-primary" onclick="gameLinkSave('image-quiz')" ${IMAGE_QUIZ_STATE.sessionSaved?'disabled':''}>
+            <i class="fas fa-save"></i> ${IMAGE_QUIZ_STATE.sessionSaved?'✓ Đã lưu minh chứng':'Lưu minh chứng cho học sinh đã chọn'}</button>
+            <span>Chỉ lưu khi trước lượt chơi đã chọn lớp và học sinh.</span></div>
         <div style="display:flex;justify-content:center;">
             <button id="imageQuizRetryBtn" type="button" class="btn btn-primary" style="min-width:160px;min-height:44px;justify-content:center;font-weight:800;"><i class="fas fa-redo"></i> Làm lại</button>
         </div>`;
@@ -9267,7 +9477,8 @@ function imageQuizHandleTimeout() {
     IMAGE_QUIZ_STATE.stats.timeout = Number(IMAGE_QUIZ_STATE.stats.timeout || 0) + 1;
     const timeoutAnswers = Array.isArray(question.a) ? question.a : [];
     const timeoutLetters = ['A','B','C','D'];
-    IMAGE_QUIZ_STATE.results.push({ question: String(question.q || ''), selectedAnswer: 'Hết thời gian', correctAnswer: `${timeoutLetters[correctIndex]}. ${String(timeoutAnswers[correctIndex] ?? '')}`, status: 'timeout' });
+    IMAGE_QUIZ_STATE.results.push({ ...gameLinkQuestionSnapshot(question), studentId:IMAGE_QUIZ_STATE.recordStudentId, selectedIndex:null, selectedAnswer: 'Hết thời gian', correctAnswer: `${timeoutLetters[correctIndex]}. ${String(timeoutAnswers[correctIndex] ?? '')}`, status: 'timeout' });
+    IMAGE_QUIZ_STATE.sessionSaved=false;
     imageQuizUpdateStatsView();
 
     const buttons = Array.from(stage.querySelectorAll('.image-quiz-answers button'));
@@ -9348,11 +9559,12 @@ function imageQuizHandleAnswer(selectedIndex, button) {
     const resultAnswers = Array.isArray(question.a) ? question.a : [];
     const resultLetters = ['A','B','C','D'];
     IMAGE_QUIZ_STATE.results.push({
-        question: String(question.q || ''),
+        ...gameLinkQuestionSnapshot(question), studentId:IMAGE_QUIZ_STATE.recordStudentId,selectedIndex,
         selectedAnswer: `${resultLetters[selectedIndex]}. ${String(resultAnswers[selectedIndex] ?? '')}`,
         correctAnswer: `${resultLetters[correctIndex]}. ${String(resultAnswers[correctIndex] ?? '')}`,
         status: isCorrect ? 'correct' : 'wrong'
     });
+    IMAGE_QUIZ_STATE.sessionSaved=false;
     const isLastAnswered = Number(IMAGE_QUIZ_STATE.stats.answered || 0) >= Number(IMAGE_QUIZ_STATE.stats.total || 0);
     imageQuizUpdateStatsView();
 
@@ -9488,6 +9700,7 @@ function imageQuizNext() {
 }
 
 function imageQuizStart() {
+    if(!gameLinkWarnUnsaved(IMAGE_QUIZ_STATE))return;
     IMAGE_QUIZ_STATE.sessionActive = true;
     IMAGE_QUIZ_STATE.phase = 'question';
     IMAGE_QUIZ_STATE.selectedIndex = null;
@@ -9503,7 +9716,11 @@ function imageQuizStart() {
     imageQuizMusicStart();
     const pool = imageQuizGetSelectedQuestions();
     if (!pool.length) { imageQuizUpdateInfo(); return; }
-
+    // Chốt đối tượng ở đầu lượt; chơi không chọn học sinh vẫn được, nhưng không lưu minh chứng cá nhân.
+    IMAGE_QUIZ_STATE.recordClassId=document.getElementById('imageQuizRecordClass')?.value||'';
+    IMAGE_QUIZ_STATE.recordStudentId=document.getElementById('imageQuizRecordStudent')?.value||'';
+    if(document.getElementById('imageQuizRecordClass'))document.getElementById('imageQuizRecordClass').disabled=true;
+    if(document.getElementById('imageQuizRecordStudent'))document.getElementById('imageQuizRecordStudent').disabled=true;
     // BƯỚC 153.6: bắt đầu một lượt mới và ghi nhận câu đầu tiên đã xuất hiện.
     IMAGE_QUIZ_STATE.usedQuestionIds.clear();
     imageQuizResetStats(pool.length);
@@ -9559,18 +9776,35 @@ function imageQuizRestoreSession() {
 }
 
 function imageQuizEndGame() {
+    if(!gameLinkWarnUnsaved(IMAGE_QUIZ_STATE))return;
     imageQuizTimerStop(); IMAGE_QUIZ_TIMER.questionToken += 1; IMAGE_QUIZ_TIMER.remaining=IMAGE_QUIZ_TIMER.duration;
     imageQuizMCStop(); imageQuizMusicStop();
     IMAGE_QUIZ_STATE.sessionActive=false; IMAGE_QUIZ_STATE.phase='idle'; IMAGE_QUIZ_STATE.currentQuestion=null;
     IMAGE_QUIZ_STATE.selectedIndex=null; IMAGE_QUIZ_STATE.timedOut=false; IMAGE_QUIZ_STATE.timerWasRunning=false;
     IMAGE_QUIZ_STATE.usedQuestionIds.clear(); IMAGE_QUIZ_STATE.selectedQuestionKeys.clear(); IMAGE_QUIZ_STATE.selectionConfirmed=false; imageQuizResetStats(0);
     imageQuizResetQuestionView();
+    if(document.getElementById('imageQuizRecordClass'))document.getElementById('imageQuizRecordClass').disabled=false;
+    if(document.getElementById('imageQuizRecordStudent'))document.getElementById('imageQuizRecordStudent').disabled=false;
     if (IMAGE_QUIZ_STATE.topic) imageQuizRenderQuestionPicker();
     showToast('Đã kết thúc trò chơi Trắc nghiệm hình ảnh.', 'success', 1800);
 }
 window.imageQuizEndGame=imageQuizEndGame;
 
+function gameLinkDiscardImageQuizSession(){
+    imageQuizTimerStop();IMAGE_QUIZ_TIMER.questionToken+=1;
+    imageQuizMCStop();imageQuizMusicStop();
+    IMAGE_QUIZ_STATE.sessionActive=false;IMAGE_QUIZ_STATE.phase='idle';
+    IMAGE_QUIZ_STATE.currentQuestion=null;
+    IMAGE_QUIZ_STATE.usedQuestionIds.clear();
+    imageQuizResetStats(0);
+    const classPicker=document.getElementById('imageQuizRecordClass');
+    if(classPicker)classPicker.disabled=false;
+    const studentPicker=document.getElementById('imageQuizRecordStudent');
+    if(studentPicker)studentPicker.disabled=false;
+}
 function imageQuizHandleGradeChange(value) {
+    if(!gameLinkWarnUnsaved(IMAGE_QUIZ_STATE)){document.getElementById('imageQuizGradeSelect').value=IMAGE_QUIZ_STATE.grade;return;}
+    gameLinkDiscardImageQuizSession();
     IMAGE_QUIZ_STATE.grade = value || '';
     IMAGE_QUIZ_STATE.subject = '';
     IMAGE_QUIZ_STATE.topic = '';
@@ -9583,10 +9817,12 @@ function imageQuizHandleGradeChange(value) {
     const topicSelect = document.getElementById('imageQuizTopicSelect');
     imageQuizSetOptions(subjectSelect, getMillionaireSubjectsForGrade(IMAGE_QUIZ_STATE.grade), '-- Chọn môn học --');
     imageQuizSetOptions(topicSelect, [], '-- Chọn bài học / chủ đề --');
-    imageQuizResetQuestionView();
+    imageQuizResetQuestionView();gameLinkUpdateImageQuizStudentPickers();
 }
 
 async function imageQuizHandleSubjectChange(value) {
+    if(!gameLinkWarnUnsaved(IMAGE_QUIZ_STATE)){document.getElementById('imageQuizSubjectSelect').value=IMAGE_QUIZ_STATE.subject;return;}
+    gameLinkDiscardImageQuizSession();
     IMAGE_QUIZ_STATE.subject = value || '';
     IMAGE_QUIZ_STATE.topic = '';
     IMAGE_QUIZ_STATE.currentQuestion = null;
@@ -9603,6 +9839,8 @@ async function imageQuizHandleSubjectChange(value) {
 }
 
 function imageQuizHandleTopicChange(value) {
+    if(!gameLinkWarnUnsaved(IMAGE_QUIZ_STATE)){document.getElementById('imageQuizTopicSelect').value=IMAGE_QUIZ_STATE.topic;return;}
+    gameLinkDiscardImageQuizSession();
     IMAGE_QUIZ_STATE.topic = value || '';
     imageQuizResetQuestionView();
     IMAGE_QUIZ_STATE.selectedQuestionKeys.clear();
@@ -9619,6 +9857,7 @@ async function initImageQuiz() {
     imageQuizBindStartButton();
     const grades = getGameAllowedGradesByAccess();
     imageQuizSetOptions(gradeSelect, grades, '-- Chọn khối --', 'Khối ');
+    gameLinkUpdateImageQuizStudentPickers();
     imageQuizSetOptions(subjectSelect, [], '-- Chọn môn học --');
     imageQuizSetOptions(topicSelect, [], '-- Chọn bài học / chủ đề --');
 
@@ -9626,7 +9865,7 @@ async function initImageQuiz() {
         IMAGE_QUIZ_STATE.questions = await loadMillionaireQuestionsForSelection(IMAGE_QUIZ_STATE.grade, IMAGE_QUIZ_STATE.subject);
         imageQuizSetOptions(subjectSelect, getMillionaireSubjectsForGrade(IMAGE_QUIZ_STATE.grade), '-- Chọn môn học --');
         imageQuizSetOptions(topicSelect, millionaireGetLessonOptions(IMAGE_QUIZ_STATE.questions), '-- Chọn bài học / chủ đề --');
-        if (imageQuizRestoreSession()) return;
+        if (imageQuizRestoreSession()){gameLinkUpdateImageQuizStudentPickers();return;}
     }
 
     IMAGE_QUIZ_STATE.grade = '';
@@ -9656,7 +9895,7 @@ const CALL_ANSWER_STATE = {
     usedQuestionKeys: new Set(), currentQuestion: null, questionAnswered: false, mcIntroduced: false,
     sessionActive: false, timerWasRunning: false, selectedAnswer: null, timedOut: false,
     selectedQuestionKeys: new Set(), selectionConfirmed: false,
-    results: []
+    results: [], sessionId:null, sessionSaved:false
 };
 
 // BƯỚC 157.2: timer + âm thanh đếm ngược + nhạc nền riêng cho Gọi tên + Trả lời.
@@ -9703,10 +9942,12 @@ function callAnswerRecordResult(status, selectedIndex=null){
     if(CALL_ANSWER_STATE.results.some(x=>x.questionKey===qKey&&x.studentKey===studentKey))return;
     const ci=Number(q.c), a=Array.isArray(q.a)?q.a:[], letters=['A','B','C','D'];
     CALL_ANSWER_STATE.results.push({
-        studentKey, studentName:String(st.fullName||'Học sinh'), questionKey:qKey,
-        question:String(q.q||''), status, selectedIndex:Number.isInteger(selectedIndex)?selectedIndex:null,
+        studentKey, studentId:st.db_uuid||null, studentName:String(st.fullName||'Học sinh'), questionKey:qKey,
+        ...gameLinkQuestionSnapshot(q),
+        status, selectedIndex:Number.isInteger(selectedIndex)?selectedIndex:null,
         correctIndex:ci, correctAnswer:`${letters[ci]||''}. ${String(a[ci]??'')}`
     });
+    CALL_ANSWER_STATE.sessionSaved=false;
 }
 
 function callAnswerRenderCompleted(){
@@ -9717,7 +9958,7 @@ function callAnswerRenderCompleted(){
     const rows=CALL_ANSWER_STATE.results||[];
     const correct=rows.filter(x=>x.status==='correct').length, wrong=rows.filter(x=>x.status==='wrong').length, timeout=rows.filter(x=>x.status==='timeout').length;
     const detailRows=rows.map((x,i)=>`<tr><td style="width:52px;text-align:center;padding:10px 8px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">${i+1}</td><td style="width:18%;font-weight:750;text-align:left;padding:10px 8px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">${escapeHtml(x.studentName)}</td><td style="width:40%;text-align:left;padding:10px 8px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.45;">${escapeHtml(x.question)}</td><td style="width:12%;font-weight:800;color:${x.status==='correct'?'#16a34a':'#dc2626'};padding:10px 8px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">${x.status==='correct'?'✓ Đúng':(x.status==='timeout'?'⏱ Hết giờ':'✕ Sai')}</td><td style="width:30%;text-align:left;padding:10px 8px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.45;">${escapeHtml(x.correctAnswer)}</td></tr>`).join('');
-    stage.innerHTML=`<div style="width:100%;max-width:980px;margin:0 auto;text-align:center;padding:42px 16px;"><div style="font-size:72px;margin-bottom:14px;">🏆</div><h2 style="font-size:32px;margin:0 0 10px;">Hoàn thành trò chơi</h2><div style="font-size:18px;opacity:.78;margin-bottom:24px;">Đã hoàn thành toàn bộ bộ câu hỏi được chọn.</div><div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:22px;"><div style="border:1px solid var(--border-color,#334155);border-radius:14px;padding:12px 18px;"><strong style="font-size:23px;">${joined}</strong><div>Học sinh tham gia / ${totalStudents}</div></div><div style="border:1px solid var(--border-color,#334155);border-radius:14px;padding:12px 18px;"><strong style="font-size:23px;">${totalQuestions}</strong><div>Câu hoàn thành / ${totalQuestions}</div></div><div style="border:1px solid #22c55e;border-radius:14px;padding:12px 18px;"><strong style="font-size:23px;">${correct}</strong><div>Đúng</div></div><div style="border:1px solid #ef4444;border-radius:14px;padding:12px 18px;"><strong style="font-size:23px;">${wrong}</strong><div>Sai</div></div><div style="border:1px solid #f59e0b;border-radius:14px;padding:12px 18px;"><strong style="font-size:23px;">${timeout}</strong><div>Hết giờ</div></div></div>${rows.length?`<div style="width:100%;max-height:360px;overflow-y:auto;overflow-x:hidden;border:1px solid var(--border-color,#334155);border-radius:14px;margin:0 auto 22px;"><table style="width:100%;max-width:100%;table-layout:fixed;border-collapse:collapse;font-size:14px;"><thead style="position:sticky;top:0;background:var(--card-bg,#fff);z-index:1;"><tr><th style="width:52px;padding:10px 8px;white-space:normal;">STT</th><th style="width:18%;padding:10px 8px;white-space:normal;">Học sinh</th><th style="width:40%;padding:10px 8px;white-space:normal;">Câu hỏi</th><th style="width:12%;padding:10px 8px;white-space:normal;">Kết quả</th><th style="width:30%;padding:10px 8px;white-space:normal;">Đáp án đúng</th></tr></thead><tbody>${detailRows}</tbody></table></div>`:''}<div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;"><button type="button" class="btn btn-primary" onclick="callAnswerReplayGame()"><i class="fas fa-redo"></i> Chơi lại</button><button type="button" class="btn btn-secondary" onclick="callAnswerEndGame()"><i class="fas fa-stop"></i> Kết thúc trò chơi</button></div></div>`;
+    stage.innerHTML=`<div style="width:100%;max-width:980px;margin:0 auto;text-align:center;padding:42px 16px;"><div style="font-size:72px;margin-bottom:14px;">🏆</div><h2 style="font-size:32px;margin:0 0 10px;">Hoàn thành trò chơi</h2><div style="font-size:18px;opacity:.78;margin-bottom:24px;">Đã hoàn thành toàn bộ bộ câu hỏi được chọn.</div><div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:22px;"><div style="border:1px solid var(--border-color,#334155);border-radius:14px;padding:12px 18px;"><strong style="font-size:23px;">${joined}</strong><div>Học sinh tham gia / ${totalStudents}</div></div><div style="border:1px solid var(--border-color,#334155);border-radius:14px;padding:12px 18px;"><strong style="font-size:23px;">${totalQuestions}</strong><div>Câu hoàn thành / ${totalQuestions}</div></div><div style="border:1px solid #22c55e;border-radius:14px;padding:12px 18px;"><strong style="font-size:23px;">${correct}</strong><div>Đúng</div></div><div style="border:1px solid #ef4444;border-radius:14px;padding:12px 18px;"><strong style="font-size:23px;">${wrong}</strong><div>Sai</div></div><div style="border:1px solid #f59e0b;border-radius:14px;padding:12px 18px;"><strong style="font-size:23px;">${timeout}</strong><div>Hết giờ</div></div></div>${rows.length?`<div style="width:100%;max-height:360px;overflow-y:auto;overflow-x:hidden;border:1px solid var(--border-color,#334155);border-radius:14px;margin:0 auto 22px;"><table style="width:100%;max-width:100%;table-layout:fixed;border-collapse:collapse;font-size:14px;"><thead style="position:sticky;top:0;background:var(--card-bg,#fff);z-index:1;"><tr><th style="width:52px;padding:10px 8px;white-space:normal;">STT</th><th style="width:18%;padding:10px 8px;white-space:normal;">Học sinh</th><th style="width:40%;padding:10px 8px;white-space:normal;">Câu hỏi</th><th style="width:12%;padding:10px 8px;white-space:normal;">Kết quả</th><th style="width:30%;padding:10px 8px;white-space:normal;">Đáp án đúng</th></tr></thead><tbody>${detailRows}</tbody></table></div>`:''}<div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;"><button id="caSaveEvidence" type="button" class="btn btn-primary" onclick="gameLinkSave('call-answer')" ${CALL_ANSWER_STATE.sessionSaved?'disabled':''}><i class="fas fa-save"></i> ${CALL_ANSWER_STATE.sessionSaved?'✓ Đã lưu minh chứng':'Lưu minh chứng'}</button><button type="button" class="btn btn-primary" onclick="callAnswerReplayGame()"><i class="fas fa-redo"></i> Chơi lại</button><button type="button" class="btn btn-secondary" onclick="callAnswerEndGame()"><i class="fas fa-stop"></i> Kết thúc trò chơi</button></div></div>`;
 }
 function callAnswerFinishAfterFeedback(parts){
     callAnswerMCSpeakSequence(parts,()=>{
@@ -9726,8 +9967,9 @@ function callAnswerFinishAfterFeedback(parts){
     });
 }
 function callAnswerReplayGame(){
+    if(!gameLinkWarnUnsaved(CALL_ANSWER_STATE))return;
     callAnswerMCStop(); callAnswerTimerStop(); CALL_ANSWER_TIMER.token+=1; callAnswerMusicStop();
-    CALL_ANSWER_STATE.usedQuestionKeys.clear(); CALL_ANSWER_STATE.calledKeys.clear(); CALL_ANSWER_STATE.currentQuestion=null; CALL_ANSWER_STATE.questionAnswered=false; CALL_ANSWER_STATE.selectedAnswer=null; CALL_ANSWER_STATE.timedOut=false; CALL_ANSWER_STATE.winner=null; CALL_ANSWER_STATE.mcIntroduced=false; CALL_ANSWER_STATE.sessionActive=false; CALL_ANSWER_STATE.results=[];
+    CALL_ANSWER_STATE.usedQuestionKeys.clear(); CALL_ANSWER_STATE.calledKeys.clear(); CALL_ANSWER_STATE.currentQuestion=null; CALL_ANSWER_STATE.questionAnswered=false; CALL_ANSWER_STATE.selectedAnswer=null; CALL_ANSWER_STATE.timedOut=false; CALL_ANSWER_STATE.winner=null; CALL_ANSWER_STATE.mcIntroduced=false; CALL_ANSWER_STATE.sessionActive=false; CALL_ANSWER_STATE.results=[];CALL_ANSWER_STATE.sessionId=null;CALL_ANSWER_STATE.sessionSaved=false;
     CALL_ANSWER_STATE.students=getImageCallerStudents(CALL_ANSWER_STATE.classId); callAnswerUpdateSummary(); callAnswerRenderCallerStage(); callAnswerPrepareStudentImages(CALL_ANSWER_STATE.students);
 }
 window.callAnswerReplayGame=callAnswerReplayGame;
@@ -9838,7 +10080,7 @@ function callAnswerRenderQuestionPicker(preserve=false){
     stage.innerHTML=`<div id="callAnswerQuestionPicker" style="width:100%"><div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:center;margin-bottom:14px"><div><h3 style="margin:0 0 4px">Chọn câu hỏi cho lượt Gọi tên + Trả lời</h3><div style="opacity:.75">${escapeHtml(CALL_ANSWER_STATE.subject)} - Khối ${escapeHtml(CALL_ANSWER_STATE.grade)} - ${escapeHtml(millionaireLessonSelectionLabel(CALL_ANSWER_STATE.questions, CALL_ANSWER_STATE.topic))}</div></div><strong id="callAnswerSelectedCount"></strong></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn btn-secondary" onclick="callAnswerSelectAllQuestions(true)"><i class="fas fa-check-double"></i> Chọn tất cả</button><button class="btn btn-secondary" onclick="callAnswerSelectAllQuestions(false)"><i class="fas fa-square"></i> Bỏ chọn tất cả</button><button id="callAnswerSaveSelectionBtn" class="btn btn-primary" onclick="callAnswerConfirmQuestionSelection()"><i class="fas fa-save"></i> Lưu bộ câu & Chuẩn bị trò chơi</button></div><div style="overflow:auto;max-height:520px;border:1px solid rgba(148,163,184,.28);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead style="position:sticky;top:0;background:var(--card-bg,#fff);z-index:1"><tr><th>Chọn</th><th>STT</th><th>Câu hỏi</th><th>A</th><th>B</th><th>C</th><th>D</th><th>Đúng</th><th>Ảnh</th><th>Thao tác</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
     stage.querySelectorAll('td,th').forEach(el=>{el.style.borderBottom='1px solid rgba(148,163,184,.18)';el.style.padding='9px 8px';el.style.verticalAlign='top';});callAnswerUpdatePickerSummary();
 }
-function callAnswerConfirmQuestionSelection(){if(!CALL_ANSWER_STATE.selectedQuestionKeys.size){alert('Vui lòng chọn ít nhất 1 câu hỏi.');return;}CALL_ANSWER_STATE.selectionConfirmed=true;CALL_ANSWER_STATE.usedQuestionKeys.clear();CALL_ANSWER_STATE.currentQuestion=null;CALL_ANSWER_STATE.questionAnswered=false;CALL_ANSWER_STATE.students=getImageCallerStudents(CALL_ANSWER_STATE.classId);CALL_ANSWER_STATE.calledKeys.clear();CALL_ANSWER_STATE.winner=null;CALL_ANSWER_STATE.mcIntroduced=false;CALL_ANSWER_STATE.sessionActive=false;CALL_ANSWER_STATE.results=[];callAnswerUpdateSummary();callAnswerRenderCallerStage();callAnswerPrepareStudentImages(CALL_ANSWER_STATE.students);}
+function callAnswerConfirmQuestionSelection(){if(!gameLinkWarnUnsaved(CALL_ANSWER_STATE))return;if(!CALL_ANSWER_STATE.selectedQuestionKeys.size){alert('Vui lòng chọn ít nhất 1 câu hỏi.');return;}CALL_ANSWER_STATE.selectionConfirmed=true;CALL_ANSWER_STATE.usedQuestionKeys.clear();CALL_ANSWER_STATE.currentQuestion=null;CALL_ANSWER_STATE.questionAnswered=false;CALL_ANSWER_STATE.students=getImageCallerStudents(CALL_ANSWER_STATE.classId);CALL_ANSWER_STATE.calledKeys.clear();CALL_ANSWER_STATE.winner=null;CALL_ANSWER_STATE.mcIntroduced=false;CALL_ANSWER_STATE.sessionActive=false;CALL_ANSWER_STATE.results=[];CALL_ANSWER_STATE.sessionId=null;CALL_ANSWER_STATE.sessionSaved=false;callAnswerUpdateSummary();callAnswerRenderCallerStage();callAnswerPrepareStudentImages(CALL_ANSWER_STATE.students);}
 
 function callAnswerClearTimers() {
     if (CALL_ANSWER_STATE.motionTimer) clearInterval(CALL_ANSWER_STATE.motionTimer);
@@ -9864,7 +10106,7 @@ function callAnswerResetCaller() {
     CALL_ANSWER_STATE.selectedAnswer = null;
     CALL_ANSWER_STATE.timedOut = false;
     CALL_ANSWER_STATE.selectedQuestionKeys.clear(); CALL_ANSWER_STATE.selectionConfirmed = false;
-    CALL_ANSWER_STATE.results = [];
+    CALL_ANSWER_STATE.results = [];CALL_ANSWER_STATE.sessionId=null;CALL_ANSWER_STATE.sessionSaved=false;
 }
 
 function callAnswerRemainingIndexes() {
@@ -10159,6 +10401,7 @@ function callAnswerRestoreSession(){
     return true;
 }
 function callAnswerEndGame(){
+    if(!gameLinkWarnUnsaved(CALL_ANSWER_STATE))return;
     callAnswerClearTimers(); callAnswerTimerStop(); CALL_ANSWER_TIMER.token+=1; callAnswerMusicStop(); callAnswerMCStop();
     CALL_ANSWER_STATE.grade='';CALL_ANSWER_STATE.classId='';CALL_ANSWER_STATE.subject='';CALL_ANSWER_STATE.topic='';CALL_ANSWER_STATE.results=[];callAnswerResetCaller();
     if(APP_STATE.currentPage==='call-answer') initCallAnswer();
@@ -10192,6 +10435,7 @@ function callAnswerUpdateSummary() {
 }
 
 function callAnswerHandleGradeChange(value) {
+    if(!gameLinkWarnUnsaved(CALL_ANSWER_STATE)){const el=document.getElementById('callAnswerGradeSelect');if(el)el.value=CALL_ANSWER_STATE.grade;return;}
     CALL_ANSWER_STATE.grade = value || '';
     CALL_ANSWER_STATE.classId = '';
     CALL_ANSWER_STATE.subject = '';
@@ -10211,6 +10455,7 @@ function callAnswerHandleGradeChange(value) {
 }
 
 function callAnswerHandleClassChange(value) {
+    if(!gameLinkWarnUnsaved(CALL_ANSWER_STATE)){const el=document.getElementById('callAnswerClassSelect');if(el)el.value=CALL_ANSWER_STATE.classId;return;}
     CALL_ANSWER_STATE.classId = value || '';
     CALL_ANSWER_STATE.subject = '';
     CALL_ANSWER_STATE.topic = '';
@@ -10224,6 +10469,9 @@ function callAnswerHandleClassChange(value) {
 }
 
 async function callAnswerHandleSubjectChange(value) {
+    if(!gameLinkWarnUnsaved(CALL_ANSWER_STATE)){const el=document.getElementById('callAnswerSubjectSelect');if(el)el.value=CALL_ANSWER_STATE.subject;return;}
+    // Đổi môn phải hủy cả kết quả của phiên trước để không gán nhầm minh chứng.
+    callAnswerMusicStop();callAnswerMCStop();callAnswerResetCaller();
     CALL_ANSWER_STATE.subject = value || '';
     CALL_ANSWER_STATE.topic = '';
     const topicSelect = document.getElementById('callAnswerTopicSelect');
@@ -10236,6 +10484,7 @@ async function callAnswerHandleSubjectChange(value) {
 }
 
 function callAnswerHandleTopicChange(value) {
+    if(!gameLinkWarnUnsaved(CALL_ANSWER_STATE)){const el=document.getElementById('callAnswerTopicSelect');if(el)el.value=CALL_ANSWER_STATE.topic;return;}
     CALL_ANSWER_STATE.topic = value || '';
     callAnswerResetCaller();
     callAnswerUpdateSummary();
@@ -10286,6 +10535,8 @@ function renderCallAnswer() {
             <label><span style="display:block;font-weight:700;margin-bottom:6px;">Bài học / Chủ đề</span><select id="callAnswerTopicSelect" onchange="callAnswerHandleTopicChange(this.value)" disabled style="width:100%;padding:10px;border-radius:10px;"><option>-- Chọn bài học / chủ đề --</option></select></label>
           </div>
         </div>
+        <div class="game-link-save-bar"><button class="btn btn-secondary" type="button" onclick="gameLinkSave('call-answer')"><i class="fas fa-save"></i> Lưu kết quả hiện có</button>
+          <span>Có thể lưu sau từng câu; nếu chưa lưu, ứng dụng sẽ cảnh báo trước khi bỏ phiên.</span></div>
         <div style="margin-top:18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;">
           <div style="padding:20px;border-radius:16px;background:var(--card-bg,#fff);border:1px solid var(--border-color,#e5e7eb);text-align:center;"><strong id="callAnswerStudentCount" style="display:block;font-size:34px;">0</strong><span>Học sinh</span></div>
           <div style="padding:20px;border-radius:16px;background:var(--card-bg,#fff);border:1px solid var(--border-color,#e5e7eb);text-align:center;"><strong id="callAnswerQuestionCount" style="display:block;font-size:34px;">0</strong><span>Câu hỏi</span></div>
@@ -10335,6 +10586,10 @@ function renderImageQuiz() {
                     <label class="image-quiz-field"><span>Môn học</span><select id="imageQuizSubjectSelect" onchange="imageQuizHandleSubjectChange(this.value)" disabled><option>-- Chọn môn học --</option></select></label>
                     <label class="image-quiz-field"><span>Bài học / Chủ đề</span><select id="imageQuizTopicSelect" onchange="imageQuizHandleTopicChange(this.value)" disabled><option>-- Chọn bài học / chủ đề --</option></select></label>
                 </div>
+                <div class="game-link-pickers"><label>Lớp (để lưu kết quả cá nhân) <select id="imageQuizRecordClass" onchange="gameLinkUpdateImageQuizStudentPickers(true)"><option value="">-- Chỉ chơi, không lưu --</option></select></label>
+                    <label>Học sinh thực hiện <select id="imageQuizRecordStudent"><option value="">-- Chọn học sinh --</option></select></label></div>
+                <div class="game-link-save-bar"><button class="btn btn-secondary" type="button" onclick="gameLinkSave('image-quiz')"><i class="fas fa-save"></i> Lưu kết quả hiện có</button>
+                  <span>Chọn lớp và học sinh trước khi bắt đầu để lưu kết quả theo cá nhân.</span></div>
             </div>
             <div class="image-quiz-stage">
                 <div class="image-quiz-placeholder">
@@ -10459,6 +10714,7 @@ function renderPage(page) {
         case 'disciplines': container.innerHTML = renderDisciplines(); break;
         case 'learning-comments':
     container.innerHTML = renderLearningComments();
+    if(canEditData())setTimeout(gameLinkLoadResults,0);
     break;
         case 'files': container.innerHTML = renderFiles(); break;
         case 'statistics': container.innerHTML = renderStatistics(); break;
