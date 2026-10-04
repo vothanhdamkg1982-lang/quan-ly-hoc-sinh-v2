@@ -1,0 +1,35 @@
+BƯỚC 175.2 – HỌC TẬP THÍCH ỨNG / MINH CHỨNG SÁNG KIẾN
+Ngày tạo: 03/10/2026 · Hạn dự kiến hoàn thiện hồ sơ: 29/10/2026
+
+I. CẬP NHẬT KHÔNG MẤT DỮ LIỆU
+1. Sao lưu JSON và toàn bộ thư mục đang chạy trên VS Code trước khi cập nhật.
+2. Nếu dùng bản vá: giải nén bản vá, chép các tệp/thư mục nằm trong quan-ly-hoc-sinh-v2 vào thư mục web hiện tại, chọn ghi đè các tệp trùng tên. Không xóa các thư mục khác.
+3. Nếu dùng ZIP đầy đủ: giải nén vào thư mục MỚI để kiểm thử; chạy cùng địa chỉ Live Server như cũ (ví dụ http://127.0.0.1:5500) và cùng tài khoản. Dữ liệu chỉ nằm trong localStorage của đúng origin và tài khoản, không tự chuyển giữa các trình duyệt, địa chỉ/port khác nhau hoặc thiết bị.
+4. Mở index.html bằng Live Server, Ctrl+Shift+R để xóa cache tệp JS/CSS. Không cần chạy SQL.
+
+II. CÁC CHỨC NĂNG BỔ SUNG
+- Chọn KIỂM THỬ hoặc THỰC NGHIỆM CHÍNH THỨC tại đầu trang Học tập thích ứng AI; mặc định KIỂM THỬ để tránh ghi nhầm. Tất cả dữ liệu bước 175.1 giữ nguyên ở chế độ KIỂM THỬ. Việc chuyển chế độ không sao chép, hợp nhất hoặc xóa dữ liệu.
+- Biểu đồ trước–sau: chỉ tính khi có đủ 2 lượt tương ứng; báo cáo lớp tính trên các hồ sơ có đủ cặp điểm để tránh thiên lệch do thiếu dữ liệu.
+- Bảng kỹ năng: thống kê kết quả đúng/tổng theo 3 kỹ năng của cả hai lần đánh giá; mỗi kỹ năng chỉ có 2 câu, chỉ dùng làm chỉ báo.
+- Giáo viên đánh giá thực hành TRƯỚC và SAU theo 3 tiêu chí: chọn đúng văn bản, điều chỉnh phông/cỡ chữ, điều chỉnh màu chữ. Chấm 0 (chưa làm được), 1 (làm được khi có hướng dẫn), 2 (tự thực hiện đúng); tổng 6 điểm. Chỉ lưu khi đã chấm đủ cả 3 tiêu chí. Thiết kế hai nhiệm vụ tương đương về độ khó và dùng cùng bảng tiêu chí cho trước/sau.
+- Xuất Excel .xlsx trực tiếp với 3 sheet: Ket_qua, Tong_hop, Ky_nang. Mã học sinh được lưu theo kiểu TEXT, không bị hiển thị 2.51E+09 và không mất số 0 đầu. Cột mức chênh lệch và chỉ số tổng hợp sử dụng công thức Excel. Excel cần thư viện SheetJS tải từ CDN lần đầu, nếu chưa có Internet có thể xuất CSV/JSON.
+- Xuất CSV chỉ gồm mã học sinh và kết quả của chế độ đang chọn. Khi mở CSV bằng Excel phải dùng Data > From Text/CSV và đặt mã học sinh là Text.
+- JSON sao lưu cả hai nhóm dữ liệu theo từng mã học sinh (schema adaptive-class-backup-v2), không chứa họ tên và không tạo chức năng nhập phục hồi tự động. Giữ nguyên bản JSON gốc của bước 175.1 để dự phòng.
+- In / Lưu PDF minh chứng: sử dụng chức năng in của trình duyệt; cần kiểm tra bản xem trước và ẩn thông tin nhận dạng khi chia sẻ ra bên ngoài.
+
+III. LƯU Ý VỀ DỮ LIỆU VÀ HẠN CHẾ
+- Không có thay đổi Supabase, không ghi đè điểm/nhận xét chính thức của học sinh.
+- AI ở phiên bản này hỗ trợ giáo viên tạo lời nhắc học liệu để kiểm duyệt; KHÔNG có mô hình AI tự phân tích/chấm điểm, KHÔNG gọi API AI. Thuật toán phân bài là quy tắc dựa trên tỷ lệ đúng.
+- Ngân hàng 18 câu đang là mẫu; phải đối chiếu SGK, PPCT, mục tiêu bài học và kiểm duyệt trước khi thực nghiệm.
+- Trước khi tổ chức thực nghiệm thật, giáo viên cần thống nhất tiêu chí, thiết kế bài thực hành, hoàn thành khảo sát đầu vào và xin chấp thuận theo quy trình đơn vị. Không lấy dữ liệu giáo viên tự kiểm thử làm minh chứng hiệu quả.
+- Không chia sẻ công khai file dữ liệu chứa mã học sinh hay ghi thông tin cá nhân vào lời nhắc AI.
+- Đối với dữ liệu lưu trên thiết bị, cần sao lưu sau mỗi buổi học; chưa có đồng bộ liên thiết bị hay nhập lại JSON vào ứng dụng.
+
+IV. KIỂM TRA SAU KHI CẬP NHẬT
+1. Chọn lớp/học sinh đã kiểm thử ở bước 175.1, chế độ KIỂM THỬ: kết quả cũ (ví dụ 5/6, 4/4, 6/6) vẫn còn.
+2. Chuyển sang THỰC NGHIỆM CHÍNH THỨC: ban đầu chưa có điểm; chuyển về KIỂM THỬ thấy điểm cũ.
+3. Tại chế độ KIỂM THỬ, dùng 1 hồ sơ để chấm thực hành trước/sau; kiểm tra biểu đồ, bảng kỹ năng và bảng lớp.
+4. Xuất XLSX và mở bằng Excel: kiểm tra mã học sinh, 3 sheet, công thức và số liệu.
+5. Sao lưu JSON hai chế độ trước khi bắt đầu thực nghiệm chính thức.
+
+Các thay đổi chính: index.html, script.js (chỉ đổi tham số import module), style.css (bổ sung style mới), adaptive-learning.js (mô-đun độc lập). Có test bổ sung trong tests/test_adaptive_1752.mjs.

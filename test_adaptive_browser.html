@@ -1,0 +1,9 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head><body><main id="pageContainer"></main><script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script type="module">
+import {createAdaptiveLearningModule} from './adaptive-learning.js';
+const classes=[{id:'c4a',name:'Lớp 4A',grade:4},{id:'c5',name:'Lớp 5A',grade:5}];
+const students=[{db_uuid:'u1',id:'HS01',fullName:'Học sinh một',class_id:'c4a'},{db_uuid:'u2',id:'HS02',fullName:'Học sinh hai',class_id:'c4a'}];
+let canEdit = true;
+const m=createAdaptiveLearningModule({context:()=>({classes,students,userId:'test-user-1752',canEdit})});
+window.__adaptiveTest={m,setViewer:()=>{canEdit=false;document.getElementById('pageContainer').innerHTML=m.render();m.init();}};
+document.getElementById('pageContainer').innerHTML=m.render();m.init();
+</script></body></html>

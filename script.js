@@ -15,6 +15,7 @@
  */
 import { supabase } from './supabase.js?v=1514936131';
 import { PERIODIC_REMARK_BANK, PERIODIC_REMARK_PERIODS } from './periodic-remark-bank.js?v=17300';
+import { createAdaptiveLearningModule } from './adaptive-learning.js?v=175040';
 
 
 // ============================================================
@@ -11232,6 +11233,15 @@ function renderImageCaller() {
     `;
 }
 
+// MÔ-ĐUN SÁNG KIẾN 175: tách biệt bộ dữ liệu thí điểm khỏi Supabase và trò chơi cũ.
+// Chỉ cho phép thao tác trên học sinh và lớp đang thuộc phạm vi truy cập của tài khoản.
+const ADAPTIVE_LEARNING = createAdaptiveLearningModule({
+    context: () => ({
+        classes: APP_STATE.classes || [], students: APP_STATE.students || [],
+        userId: APP_STATE.currentUserId, canEdit: canEditData()
+    })
+});
+
 function renderPage(page) {
     const previousPage = APP_STATE.currentPage;
 
@@ -11312,6 +11322,7 @@ function renderPage(page) {
         case 'image-quiz': container.innerHTML = renderImageQuiz(); break;
         case 'call-answer': container.innerHTML = renderCallAnswer(); break;
         case 'millionaire': container.innerHTML = renderMillionaire(); break;
+        case 'adaptive-learning': container.innerHTML = ADAPTIVE_LEARNING.render(); break;
         default: container.innerHTML = '<p>Trang không tồn tại.</p>';
     }
     setTimeout(() => {
@@ -11329,6 +11340,7 @@ function renderPage(page) {
         if (page === 'image-quiz') initImageQuiz();
         if (page === 'call-answer') initCallAnswer();
         if (page === 'millionaire') initMillionaire();
+        if (page === 'adaptive-learning') ADAPTIVE_LEARNING.init();
         applyViewerReadOnlyUI();
         if (isViewer() && page === 'attendance') {
             setTimeout(applyViewerReadOnlyUI, 120);
@@ -11339,6 +11351,7 @@ function renderPage(page) {
 function getPageTitle(page) {
     const titles = {
         'learning-comments': 'Nhận xét học tập',
+        'adaptive-learning': 'Học tập thích ứng AI',
         dashboard: 'Dashboard',
         students: 'Học sinh',
         classes: 'Lớp',

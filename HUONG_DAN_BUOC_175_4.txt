@@ -1,0 +1,28 @@
+BƯỚC 175.4 — CƠ CHẾ HỌC TẬP THÍCH ỨNG VÀ PHẢN HỒI AI CÓ KIỂM DUYỆT
+
+CÁCH CẬP NHẬT TỪ BẢN 175.3:
+1. Sao lưu JSON cả hai chế độ và sao chép toàn bộ thư mục ứng dụng trước khi cập nhật.
+2. Giải nén bản vá; sao chép adaptive-learning.js, script.js, style.css vào thư mục ứng dụng đang chạy trong VS Code. Chọn ghi đè đúng 3 tệp này.
+3. Mở Live Server; nhấn Ctrl+Shift+R. Kiểm tra giao diện hiển thị BƯỚC 175.4.
+4. GIỮ NGUYÊN ngân hàng 30 câu, khóa localStorage qlhs_adaptive_l4_bai8_v1753_<ID>, quyền truy cập và các phân hệ cũ. Không chạy SQL, không đổi bảng Supabase.
+
+CHỨC NĂNG MỚI:
+- Kế hoạch giải thích được: nếu chỉ một kỹ năng còn thiếu, giao đúng 2 câu của kỹ năng đó; nếu ít nhất hai kỹ năng còn thiếu, chọn 2 kỹ năng ưu tiên (4 câu); nếu tất cả đạt, giao 4 câu củng cố và nhiệm vụ vận dụng tổng hợp; nếu dữ liệu thiếu, cần chẩn đoán bổ sung.
+- Nếu giáo viên ĐÃ LƯU thang chấm thực hành trước học, kết quả thực hành được xét cùng dữ liệu trắc nghiệm khi ưu tiên kỹ năng. Nếu chưa lưu, hệ thống chỉ dựa vào trắc nghiệm.
+- Phần Học liệu AI tạo lời nhắc theo ba mục đích: phản hồi sửa lỗi, bài luyện phân hóa, phân tích lỗi thường gặp. Giáo viên sử dụng công cụ AI được đơn vị cho phép, sửa nội dung và tự nhấn duyệt để lưu cho hồ sơ đang chọn.
+- Báo cáo theo kỹ năng: số hồ sơ có đủ hai lần đánh giá; trung bình trước, sau và chênh lệch; trung bình thực hành từng kỹ năng (0–2).
+- Excel: trang Tong_hop có bảng kỹ năng từ dòng 14; Ket_qua có các cột Q–S (chiến lược, giải thích, số phản hồi được duyệt); Ky_nang có hai cột điểm thực hành theo kỹ năng (I–J). Các cột và công thức A–P hiện có không thay đổi.
+
+KIỂM TRA TRƯỚC KHI DÙNG CHÍNH THỨC:
+A. Chọn KIỂM THỬ: làm đầu vào sai đúng một kỹ năng => bài luyện tập 2 câu thuộc kỹ năng đó.
+B. Chấm thực hành TRƯỚC thực tế rồi lưu trước khi bắt đầu luyện tập để hệ thống xét thêm dữ liệu thao tác.
+C. Kiểm tra được hai kỹ năng cần hỗ trợ => 4 câu; tất cả đạt => bài củng cố và nhiệm vụ vận dụng.
+D. Tạo lời nhắc AI không có mã hoặc tên học sinh; duyệt phản hồi bằng tay rồi kiểm tra lưu theo hồ sơ đúng chế độ.
+E. Sao lưu JSON; xuất Excel; kiểm tra bảng Tong_hop/Ket_qua/Ky_nang, mã học sinh dạng văn bản, hồ sơ chưa có điểm để trống.
+
+LƯU Ý VỀ MINH CHỨNG:
+- Lượt kiểm thử không được đưa vào báo cáo thực nghiệm chính thức.
+- Điểm chấm thực hành chỉ ghi sau khi đã quan sát sản phẩm thực tế. Thực nghiệm phải thực hiện bài trước khi hỗ trợ và bài sau theo nhiệm vụ tương đương.
+- AI KHÔNG tự kết nối qua API, KHÔNG tự chấm điểm. Trình tạo lời nhắc giúp giáo viên làm việc với AI bên ngoài, nội dung đầu ra phải được kiểm duyệt.
+- Mỗi kỹ năng chỉ có 2 câu trắc nghiệm; dữ liệu chỉ hỗ trợ gợi ý. Không khẳng định hiệu quả với cả lớp khi chưa đủ mẫu thực tế.
+- Nút sao lưu JSON xuất tất cả bản ghi đã chọn; không tự xóa hoặc trộn dữ liệu cũ.

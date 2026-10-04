@@ -1,0 +1,467 @@
+{
+  "version": "175.3",
+  "lesson": "Bài 8: Định dạng văn bản trên trang chiếu",
+  "grade": 4,
+  "subject": "Tin học",
+  "book": "Kết nối tri thức với cuộc sống",
+  "pages": "34–38",
+  "skills": {
+    "select": "Chọn đúng phần văn bản",
+    "font": "Thay đổi phông và cỡ chữ",
+    "style": "Định dạng kiểu chữ (đậm, nghiêng, gạch chân)",
+    "color": "Thay đổi màu chữ",
+    "bullet": "Tạo hoặc bỏ dấu đầu dòng"
+  },
+  "questions": [
+    {
+      "id": "PRE01",
+      "stage": "pre",
+      "skill": "select",
+      "q": "Trước khi đổi cỡ chữ cho cụm từ “Cảnh đẹp quê hương”, em cần làm gì?",
+      "a": [
+        "Bấm nút Bullets",
+        "Chọn cụm từ cần định dạng",
+        "Đóng tệp trình chiếu",
+        "Tạo trang chiếu mới"
+      ],
+      "correct": 1,
+      "why": "Phải chọn đúng phần văn bản trước khi nháy nút lệnh định dạng.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PRE02",
+      "stage": "pre",
+      "skill": "select",
+      "q": "Muốn chọn một dòng tiêu đề, em thực hiện thao tác nào?",
+      "a": [
+        "Nháy vào vùng trống ngoài trang chiếu",
+        "Bấm nút lưu tệp",
+        "Chọn tất cả trang chiếu",
+        "Kéo thả chuột từ đầu đến cuối dòng tiêu đề"
+      ],
+      "correct": 3,
+      "why": "Kéo thả từ đầu đến cuối phần văn bản để chọn dòng cần định dạng.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PRE03",
+      "stage": "pre",
+      "skill": "font",
+      "q": "Trong nhóm Font trên dải lệnh Home, ô tên phông chữ dùng để làm gì?",
+      "a": [
+        "Chọn phông chữ cho phần văn bản đã chọn",
+        "Chọn màu chữ",
+        "Tạo dấu đầu dòng",
+        "Lưu bài trình chiếu"
+      ],
+      "correct": 0,
+      "why": "Ô Font dùng để lựa chọn phông chữ.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PRE04",
+      "stage": "pre",
+      "skill": "font",
+      "q": "Muốn đổi cỡ chữ của tiêu đề từ 30 lên 60, em sử dụng công cụ nào?",
+      "a": [
+        "Bullets",
+        "Font Color",
+        "Font Size",
+        "Italic"
+      ],
+      "correct": 2,
+      "why": "Ô Font Size dùng để chọn cỡ chữ, chẳng hạn 30 hoặc 60.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PRE05",
+      "stage": "pre",
+      "skill": "style",
+      "q": "Muốn làm đậm một cụm từ đã chọn, em dùng nút nào?",
+      "a": [
+        "I (Italic)",
+        "U (Underline)",
+        "B (Bold)",
+        "Bullets"
+      ],
+      "correct": 2,
+      "why": "Nút B thực hiện định dạng chữ đậm.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PRE06",
+      "stage": "pre",
+      "skill": "style",
+      "q": "Nút I trong nhóm Font có chức năng nào?",
+      "a": [
+        "Làm chữ nghiêng",
+        "Gạch chân văn bản",
+        "Đổi màu chữ",
+        "Thêm dấu đầu dòng"
+      ],
+      "correct": 0,
+      "why": "Nút I dùng để định dạng chữ nghiêng.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PRE07",
+      "stage": "pre",
+      "skill": "color",
+      "q": "Công cụ Font Color (chữ A có vạch màu) dùng để làm gì?",
+      "a": [
+        "Chọn phông chữ",
+        "Đổi cỡ chữ",
+        "Thay đổi màu nền trang chiếu",
+        "Thay đổi màu chữ"
+      ],
+      "correct": 3,
+      "why": "Font Color dùng để chọn màu cho văn bản được chọn.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PRE08",
+      "stage": "pre",
+      "skill": "color",
+      "q": "Muốn đổi màu của riêng tiêu đề thành màu đỏ, em thực hiện cách nào?",
+      "a": [
+        "Đổi màu mọi đối tượng trên trang chiếu",
+        "Chọn tiêu đề rồi chọn màu đỏ bằng Font Color",
+        "Bấm Bullets trước",
+        "Chỉ mở hộp chọn phông chữ"
+      ],
+      "correct": 1,
+      "why": "Chọn đúng phần văn bản rồi sử dụng nút màu chữ.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PRE09",
+      "stage": "pre",
+      "skill": "bullet",
+      "q": "Muốn tạo dấu đầu dòng cho các mục trong danh sách, em sử dụng nút nào?",
+      "a": [
+        "Bullets trong nhóm Paragraph",
+        "Font Size trong nhóm Font",
+        "Save trên thanh công cụ",
+        "Italic trong nhóm Font"
+      ],
+      "correct": 0,
+      "why": "Nút Bullets của nhóm Paragraph dùng để tạo dấu đầu dòng.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PRE10",
+      "stage": "pre",
+      "skill": "bullet",
+      "q": "Trước khi tạo dấu đầu dòng cho một danh sách, em cần làm gì?",
+      "a": [
+        "Đóng phần mềm",
+        "Xóa trang chiếu",
+        "Chọn các mục trong danh sách",
+        "Đổi tên tệp"
+      ],
+      "correct": 2,
+      "why": "Chọn phần văn bản của danh sách trước khi dùng lệnh Bullets.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PR01",
+      "stage": "practice",
+      "skill": "select",
+      "q": "Chỉ muốn đổi màu ba từ đầu của tiêu đề, em cần chọn phần nào?",
+      "a": [
+        "Toàn bộ bài trình chiếu",
+        "Dòng cuối cùng",
+        "Đúng ba từ đầu của tiêu đề",
+        "Một trang chiếu khác"
+      ],
+      "correct": 2,
+      "why": "Chỉ chọn đúng phần văn bản muốn định dạng.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PR02",
+      "stage": "practice",
+      "skill": "select",
+      "q": "Sau khi chọn đúng cụm từ, bước tiếp theo để làm chữ đậm là gì?",
+      "a": [
+        "Nháy nút B",
+        "Lưu tệp trước rồi đóng",
+        "Tạo trang mới",
+        "Chọn hình ảnh"
+      ],
+      "correct": 0,
+      "why": "Khi đã chọn văn bản, nháy B để chuyển sang kiểu chữ đậm.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PR03",
+      "stage": "practice",
+      "skill": "font",
+      "q": "Muốn dùng phông Times New Roman cho tiêu đề, em chọn ở đâu?",
+      "a": [
+        "Nút Bullets",
+        "Nút Save",
+        "Ô Font Color",
+        "Ô Font"
+      ],
+      "correct": 3,
+      "why": "Dùng danh sách Font để chọn Times New Roman.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PR04",
+      "stage": "practice",
+      "skill": "font",
+      "q": "Cỡ chữ hiện tại là 30, yêu cầu đổi thành 50. Em thao tác tại đâu?",
+      "a": [
+        "Nút U",
+        "Ô Font Size",
+        "Nút Bullets",
+        "Nút Open"
+      ],
+      "correct": 1,
+      "why": "Chọn cỡ 50 trong ô Font Size của phần văn bản đã chọn.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PR05",
+      "stage": "practice",
+      "skill": "style",
+      "q": "Muốn gạch chân phần văn bản đã chọn, em nhấn nút nào?",
+      "a": [
+        "U",
+        "B",
+        "I",
+        "Bullets"
+      ],
+      "correct": 0,
+      "why": "Nút U dùng để định dạng gạch chân.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PR06",
+      "stage": "practice",
+      "skill": "style",
+      "q": "Muốn một cụm từ vừa đậm vừa nghiêng, em dùng hai nút nào?",
+      "a": [
+        "B và U",
+        "I và U",
+        "B và I",
+        "Font và Size"
+      ],
+      "correct": 2,
+      "why": "Kết hợp hai nút B và I để tạo kiểu đậm và nghiêng.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PR07",
+      "stage": "practice",
+      "skill": "color",
+      "q": "Tiêu đề đang có màu đen, yêu cầu đổi thành màu xanh. Sau khi chọn tiêu đề, em làm gì?",
+      "a": [
+        "Chọn Bullets",
+        "Chọn màu xanh tại Font Color",
+        "Nháy Save để đổi màu",
+        "Tăng cỡ chữ"
+      ],
+      "correct": 1,
+      "why": "Sử dụng Font Color để chọn màu chữ xanh.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PR08",
+      "stage": "practice",
+      "skill": "color",
+      "q": "Sau khi chọn đúng đoạn văn bản, nút nào giúp em thay đổi màu chữ?",
+      "a": [
+        "Font Size",
+        "Bold",
+        "Open",
+        "Font Color"
+      ],
+      "correct": 3,
+      "why": "Nút Font Color thay đổi màu phần văn bản đã chọn.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PR09",
+      "stage": "practice",
+      "skill": "bullet",
+      "q": "Danh sách các địa danh chưa có dấu đầu dòng. Em làm gì?",
+      "a": [
+        "Nhấn B",
+        "Nhấn I",
+        "Chọn danh sách rồi chọn Bullets",
+        "Tăng cỡ chữ"
+      ],
+      "correct": 2,
+      "why": "Chọn danh sách, sau đó nháy Bullets và chọn kiểu dấu.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "PR10",
+      "stage": "practice",
+      "skill": "bullet",
+      "q": "Muốn bỏ dấu đầu dòng đã thêm cho danh sách, em chọn mục nào?",
+      "a": [
+        "Font Color",
+        "None trong danh sách Bullets",
+        "Italic",
+        "Font Size"
+      ],
+      "correct": 1,
+      "why": "Theo SGK, chọn None để bỏ dấu đầu dòng đã chọn.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "POST01",
+      "stage": "post",
+      "skill": "select",
+      "q": "Trước khi đổi phông chữ cho dòng “Trường em”, em cần thao tác nào?",
+      "a": [
+        "Chọn nút Save",
+        "Chèn một hình ảnh",
+        "Tạo thêm trang chiếu",
+        "Chọn dòng “Trường em”"
+      ],
+      "correct": 3,
+      "why": "Cần chọn phần văn bản cần đổi phông trước khi dùng lệnh Font.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "POST02",
+      "stage": "post",
+      "skill": "select",
+      "q": "Để định dạng toàn bộ đoạn chú thích dưới ảnh, em nên chọn phần nào?",
+      "a": [
+        "Chỉ ký tự đầu tiên",
+        "Toàn bộ đoạn chú thích",
+        "Tên tệp trình chiếu",
+        "Một trang chiếu trống"
+      ],
+      "correct": 1,
+      "why": "Chọn toàn bộ đoạn cần thay đổi định dạng.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "POST03",
+      "stage": "post",
+      "skill": "font",
+      "q": "Muốn đổi phông chữ của đoạn đã chọn sang Arial, em dùng ô nào?",
+      "a": [
+        "Font Color",
+        "Bullets",
+        "Font",
+        "Font Size"
+      ],
+      "correct": 2,
+      "why": "Ô Font dùng để lựa chọn tên phông, chẳng hạn Arial.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "POST04",
+      "stage": "post",
+      "skill": "font",
+      "q": "Để đặt cỡ chữ của tên trường thành 50, em chọn công cụ nào?",
+      "a": [
+        "Font Size",
+        "Font Color",
+        "Underline",
+        "Bullets"
+      ],
+      "correct": 0,
+      "why": "Ô Font Size dùng để thay đổi cỡ chữ của phần được chọn.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "POST05",
+      "stage": "post",
+      "skill": "style",
+      "q": "Nút B trong nhóm Font dùng để tạo kiểu chữ nào?",
+      "a": [
+        "Chữ nghiêng",
+        "Chữ đậm",
+        "Chữ gạch chân",
+        "Dấu đầu dòng"
+      ],
+      "correct": 1,
+      "why": "B là nút lệnh định dạng chữ đậm.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "POST06",
+      "stage": "post",
+      "skill": "style",
+      "q": "Muốn cụm từ “Trường em” vừa đậm vừa nghiêng, em chọn cặp nút nào?",
+      "a": [
+        "I và U",
+        "B và Bullets",
+        "U và Font Color",
+        "B và I"
+      ],
+      "correct": 3,
+      "why": "B tạo chữ đậm và I tạo chữ nghiêng.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "POST07",
+      "stage": "post",
+      "skill": "color",
+      "q": "Muốn đổi màu dòng tên lớp sang màu xanh, em chọn lệnh nào?",
+      "a": [
+        "Font Color",
+        "Font Size",
+        "Bold",
+        "Bullets"
+      ],
+      "correct": 0,
+      "why": "Sử dụng Font Color để chọn màu xanh cho văn bản đã chọn.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "POST08",
+      "stage": "post",
+      "skill": "color",
+      "q": "Chỉ muốn đổi màu câu chú thích ảnh, em thực hiện thao tác nào?",
+      "a": [
+        "Chọn toàn bộ các trang chiếu",
+        "Nháy nút Save",
+        "Chọn câu chú thích rồi chọn màu tại Font Color",
+        "Chọn danh sách ở trang khác"
+      ],
+      "correct": 2,
+      "why": "Lệnh màu chữ áp dụng cho phần văn bản được chọn.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "POST09",
+      "stage": "post",
+      "skill": "bullet",
+      "q": "Để danh sách hoạt động văn nghệ có dấu đầu dòng, em dùng lệnh nào?",
+      "a": [
+        "Font Size",
+        "Underline",
+        "Save",
+        "Bullets"
+      ],
+      "correct": 3,
+      "why": "Bullets tạo dấu đầu dòng cho các mục trong danh sách.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    },
+    {
+      "id": "POST10",
+      "stage": "post",
+      "skill": "bullet",
+      "q": "Muốn bỏ dấu đầu dòng của một danh sách đã chọn, em thực hiện cách nào?",
+      "a": [
+        "Chọn None trong danh sách Bullets",
+        "Chọn nút B",
+        "Tăng cỡ chữ",
+        "Đổi phông chữ"
+      ],
+      "correct": 0,
+      "why": "Chọn None trong lệnh Bullets để bỏ dấu đầu dòng.",
+      "source": "SGK Tin học 4 Kết nối tri thức, Bài 8, trang 34–38"
+    }
+  ]
+}

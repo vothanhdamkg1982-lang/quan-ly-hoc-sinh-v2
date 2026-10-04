@@ -1,0 +1,19 @@
+BƯỚC 175.2.1 – SỬA LỖI #VALUE! KHI XUẤT EXCEL
+
+1. Thay đổi:
+- Sheet Ket_qua, cột H: chỉ tính chênh lệch khi có đủ bốn giá trị số ở đầu vào và sau học, tổng số câu > 0. Học sinh chưa làm bài sẽ có ô trống.
+- Sheet Ky_nang, cột G: chỉ tính chênh lệch cho từng kỹ năng khi có đủ kết quả trước và sau, số câu > 0.
+- Không thay đổi cách tính kết quả của học sinh đã hoàn thành, mã học sinh dạng văn bản, cấu trúc dữ liệu trên trình duyệt hoặc Supabase.
+
+2. Cập nhật trên VS Code:
+- SAO LƯU JSON cả hai chế độ và sao chép thư mục web hiện tại trước khi thay đổi.
+- Giải nén bản vá vào một thư mục tạm. Sao chép 3 tệp (adaptive-learning.js, script.js, index.html) từ thư mục quan-ly-hoc-sinh-v2 trong ZIP vào thư mục dự án hiện tại, ghi đè các tệp trùng tên.
+- Mở lại bằng Live Server, nhấn Ctrl+Shift+R để tải mã JS mới.
+- Giữ chế độ KIỂM THỬ, nhấn Xuất Excel .xlsx. Mở Ket_qua: các học sinh chưa có bài phải để trống cột H; hàng có đủ 5/6 trước và 6/6 sau hiển thị 16,7. Mở Ky_nang: học sinh thiếu kết quả phải để trống cột G.
+- Kiểm tra Tổng_hop và xuất lại báo cáo. Không dùng tệp Excel cũ bị lỗi làm minh chứng.
+
+3. Công thức sửa trực tiếp trong Excel cũ nếu cần:
+H2: =IF(COUNT(B2;C2;F2;G2)<4;"";IFERROR(IF(AND(C2>0;G2>0);ROUND((F2/G2-B2/C2)*100;1);"");""))
+Sao chép công thức xuống hết các học sinh. Nếu Excel sử dụng dấu phẩy, thay dấu chấm phẩy bằng dấu phẩy.
+
+Lưu ý: đây là bản vá hàm xuất, KHÔNG tự sửa những tệp .xlsx đã xuất trước đó.

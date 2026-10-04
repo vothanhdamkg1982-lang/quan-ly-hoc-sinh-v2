@@ -1,0 +1,13 @@
+# HƯỚNG DẪN BƯỚC 175.3 — BÀI 8 THEO SGK (TRANG 34–38)
+
+1. Sao lưu JSON cả hai chế độ và thư mục hiện tại. Không xóa dữ liệu trong trình duyệt.
+2. Nếu dùng bản vá: chép adaptive-bank.js, adaptive-learning.js, script.js vào thư mục ứng dụng cũ; riêng tệp lưu trữ 18 câu không cần thay thế.
+3. Khởi động Live Server rồi nhấn Ctrl+Shift+R. Giao diện phải hiển thị BƯỚC 175.3 và 30 câu.
+4. Dữ liệu của 175.2.2 vẫn ở khóa localStorage cũ, KHÔNG tự chép sang ngân hàng 30 câu mới. Chọn nút Sao lưu kết quả bản 175.2.2 để tải JSON cũ.
+5. Dữ liệu 175.3 dùng khóa mới để không trộn kết quả bài 6 câu với bài 10 câu. Chưa được xác nhận kiểm duyệt mặc định; giáo viên đọc và xác nhận lại 30 câu.
+6. Giữ chế độ KIỂM THỬ, thử 10 câu đầu vào -> 4 câu thích ứng từ hai kỹ năng ưu tiên -> 10 câu đánh giá lại. Chấm 5 tiêu chí thực hành (tổng 10 điểm).
+7. Thực nghiệm chính thức chỉ bắt đầu sau khi kiểm duyệt câu hỏi và kiểm tra hai bài thực hành tương đương, có đầy đủ bài đầu vào.
+8. AI hiện giúp tạo lời nhắc không kèm dữ liệu cá nhân; CHƯA có API AI trực tiếp, không mô tả sai thành AI tự chẩn đoán.
+9. Không chạy SQL; không đổi Supabase; các phân hệ quản lý học sinh và trò chơi giữ nguyên.
+
+NỘI DUNG SGK: chọn văn bản trước khi định dạng; Font và Font Size; B/I/U; Font Color; Bullets và None; mở/lưu bài trình chiếu.

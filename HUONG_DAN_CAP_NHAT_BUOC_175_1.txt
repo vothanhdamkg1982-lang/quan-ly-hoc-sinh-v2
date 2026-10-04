@@ -1,0 +1,30 @@
+BƯỚC 175.1 — BỔ SUNG GIAO DIỆN XEM ĐỦ 18 CÂU HỎI
+Ngày: 03/10/2026 | Dùng với bản 175.0, không cần chạy SQL.
+
+A. NẾU ĐÃ CÀI WEB APP BƯỚC 175.0 TRONG VS CODE
+1. Tạo bản sao/sao lưu thư mục dự án trước khi cập nhật.
+2. Tải BAN_VA_BUOC_175_1_XEM_18_CAU.zip rồi giải nén.
+3. Mở thư mục quan-ly-hoc-sinh-v2 nằm TRONG gói cập nhật; sao chép các tệp sau vào thư mục quan-ly-hoc-sinh-v2 đang chạy trong VS Code, chọn ghi đè:
+   - adaptive-learning.js
+   - script.js
+   - style.css
+   - index.html
+   - tests/test_adaptive.mjs (nếu đang sử dụng bộ kiểm thử)
+   - HUONG_DAN_CAP_NHAT_BUOC_175_1.txt
+   - XEM_TRUOC_NGAN_HANG_18_CAU.html (tệp tra cứu độc lập)
+4. KHÔNG xóa thư mục gốc, KHÔNG chép đè adaptive-bank.js (18 câu hỏi hiện có giữ nguyên), KHÔNG chạy SQL.
+5. Đóng tab phần mềm nếu cần; mở lại bằng Live Server; nhấn Ctrl+Shift+R (làm mới và bỏ bộ nhớ đệm).
+6. Trong Học tập → Học tập thích ứng AI, tìm liên kết “Xem đầy đủ 18 câu hỏi và đáp án ↓”.
+7. Trong vùng Kiểm duyệt ngân hàng câu hỏi, mở lần lượt các nhóm: I Đầu vào, II Luyện tập, III Đánh giá lại. Xem cả câu hỏi, A–D, đáp án, giải thích và kỹ năng, sau đó mới nhấn Xác nhận.
+
+B. NẾU CÀI LẠI TỪ ĐẦU
+Dùng QUAN_LY_HOC_SINH_V2_BUOC_175_1_XEM_18_CAU.zip (bộ mã nguồn đầy đủ), giải nén và chạy Live Server giống bản 175.0.
+
+C. NẾU CHƯA MUỐN CẬP NHẬT
+Mở tệp XEM_TRUOC_NGAN_HANG_18_CAU.html trong trình duyệt để xem đủ 18 câu độc lập.
+
+LƯU Ý
+- Chức năng xem đáp án chỉ hiển thị cho tài khoản có quyền chỉnh sửa, không xuất hiện cho tài khoản chỉ xem.
+- Câu hỏi là BẢN MẪU cần đối chiếu SGK, PPCT và phân phối chương trình trước thực nghiệm.
+- Dữ liệu thí điểm trên localStorage của bản 175.0 không bị sửa/ghi đè bởi mã nguồn bản 175.1 khi vẫn dùng cùng tên miền, trình duyệt và tài khoản; tuy nhiên phải sao lưu JSON trước khi cập nhật.
+- Bản vá không yêu cầu SQL, không thay bảng Supabase và không thay logic điểm/nhận xét chính thức.

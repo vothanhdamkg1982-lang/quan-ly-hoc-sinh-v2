@@ -1,0 +1,34 @@
+BƯỚC 175.2.2 – SỬA TRUNG BÌNH TRANG TONG_HOP KHI XUẤT EXCEL
+Ngày: 03/10/2026
+
+1. VẤN ĐỀ ĐÃ KHẮC PHỤC
+- Bước 175.2.1 đã sửa lỗi #VALUE! ở Ket_qua/Ky_nang nhưng ba ô điểm trung bình
+  đầu vào, sau học, chênh lệch của Tong_hop có thể hiển thị sai thành 0.0.
+- Bản 175.2.2 thay công thức SUMPRODUCT mảng bằng hai cột tính tỷ lệ ghép
+  (O, P) theo từng học sinh có đủ cả bài đầu vào và bài sau học.
+- Tong_hop lấy AVERAGE từ các cột phụ; không tính học sinh thiếu một lần
+  đánh giá. Điểm 0 hợp lệ vẫn được tính, không bị loại vì giá trị bằng 0.
+- Giá trị tổng hợp tại thời điểm xuất cũng được lưu sẵn trong tệp Excel để
+  các phần mềm xem Excel không tự tính lại công thức vẫn hiển thị đúng.
+
+2. CÁCH CẬP NHẬT BẢN VÁ
+- Sao lưu dữ liệu JSON từ Web App và sao lưu thư mục dự án đang chạy.
+- Giải nén bản vá 175.2.2; chép adaptive-learning.js vào thư mục gốc
+  quan-ly-hoc-sinh-v2, ghi đè tệp cùng tên.
+- Không cần thay script.js, index.html, adaptive-bank.js hoặc chạy SQL.
+- Mở Live Server, nhấn Ctrl + Shift + R, nhìn tiêu đề BƯỚC 175.2.2.
+- Giữ chế độ KIỂM THỬ, nhấn Xuất Excel .xlsx để tạo tệp MỚI.
+
+3. KẾT QUẢ MONG ĐỢI VỚI MỘT HỒ SƠ THỬ 5/6 VÀ 6/6
+Ket_qua: đầu vào 5/6; sau học 6/6; chênh lệch +16,7 điểm %.
+Tong_hop: số học sinh đủ trước–sau = 1;
+          điểm đầu vào = 83,3%; sau học = 100,0%; chênh lệch = 16,7 điểm %.
+Ky_nang: ba dòng của học sinh có kết quả như cũ, các dòng chưa có dữ liệu để trống.
+Ket_qua O/P: hai cột mới chứa tỷ lệ của hồ sơ đã có đủ cặp trước–sau.
+
+4. LƯU Ý
+- Để kiểm tra thống kê, chỉ dùng dữ liệu KIỂM THỬ ở bước này.
+- Không đổi điểm, hồ sơ hay dữ liệu Supabase; không cần làm lại bài đã thực hiện.
+- Tệp Excel tải ở bản cũ không tự thay đổi; phải xuất tệp mới.
+- Chức năng đã qua kiểm thử logic và cấu trúc mã, cần mở Excel thực tế trên
+  máy thầy để xác nhận trước khi dùng báo cáo chính thức.
