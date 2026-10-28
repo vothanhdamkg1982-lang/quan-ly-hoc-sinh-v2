@@ -412,6 +412,7 @@ function sanitizeMillionaireStateForStorage() {
         started: !!MILLIONAIRE_STATE.started,
         ended: !!MILLIONAIRE_STATE.ended,
         level: Number(MILLIONAIRE_STATE.level) || 0,
+        correctCount: Number(MILLIONAIRE_STATE.correctCount) || 0,
         locked: !!MILLIONAIRE_STATE.locked,
         questions: Array.isArray(MILLIONAIRE_STATE.questions)
             ? MILLIONAIRE_STATE.questions.map(q => ({
@@ -482,6 +483,7 @@ function restoreMillionaireStateFromStorage() {
         MILLIONAIRE_STATE.started = !!saved.started;
         MILLIONAIRE_STATE.ended = !!saved.ended;
         MILLIONAIRE_STATE.level = Math.max(0, Number(saved.level) || 0);
+        MILLIONAIRE_STATE.correctCount = Math.max(0, Number(saved.correctCount ?? saved.level) || 0);
         MILLIONAIRE_STATE.locked = !!saved.locked;
         MILLIONAIRE_STATE.questions = Array.isArray(saved.questions)
             ? saved.questions.map(q => ({ ...q, a: Array.isArray(q.a) ? [...q.a] : [] }))
@@ -7745,7 +7747,7 @@ function renderMillionaire() {
                 <div class="millionaire-play-mode-box">
                     <div class="millionaire-play-mode-title"><i class="fas fa-gamepad"></i> Luật chơi</div>
                     <label><input type="radio" name="millionairePlayMode" value="stop_on_wrong" ${state.playMode === 'stop_on_wrong' ? 'checked' : ''} onchange="millionaireSetPlayMode(this.value)"><span><strong>1. Sai là dừng</strong><small>Chọn sai → kết thúc lượt chơi.</small></span></label>
-                    <label><input type="radio" name="millionairePlayMode" value="continue_on_wrong" ${state.playMode === 'continue_on_wrong' ? 'checked' : ''} onchange="millionaireSetPlayMode(this.value)"><span><strong>2. Sai vẫn tiếp tục</strong><small>Chọn sai → báo sai → chuyển sang câu tiếp theo.</small></span></label>
+                    <label><input type="radio" name="millionairePlayMode" value="continue_on_wrong" ${state.playMode === 'continue_on_wrong' ? 'checked' : ''} onchange="millionaireSetPlayMode(this.value)"><span><strong>2. Sai vẫn tiếp tục</strong><small>Chọn sai → báo sai → chờ giáo viên bấm Tiếp theo.</small></span></label>
                     <label><input type="radio" name="millionairePlayMode" value="retry_until_correct" ${state.playMode === 'retry_until_correct' ? 'checked' : ''} onchange="millionaireSetPlayMode(this.value)"><span><strong>3. Phải chọn đúng mới qua câu</strong><small>Chọn sai → ở nguyên câu và chọn lại đến khi đúng.</small></span></label>
                 </div>
                 <div class="millionaire-mc-settings">
@@ -7844,7 +7846,7 @@ function renderMillionaire() {
                         // đánh dấu phương án vừa chọn là sai; tuyệt đối không làm lộ đáp án đúng
                         // trước khi học sinh được quyền chọn lại.
                         const retryWrongPhase = state.playMode === 'retry_until_correct' && state.phase === 'wrong';
-                        const revealResult = ['correct','wrong','ended','finished','winner'].includes(state.phase) && !retryWrongPhase;
+                        const revealResult = ['correct','wrong','timeout','ended','finished','winner'].includes(state.phase) && !retryWrongPhase;
                         const isCorrectReveal = revealResult && idx === question.c;
                         const isWrongReveal = (retryWrongPhase || revealResult) && selected && idx !== question.c;
                         const isSuspenseSelected = state.phase === 'locked' && selected;
@@ -7874,6 +7876,16 @@ function renderMillionaire() {
                         </div>
                     </div>` : ''}
                 <div class="millionaire-message">${escapeHtml(state.message)}</div>
+                ${['correct','wrong','timeout'].includes(state.phase) ? `
+                    <div class="millionaire-teacher-next-wrap">
+                        <span class="millionaire-teacher-pause"><i class="fas fa-pause-circle"></i> Đã dừng tại câu ${state.level+1}. Chỉ giáo viên mới chuyển bước.</span>
+                        <button type="button" class="btn btn-primary millionaire-teacher-next" onclick="millionaireAdvanceQuestion()">
+                            <i class="fas fa-arrow-right"></i>
+                            ${state.phase!=='correct' && state.playMode==='retry_until_correct' ? 'Thử lại câu này' :
+                              state.phase!=='correct' && state.playMode==='stop_on_wrong' ? 'Xem kết quả lượt chơi' :
+                              state.level+1>=state.questions.length ? 'Xem kết quả cuối cùng' : 'Tiếp theo → Câu '+(state.level+2)}
+                        </button>
+                    </div>` : ''}
                 ${renderMillionaireAudience()}
             </div>
         `;
@@ -7995,23 +8007,15 @@ function millionaireTimerBeep(kind='tick'){if(!MILLIONAIRE_STATE.timerEnabled||!
 function millionaireStopTimer(){if(MILLIONAIRE_STATE.timerIntervalId){clearInterval(MILLIONAIRE_STATE.timerIntervalId);MILLIONAIRE_STATE.timerIntervalId=null}}
 function millionaireStartTimer(reset=true){millionaireStopTimer();const s=MILLIONAIRE_STATE;if(!s.timerEnabled||!s.started||s.ended)return;if(reset)s.timerRemaining=millionaireTimerTotalSeconds();s.timerIntervalId=setInterval(()=>{if(s.locked||s.ended||!s.started)return;s.timerRemaining=Math.max(0,s.timerRemaining-1);const r=s.timerRemaining;if(r>0&&r<=10)millionaireTimerBeep(r<=5?'urgent':'tick');const el=document.getElementById('millionaireTimerDisplay');if(el){el.textContent=millionaireFormatTimer(r);el.classList.toggle('urgent',r<=10);el.classList.toggle('critical',r<=5)}if(r<=0){millionaireStopTimer();millionaireTimerBeep('timeout');millionaireHandleTimeout()}},1000)}
 function millionaireHandleTimeout(){
-    const s=MILLIONAIRE_STATE;
-    if(!s.started||s.ended)return;
-    const total=s.questions.length;
-    millionaireRecordAnswer(getMillionaireCurrentQuestion(),null,'timeout');
-    stopMillionaireThinking();s.locked=true;s.phase='timeout';s.message='Hết thời gian!';millionaireMCAnnounce('Hết thời gian trả lời.');refreshMillionaire();
-    if(s.playMode==='continue_on_wrong'){
-        setTimeout(()=>{
-            if(s.level>=total-1){s.level=total;s.ended=true;s.phase='finished';s.message=`Hết thời gian. Đã hoàn thành ${total} câu hỏi.`;refreshMillionaire();return}
-            s.level++;s.locked=false;s.selectedIndex=null;s.hiddenAnswers=[];s.audienceResult=null;s.wrongAttempts=[];s.phase='question';s.message=`Hết thời gian. Tiếp tục câu ${s.level+1}.`;millionaireSound('question');refreshMillionaire();millionaireMCPresentCurrentQuestion()
-        },1000);return
-    }
-    if(s.playMode==='retry_until_correct'){
-        setTimeout(()=>{s.locked=false;s.selectedIndex=null;s.phase='question';s.message='Hết thời gian. Hãy tiếp tục chọn đến khi đúng.';refreshMillionaire()},900);return
-    }
-    setTimeout(()=>{
-        const safe=s.level>=10?10:(s.level>=5?5:0);s.level=Math.min(safe,total);s.ended=true;s.phase='ended';s.message=safe?`Hết thời gian. Bạn bảo toàn mốc câu ${Math.min(safe,total)}.`:'Hết thời gian. Lượt chơi kết thúc.';refreshMillionaire()
-    },900)
+    const state = MILLIONAIRE_STATE;
+    if (!state.started || state.ended || state.locked) return;
+    millionaireRecordAnswer(getMillionaireCurrentQuestion(), null, 'timeout');
+    millionaireStopTimer(); stopMillionaireThinking();
+    state.locked = true;
+    state.phase = 'timeout';
+    state.message = 'Hết thời gian! Giáo viên bấm Tiếp theo để tiếp tục.';
+    millionaireMCAnnounce('Hết thời gian trả lời.');
+    refreshMillionaire();
 }
 
 function millionaireSetPlayMode(mode) {
@@ -8142,6 +8146,87 @@ function millionaireCancelAnswer(){
     millionaireStartThinking(180); millionaireStartTimer(false);
 }
 
+// Giữ nguyên màn hình kết quả cho đến khi giáo viên chủ động bấm Tiếp theo.
+function millionaireAdvanceQuestion() {
+    const state = MILLIONAIRE_STATE;
+    if (!state.started || state.ended || !state.locked ||
+        !['correct', 'wrong', 'timeout'].includes(state.phase)) return;
+    const phase = state.phase;
+    const mode = state.playMode;
+    const answeredLevel = state.level + 1;
+    const total = state.questions.length;
+    millionaireMCStop();
+    stopMillionaireThinking();
+    millionaireStopTimer();
+
+    if (phase !== 'correct' && mode === 'retry_until_correct') {
+        // Luật phải đúng mới qua câu: nút này cho phép thử lại, không nhảy câu.
+        state.locked = false;
+        state.selectedIndex = null;
+        state.phase = 'question';
+        state.message = 'Hãy chọn đáp án khác để tiếp tục.';
+        refreshMillionaire();
+        millionaireStartThinking(180);
+        millionaireStartTimer(true);
+        return;
+    }
+    if (phase !== 'correct' && mode === 'stop_on_wrong') {
+        const safe = state.level >= 10 ? 10 : (state.level >= 5 ? 5 : 0);
+        state.level = Math.min(safe, total);
+        state.ended = true;
+        state.phase = 'ended';
+        state.message = safe
+            ? `Lượt chơi kết thúc. Bạn đã trả lời đúng ${state.correctCount}/${total} câu và bảo toàn mốc câu ${safe}.`
+            : `Lượt chơi kết thúc. Bạn đã trả lời đúng ${state.correctCount}/${total} câu.`;
+        refreshMillionaire();
+        millionaireMCAnnounce(millionaireWrongEndingMCText(safe, state.correctCount, total));
+        return;
+    }
+    if (answeredLevel >= total) {
+        state.level = total;
+        state.ended = true;
+        state.phase = phase === 'correct' ? 'winner' : 'finished';
+        state.message = phase === 'correct'
+            ? `Bạn đã hoàn thành ${total} câu hỏi!`
+            : `Đã đi hết ${total} câu hỏi của lượt chơi.`;
+        refreshMillionaire();
+        if (phase === 'correct') {
+            millionaireSound('winner');
+            millionaireShowCelebration({
+                icon: 'fa-trophy', kicker: total >= 15 ? 'CHINH PHỤC MỐC 15' : 'HOÀN THÀNH THỬ THÁCH',
+                title: 'XUẤT SẮC!',
+                message: total >= 15 ? 'Bạn đã vượt qua toàn bộ 15 câu hỏi.' : `Bạn đã trả lời đúng toàn bộ ${total} câu hỏi của bài học.`,
+                cheque: millionairePrizeAtLevel(total), winner: true, duration: 4600
+            });
+            millionaireMCAnnounce(millionaireWinnerMCText(total));
+        } else {
+            millionaireMCAnnounce(`Bạn đã đi hết ${total} câu hỏi của lượt chơi. Cảm ơn bạn đã tham gia!`);
+        }
+        return;
+    }
+    state.level++;
+    state.locked = false;
+    state.selectedIndex = null;
+    state.hiddenAnswers = [];
+    state.audienceResult = null;
+    state.wrongAttempts = [];
+    state.phase = 'question';
+    state.message = `Câu ${state.level + 1}/${total}. Hãy chọn đáp án đúng.`;
+    const isMilestone = phase === 'correct' && [5,10].includes(answeredLevel);
+    if (isMilestone) {
+        refreshMillionaire();
+        millionaireCelebrateMilestone(answeredLevel, () => {
+            if (state.started && !state.ended && state.level === answeredLevel && state.phase === 'question') {
+                millionaireMCPresentCurrentQuestion({ clear: true });
+            }
+        });
+    } else {
+        millionaireSound('question');
+        refreshMillionaire();
+        millionaireMCPresentCurrentQuestion();
+    }
+}
+
 function millionaireResolveAnswer(index) {
     const state = MILLIONAIRE_STATE;
     const question = getMillionaireCurrentQuestion();
@@ -8150,156 +8235,43 @@ function millionaireResolveAnswer(index) {
     if (state.playMode === 'retry_until_correct' && state.wrongAttempts.includes(index)) return;
 
     state.selectedIndex = index;
-    millionaireStopTimer();
-    stopMillionaireThinking();
-    millionaireMCStop();
+    millionaireStopTimer(); stopMillionaireThinking(); millionaireMCStop();
     state.locked = true;
     state.phase = 'locked';
     state.message = `Đã khóa đáp án ${['A','B','C','D'][index]}. Đang chờ công bố kết quả...`;
     millionaireSound('lock');
     refreshMillionaire();
-    // BƯỚC 159.4: tạo khoảng suspense ngắn sau khi khóa đáp án.
     setTimeout(() => {
         if (state.started && !state.ended && state.phase === 'locked' && state.selectedIndex === index) {
             millionaireSound('suspense');
         }
     }, 260);
-
     setTimeout(() => {
-        if (index === question.c) {
-            millionaireRecordAnswer(question,index,'correct');
+        if (!state.started || state.ended || state.phase !== 'locked' || state.selectedIndex !== index ||
+            state.questions[state.level] !== question) return;
+        const isCorrect = index === question.c;
+        millionaireRecordAnswer(question, index, isCorrect ? 'correct' : 'wrong');
+        if (isCorrect) {
             state.correctCount = Math.min(state.questions.length, (Number(state.correctCount) || 0) + 1);
             state.phase = 'correct';
-            state.message = 'Chính xác!';
             state.wrongAttempts = [];
+            state.message = 'Chính xác! Chờ giáo viên bấm Tiếp theo.';
             millionaireSound('correct');
             millionaireMCAnnounce('Chính xác! Xin chúc mừng bạn.');
-            refreshMillionaire();
-
-            setTimeout(() => {
-                const answeredLevel = state.level + 1;
-                const totalQuestions = state.questions.length;
-                if (answeredLevel >= totalQuestions) {
-                    state.level = totalQuestions;
-                    state.ended = true;
-                    stopMillionaireThinking();
-                    state.phase = 'winner';
-                    state.message = `Bạn đã hoàn thành ${totalQuestions} câu hỏi!`;
-                    millionaireSound('winner');
-                    refreshMillionaire();
-                    millionaireShowCelebration({
-                        icon: 'fa-trophy',
-                        kicker: totalQuestions >= 15 ? 'CHINH PHỤC MỐC 15' : 'HOÀN THÀNH THỬ THÁCH',
-                        title: 'XUẤT SẮC!',
-                        message: totalQuestions >= 15 ? 'Bạn đã vượt qua toàn bộ 15 câu hỏi.' : `Bạn đã trả lời đúng toàn bộ ${totalQuestions} câu hỏi của bài học.`,
-                        cheque: totalQuestions >= 15 ? millionairePrizeAtLevel(15) : millionairePrizeAtLevel(totalQuestions),
-                        winner: true,
-                        duration: 4600
-                    });
-                    millionaireMCAnnounce(millionaireWinnerMCText(totalQuestions));
-                    return;
-                }
-                state.level++;
-                state.locked = false;
-                state.selectedIndex = null;
-                state.hiddenAnswers = [];
-                state.audienceResult = null;
-                state.wrongAttempts = [];
-                state.phase = 'question';
-                state.message = `Chính xác! Tiếp tục câu ${state.level + 1}.`;
-                const isMilestone = [5,10].includes(answeredLevel);
-                if (isMilestone) {
-                    refreshMillionaire();
-                    millionaireCelebrateMilestone(answeredLevel, () => {
-                        if (state.started && !state.ended && state.level === answeredLevel) {
-                            millionaireMCPresentCurrentQuestion({ clear: true });
-                        }
-                    });
-                } else {
-                    millionaireSound('question');
-                    refreshMillionaire();
-                    millionaireMCPresentCurrentQuestion();
-                }
-            }, 850);
-            return;
-        }
-
-        millionaireRecordAnswer(question,index,'wrong');
-        stopMillionaireThinking();
-        state.phase = 'wrong';
-        millionaireSound('wrong');
-
-        if (state.playMode === 'continue_on_wrong') {
-            state.message = `Chưa đúng. Đáp án đúng là ${['A','B','C','D'][question.c]}.`;
-            millionaireMCAnnounce(`Rất tiếc, đáp án chưa chính xác. Đáp án đúng là ${['A','B','C','D'][question.c]}: ${question.a[question.c]}.`);
-            refreshMillionaire();
-            setTimeout(() => {
-                const totalQuestions = state.questions.length;
-                if (state.level >= totalQuestions - 1) {
-                    state.level = totalQuestions;
-                    state.ended = true;
-                    state.phase = 'finished';
-                    state.message = `Đã hoàn thành ${totalQuestions} câu hỏi.`;
-                    refreshMillionaire();
-                    millionaireMCAnnounce(`Bạn đã đi hết ${totalQuestions} câu hỏi của lượt chơi. Cảm ơn bạn đã tham gia. Hãy xem lại những câu chưa chính xác và thử sức thêm một lần nữa nhé!`);
-                    return;
-                }
-                state.level++;
-                state.locked = false;
-                state.selectedIndex = null;
-                state.hiddenAnswers = [];
-                state.audienceResult = null;
-                state.wrongAttempts = [];
-                state.phase = 'question';
-                state.message = `Tiếp tục câu ${state.level + 1}.`;
-                millionaireSound('question');
-                refreshMillionaire();
-                millionaireMCPresentCurrentQuestion();
-            }, 1200);
-            return;
-        }
-
-        if (state.playMode === 'retry_until_correct') {
-            if (!state.wrongAttempts.includes(index)) state.wrongAttempts.push(index);
-            state.message = 'Chưa đúng. Hãy chọn lại đáp án khác.';
-            millionaireMCAnnounce('Rất tiếc, đáp án chưa chính xác. Bạn hãy suy nghĩ và chọn lại một đáp án khác.');
-            refreshMillionaire();
-            setTimeout(() => {
-                state.locked = false;
-                state.selectedIndex = null;
-                state.phase = 'question';
-                state.message = 'Hãy chọn lại. Chỉ khi đúng mới chuyển sang câu tiếp theo.';
-                refreshMillionaire();
-                millionaireStartThinking(250);
-                millionaireStartTimer(true);
-            }, 900);
-            return;
-        }
-
-        state.message = 'Rất tiếc, đáp án chưa đúng.';
-        millionaireMCAnnounce(`Rất tiếc, đáp án chưa chính xác. Đáp án đúng là ${['A','B','C','D'][question.c]}: ${question.a[question.c]}.`);
-        refreshMillionaire();
-        setTimeout(() => {
-            const safeLevel = state.level >= 10 ? 10 : (state.level >= 5 ? 5 : 0);
-            state.level = safeLevel;
-            state.ended = true;
-            state.phase = 'ended';
-            state.message = safeLevel
-                ? `Rất tiếc, đáp án chưa đúng. Bạn đã trả lời đúng ${state.correctCount}/${state.questions.length} câu và bảo toàn mốc câu ${safeLevel}.`
-                : `Rất tiếc, đáp án chưa đúng. Bạn đã trả lời đúng ${state.correctCount}/${state.questions.length} câu.`;
-            refreshMillionaire();
-            if (safeLevel) {
-                millionaireShowCelebration({
-                    icon: 'fa-file-signature',
-                    kicker: `BẢO TOÀN MỐC ${safeLevel}`,
-                    title: 'CẢM ƠN BẠN ĐÃ THAM GIA',
-                    message: 'Bạn đã giữ được thành tích ở mốc an toàn.',
-                    cheque: millionairePrizeAtLevel(safeLevel),
-                    duration: 3900
-                });
+        } else {
+            if (state.playMode === 'retry_until_correct' && !state.wrongAttempts.includes(index)) {
+                state.wrongAttempts.push(index);
             }
-            millionaireMCAnnounce(millionaireWrongEndingMCText(safeLevel, state.correctCount, state.questions.length));
-        }, 1000);
+            state.phase = 'wrong';
+            state.message = state.playMode === 'retry_until_correct'
+                ? 'Chưa đúng! Giáo viên bấm Thử lại để học sinh chọn đáp án khác.'
+                : `Chưa đúng. Đáp án đúng là ${['A','B','C','D'][question.c]}. Chờ giáo viên bấm Tiếp theo.`;
+            millionaireSound('wrong');
+            millionaireMCAnnounce(state.playMode === 'retry_until_correct'
+                ? 'Chưa chính xác. Hãy suy nghĩ và thử lại.'
+                : `Rất tiếc, đáp án đúng là ${['A','B','C','D'][question.c]}: ${question.a[question.c]}.`);
+        }
+        refreshMillionaire();
     }, 1750);
 }
 
@@ -8496,6 +8468,7 @@ window.millionaireSelectAllPlayQuestions = millionaireSelectAllPlayQuestions;
 window.millionaireStart = millionaireStart;
 window.millionaireRestart = millionaireRestart;
 window.millionaireChooseAnswer = millionaireChooseAnswer;
+window.millionaireAdvanceQuestion = millionaireAdvanceQuestion;
 window.millionaireConfirmAnswer = millionaireConfirmAnswer;
 window.millionaireCancelAnswer = millionaireCancelAnswer;
 window.millionaireUseFifty = millionaireUseFifty;
@@ -8706,6 +8679,28 @@ function imageCallerStudentKey(student) {
 // với ngày đang dùng tại module Điểm danh và Vòng quay.
 const IMAGE_CALLER_ABSENT_STATUSES = new Set(['Vắng', 'Phép', 'Không phép']);
 
+// Dùng ngày theo giờ máy giáo viên (không dùng UTC vì dễ lệch ngày ở Việt Nam).
+function gameAttendanceLocalDate() {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+function gameAttendanceEligibleStudents(allStudents, rows) {
+    const absentIds = new Set((rows || [])
+        .filter(row => IMAGE_CALLER_ABSENT_STATUSES.has(String(row.status || '').trim()))
+        .map(row => String(row.student_id || '').trim()).filter(Boolean));
+    return allStudents.filter(student => !absentIds.has(String(student.db_uuid || '').trim()));
+}
+async function gameFetchAttendanceStudents(classId) {
+    const day = gameAttendanceLocalDate();
+    const { data, error } = await supabase.from('app3_attendance')
+        .select('student_id,status').eq('class_id', classId).eq('attendance_date', day);
+    if (error) throw error;
+    const allStudents = getImageCallerStudents(classId);
+    const eligible = gameAttendanceEligibleStudents(allStudents, data);
+    return { day, eligible, absentCount: allStudents.length - eligible.length };
+}
+
+
 async function imageCallerSyncAttendanceForClass(classId, { preserveSession = true } = {}) {
     if (!classId || !getImageCallerClasses().some(cls => String(cls.id) === String(classId))) return false;
     const requestId = ++IMAGE_CALLER_STATE.attendanceRequestId;
@@ -8717,24 +8712,12 @@ async function imageCallerSyncAttendanceForClass(classId, { preserveSession = tr
     if (status) status.textContent = 'Đang đối chiếu điểm danh...';
     if (description) description.textContent = 'Đang tải danh sách học sinh có mặt trong ngày.';
 
-    const day = new Date().toISOString().split('T')[0];
     try {
-        const { data, error } = await supabase.from('app3_attendance')
-            .select('student_id,status')
-            .eq('class_id', classId)
-            .eq('attendance_date', day);
-        if (error) throw error;
+        const {day, eligible, absentCount} = await gameFetchAttendanceStudents(classId);
         if (requestId !== IMAGE_CALLER_STATE.attendanceRequestId ||
             String(IMAGE_CALLER_STATE.classId) !== String(classId)) return false;
-
-        const allStudents = getImageCallerStudents(classId);
-        const absentIds = new Set((data || [])
-            .filter(row => IMAGE_CALLER_ABSENT_STATUSES.has(String(row.status || '').trim()))
-            .map(row => String(row.student_id || '').trim())
-            .filter(Boolean));
-        const eligible = allStudents.filter(student => !absentIds.has(String(student.db_uuid || '').trim()));
         IMAGE_CALLER_STATE.students = eligible;
-        IMAGE_CALLER_STATE.absentCount = allStudents.length - eligible.length;
+        IMAGE_CALLER_STATE.absentCount = absentCount;
         IMAGE_CALLER_STATE.attendanceSynced = true;
         IMAGE_CALLER_STATE.attendanceLoading = false;
 
@@ -10479,7 +10462,9 @@ const CALL_ANSWER_STATE = {
     usedQuestionKeys: new Set(), currentQuestion: null, questionAnswered: false, mcIntroduced: false,
     sessionActive: false, timerWasRunning: false, selectedAnswer: null, timedOut: false,
     selectedQuestionKeys: new Set(), selectionConfirmed: false,
-    results: [], sessionId:null, sessionSaved:false
+    results: [], sessionId:null, sessionSaved:false,
+    attendanceRequestId:0, attendanceLoading:false, attendanceSynced:false,
+    attendanceDate:'', absentCount:0
 };
 
 // BƯỚC 157.2: timer + âm thanh đếm ngược + nhạc nền riêng cho Gọi tên + Trả lời.
@@ -10664,7 +10649,74 @@ function callAnswerRenderQuestionPicker(preserve=false){
     stage.innerHTML=`<div id="callAnswerQuestionPicker" style="width:100%"><div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:center;margin-bottom:14px"><div><h3 style="margin:0 0 4px">Chọn câu hỏi cho lượt Gọi tên + Trả lời</h3><div style="opacity:.75">${escapeHtml(CALL_ANSWER_STATE.subject)} - Khối ${escapeHtml(CALL_ANSWER_STATE.grade)} - ${escapeHtml(millionaireLessonSelectionLabel(CALL_ANSWER_STATE.questions, CALL_ANSWER_STATE.topic))}</div></div><strong id="callAnswerSelectedCount"></strong></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn btn-secondary" onclick="callAnswerSelectAllQuestions(true)"><i class="fas fa-check-double"></i> Chọn tất cả</button><button class="btn btn-secondary" onclick="callAnswerSelectAllQuestions(false)"><i class="fas fa-square"></i> Bỏ chọn tất cả</button><button id="callAnswerSaveSelectionBtn" class="btn btn-primary" onclick="callAnswerConfirmQuestionSelection()"><i class="fas fa-save"></i> Lưu bộ câu & Chuẩn bị trò chơi</button></div><div style="overflow:auto;max-height:520px;border:1px solid rgba(148,163,184,.28);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead style="position:sticky;top:0;background:var(--card-bg,#fff);z-index:1"><tr><th>Chọn</th><th>STT</th><th>Câu hỏi</th><th>A</th><th>B</th><th>C</th><th>D</th><th>Đúng</th><th>Ảnh</th><th>Thao tác</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
     stage.querySelectorAll('td,th').forEach(el=>{el.style.borderBottom='1px solid rgba(148,163,184,.18)';el.style.padding='9px 8px';el.style.verticalAlign='top';});callAnswerUpdatePickerSummary();
 }
-function callAnswerConfirmQuestionSelection(){if(!gameLinkWarnUnsaved(CALL_ANSWER_STATE))return;if(!CALL_ANSWER_STATE.selectedQuestionKeys.size){alert('Vui lòng chọn ít nhất 1 câu hỏi.');return;}CALL_ANSWER_STATE.selectionConfirmed=true;CALL_ANSWER_STATE.usedQuestionKeys.clear();CALL_ANSWER_STATE.currentQuestion=null;CALL_ANSWER_STATE.questionAnswered=false;CALL_ANSWER_STATE.students=getImageCallerStudents(CALL_ANSWER_STATE.classId);CALL_ANSWER_STATE.calledKeys.clear();CALL_ANSWER_STATE.winner=null;CALL_ANSWER_STATE.mcIntroduced=false;CALL_ANSWER_STATE.sessionActive=false;CALL_ANSWER_STATE.results=[];CALL_ANSWER_STATE.sessionId=null;CALL_ANSWER_STATE.sessionSaved=false;callAnswerUpdateSummary();callAnswerRenderCallerStage();callAnswerPrepareStudentImages(CALL_ANSWER_STATE.students);}
+// Điểm danh là nguồn xác định học sinh được gọi cho module Gọi tên + Trả lời.
+// Mỗi lượt gọi luôn tải lại dữ liệu; nếu lỗi mạng thì không cho quay.
+async function callAnswerSyncAttendanceForClass(classId, { preserveSession = true } = {}) {
+    if (!classId || !getImageCallerClasses().some(cls => String(cls.id) === String(classId))) return false;
+    const state = CALL_ANSWER_STATE;
+    const requestId = ++state.attendanceRequestId;
+    state.attendanceLoading = true;
+    state.attendanceSynced = false;
+    const statusEl = document.getElementById('callAnswerCallerStatus');
+    const btn = document.getElementById('callAnswerStartBtn');
+    if (statusEl) statusEl.textContent = 'Đang kiểm tra điểm danh...';
+    if (btn) btn.disabled = true;
+    try {
+        const {day, eligible, absentCount} = await gameFetchAttendanceStudents(classId);
+        if (requestId !== state.attendanceRequestId || String(state.classId) !== String(classId)) return false;
+        const keep = preserveSession && (!state.attendanceDate || state.attendanceDate === day);
+        state.students = eligible;
+        state.absentCount = absentCount;
+        state.attendanceDate = day;
+        state.attendanceLoading = false;
+        state.attendanceSynced = true;
+        if (keep) {
+            const allowed = new Set(eligible.map(imageCallerStudentKey));
+            state.calledKeys = new Set([...state.calledKeys].filter(key => allowed.has(key)));
+            if (!state.currentQuestion && state.winner && !allowed.has(imageCallerStudentKey(state.winner))) state.winner = null;
+        } else {
+            state.calledKeys.clear();
+            if (!state.currentQuestion) state.winner = null;
+        }
+        callAnswerUpdateSummary();
+        if (state.selectionConfirmed && !state.isSpinning && !state.currentQuestion) {
+            callAnswerRenderCallerStage();
+            callAnswerPrepareStudentImages(eligible);
+        }
+        const info = document.getElementById('callAnswerAttendanceInfo');
+        if (info) info.textContent = `${eligible.length} có thể gọi · ${absentCount} vắng/phép · Điểm danh ${day}`;
+        if (!eligible.length) showToast('Không có học sinh có mặt để gọi trong lớp đã chọn.','warning');
+        return true;
+    } catch (error) {
+        if (requestId !== state.attendanceRequestId) return false;
+        state.attendanceLoading = false;
+        state.attendanceSynced = false;
+        state.students = []; // Không gọi bừa khi không kiểm tra được điểm danh.
+        console.warn('[Gọi tên + Trả lời] Không tải được điểm danh:', error);
+        callAnswerUpdateSummary();
+        if (state.selectionConfirmed && !state.currentQuestion) callAnswerRenderCallerStage();
+        showToast('Không tải được điểm danh: ' + (error?.message || String(error)), 'error');
+        return false;
+    }
+}
+
+async function callAnswerConfirmQuestionSelection(){
+    if(!gameLinkWarnUnsaved(CALL_ANSWER_STATE)) return;
+    if(!CALL_ANSWER_STATE.selectedQuestionKeys.size){alert('Vui lòng chọn ít nhất 1 câu hỏi.');return;}
+    CALL_ANSWER_STATE.selectionConfirmed=true;
+    CALL_ANSWER_STATE.usedQuestionKeys.clear();
+    CALL_ANSWER_STATE.currentQuestion=null;
+    CALL_ANSWER_STATE.questionAnswered=false;
+    CALL_ANSWER_STATE.students=[];
+    CALL_ANSWER_STATE.calledKeys.clear();
+    CALL_ANSWER_STATE.winner=null;
+    CALL_ANSWER_STATE.mcIntroduced=false;
+    CALL_ANSWER_STATE.sessionActive=false;
+    CALL_ANSWER_STATE.results=[];CALL_ANSWER_STATE.sessionId=null;CALL_ANSWER_STATE.sessionSaved=false;
+    CALL_ANSWER_STATE.attendanceSynced=false;
+    callAnswerUpdateSummary();callAnswerRenderCallerStage();
+    await callAnswerSyncAttendanceForClass(CALL_ANSWER_STATE.classId, {preserveSession:false});
+}
 
 function callAnswerClearTimers() {
     if (CALL_ANSWER_STATE.motionTimer) clearInterval(CALL_ANSWER_STATE.motionTimer);
@@ -10677,7 +10729,12 @@ function callAnswerClearTimers() {
 function callAnswerResetCaller() {
     callAnswerClearTimers();
     callAnswerTimerStop(); CALL_ANSWER_TIMER.token += 1; CALL_ANSWER_TIMER.remaining = CALL_ANSWER_TIMER.duration;
-    CALL_ANSWER_STATE.students = CALL_ANSWER_STATE.classId ? getImageCallerStudents(CALL_ANSWER_STATE.classId) : [];
+    CALL_ANSWER_STATE.attendanceRequestId++;
+    CALL_ANSWER_STATE.attendanceLoading = false;
+    CALL_ANSWER_STATE.attendanceSynced = false;
+    CALL_ANSWER_STATE.absentCount = 0;
+    CALL_ANSWER_STATE.attendanceDate = '';
+    CALL_ANSWER_STATE.students = [];
     CALL_ANSWER_STATE.calledKeys.clear();
     CALL_ANSWER_STATE.winner = null;
     CALL_ANSWER_STATE.isSpinning = false;
@@ -10693,6 +10750,12 @@ function callAnswerResetCaller() {
     CALL_ANSWER_STATE.results = [];CALL_ANSWER_STATE.sessionId=null;CALL_ANSWER_STATE.sessionSaved=false;
 }
 
+function callAnswerReloadAttendance(){
+    if(CALL_ANSWER_STATE.attendanceLoading || !CALL_ANSWER_STATE.classId || CALL_ANSWER_STATE.isSpinning) return;
+    callAnswerSyncAttendanceForClass(CALL_ANSWER_STATE.classId, {preserveSession:true});
+}
+window.callAnswerReloadAttendance = callAnswerReloadAttendance;
+
 function callAnswerRemainingIndexes() {
     const result = [];
     CALL_ANSWER_STATE.students.forEach((student, index) => {
@@ -10705,8 +10768,11 @@ function callAnswerRenderCallerStage() {
     const stage = document.getElementById('callAnswerGameStage');
     if (!stage) return;
     const students = CALL_ANSWER_STATE.students;
-    if (!students.length) {
-        stage.innerHTML = `<div style="opacity:.65;text-align:center;"><i class="fas fa-gamepad" style="font-size:54px;opacity:.35;"></i><h3>Khu vực Gọi tên + Trả lời</h3><p id="callAnswerReadyText">Chọn đầy đủ Khối, Lớp, Môn học và Bài học để chuẩn bị trò chơi.</p></div>`;
+    if (!CALL_ANSWER_STATE.attendanceSynced || !students.length) {
+        const note = CALL_ANSWER_STATE.attendanceLoading ? 'Đang tải danh sách điểm danh...' :
+            !CALL_ANSWER_STATE.attendanceSynced ? 'Chưa kiểm tra được điểm danh. Không thể gọi học sinh; hãy bấm Tải lại.' :
+            'Không có học sinh có mặt để gọi. Hãy kiểm tra mục Điểm danh.';
+        stage.innerHTML = `<div style="text-align:center;"><i class="fas fa-gamepad" style="font-size:54px;opacity:.35;"></i><h3>Khu vực Gọi tên + Trả lời</h3><p id="callAnswerReadyText">${note}</p><button type="button" class="btn btn-secondary" onclick="callAnswerReloadAttendance()" ${CALL_ANSWER_STATE.attendanceLoading?'disabled':''}>Tải lại điểm danh</button></div>`;
         return;
     }
     stage.innerHTML = `<div id="callAnswerArena" style="position:relative;width:100%;height:430px;overflow:hidden;border-radius:18px;background:rgba(99,102,241,.035);">
@@ -10720,6 +10786,7 @@ function callAnswerRenderCallerStage() {
       <div id="callAnswerCallerStatus" style="font-weight:800;font-size:20px;">Sẵn sàng gọi tên</div>
       <div id="callAnswerCallerName" style="font-weight:900;font-size:30px;margin-top:5px;"></div>
       <div id="callAnswerCallerStats" style="opacity:.7;margin-top:5px;">Đã gọi ${CALL_ANSWER_STATE.calledKeys.size} / ${students.length} • Còn lại ${callAnswerRemainingIndexes().length}</div>
+      <div id="callAnswerAttendanceInfo" style="font-size:13px;opacity:.8;margin-top:5px;">${students.length} có thể gọi · ${CALL_ANSWER_STATE.absentCount} vắng/phép</div>
       <button id="callAnswerStartBtn" type="button" class="btn btn-primary" onclick="callAnswerStartRandom()" style="margin-top:14px;min-width:210px;"><i class="fas fa-play"></i> ${CALL_ANSWER_STATE.calledKeys.size ? 'Gọi học sinh tiếp theo' : 'Bắt đầu gọi tên'}</button>
     </div>`;
     requestAnimationFrame(callAnswerMoveBubbles);
@@ -10769,8 +10836,12 @@ function callAnswerMoveBubbles() {
     });
 }
 
-function callAnswerStartRandom() {
-    if (CALL_ANSWER_STATE.isSpinning) return;
+async function callAnswerStartRandom() {
+    if (CALL_ANSWER_STATE.isSpinning || CALL_ANSWER_STATE.attendanceLoading || !CALL_ANSWER_STATE.selectionConfirmed) return;
+    const classId = CALL_ANSWER_STATE.classId;
+    const synced = await callAnswerSyncAttendanceForClass(classId, {preserveSession:true});
+    if (!synced || classId !== CALL_ANSWER_STATE.classId ||
+        !CALL_ANSWER_STATE.students.length || CALL_ANSWER_STATE.isSpinning) return;
     CALL_ANSWER_STATE.sessionActive = true;
     if (!CALL_ANSWER_MUSIC.running) callAnswerMusicStart();
     const remaining = callAnswerRemainingIndexes();
@@ -10895,13 +10966,13 @@ function callAnswerRenderQuestion(question, student, restoring=false) {
         <div style="display:flex;justify-content:center;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px;"><div id="callAnswerTimer" style="font-size:30px;font-weight:900;transition:.2s;">⏱ 00:30</div><button id="callAnswerMusicBtn" type="button" class="btn btn-secondary" onclick="callAnswerMusicToggle()"><i class="fas fa-volume-up"></i> Nhạc nền</button></div>
         <div style="text-align:center;margin-bottom:18px;">
           <div style="font-size:16px;opacity:.72;">Học sinh đang trả lời</div>
-          <div style="font-size:28px;font-weight:900;margin-top:4px;">${escapeHtml(student.fullName || 'Học sinh')}</div>
+          <div class="call-answer-student-name" style="font-size:28px;font-weight:900;margin-top:4px;">${escapeHtml(student.fullName || 'Học sinh')}</div>
           <div style="margin-top:7px;opacity:.7;">Câu hỏi đã dùng ${used} / ${total} • Còn lại ${Math.max(0,total-used)}</div>
         </div>
         ${imageHtml}
-        <h2 style="text-align:center;margin:14px 0 24px;font-size:28px;">${escapeHtml(String(question.q || 'Câu hỏi'))}</h2>
+        <h2 class="call-answer-question-title" style="text-align:center;margin:14px 0 24px;font-size:28px;">${escapeHtml(String(question.q || 'Câu hỏi'))}</h2>
         <div id="callAnswerOptions" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;">
-          ${['A','B','C','D'].map((letter,index)=>`<button type="button" onclick="callAnswerChooseAnswer(${index}, this)" style="min-height:72px;border:1px solid var(--border-color,#334155);border-radius:14px;padding:16px;display:flex;align-items:center;gap:14px;text-align:left;background:transparent;color:inherit;cursor:pointer;font:inherit;"><strong style="width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:rgba(59,130,246,.12);flex:0 0 auto;">${letter}</strong><span>${escapeHtml(String(answers[index] ?? ''))}</span></button>`).join('')}
+          ${['A','B','C','D'].map((letter,index)=>`<button type="button" class="call-answer-option" onclick="callAnswerChooseAnswer(${index}, this)" style="min-height:72px;border:1px solid var(--border-color,#334155);border-radius:14px;padding:16px;display:flex;align-items:center;gap:14px;text-align:left;background:transparent;color:inherit;cursor:pointer;font:inherit;"><strong style="width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:rgba(59,130,246,.12);flex:0 0 auto;">${letter}</strong><span class="call-answer-option-text">${escapeHtml(String(answers[index] ?? ''))}</span></button>`).join('')}
         </div>
         <div id="callAnswerResult" style="text-align:center;margin-top:18px;"></div>
       </div>`;
@@ -10961,8 +11032,9 @@ function callAnswerNextStudent() {
     CALL_ANSWER_STATE.currentQuestion = null;
     CALL_ANSWER_STATE.questionAnswered = false; CALL_ANSWER_STATE.selectedAnswer = null; CALL_ANSWER_STATE.timedOut = false;
     CALL_ANSWER_STATE.winner = null;
+    CALL_ANSWER_STATE.attendanceSynced = false;
     callAnswerRenderCallerStage();
-    callAnswerPrepareStudentImages(CALL_ANSWER_STATE.students);
+    callAnswerSyncAttendanceForClass(CALL_ANSWER_STATE.classId, {preserveSession:true});
     setTimeout(() => callAnswerMCSpeakSequence(['Tiếp theo.']), 120);
 }
 
@@ -10998,7 +11070,7 @@ function callAnswerUpdateSummary() {
     const studentEl = document.getElementById('callAnswerStudentCount');
     const questionEl = document.getElementById('callAnswerQuestionCount');
     const readyEl = document.getElementById('callAnswerReadyText');
-    const students = CALL_ANSWER_STATE.classId ? getImageCallerStudents(CALL_ANSWER_STATE.classId) : [];
+    const students = CALL_ANSWER_STATE.classId && CALL_ANSWER_STATE.attendanceSynced ? CALL_ANSWER_STATE.students : [];
     const questions = (CALL_ANSWER_STATE.grade && CALL_ANSWER_STATE.subject && CALL_ANSWER_STATE.topic)
         ? (CALL_ANSWER_STATE.selectionConfirmed ? callAnswerFilteredQuestions() : callAnswerAllFilteredQuestions()) : [];
     if (studentEl) studentEl.textContent = String(students.length);
@@ -11009,14 +11081,8 @@ function callAnswerUpdateSummary() {
             : 'Chọn đầy đủ Khối, Lớp, Môn học và Bài học để chuẩn bị trò chơi.';
     }
     const ready = students.length > 0 && questions.length > 0;
-    if (ready && CALL_ANSWER_STATE.selectionConfirmed) {
-        CALL_ANSWER_STATE.students = students;
-        if (!CALL_ANSWER_STATE.isSpinning && CALL_ANSWER_STATE.calledKeys.size === 0) {
-            callAnswerRenderCallerStage();
-            // Nạp ảnh thật ngay khi lớp sẵn sàng, không chờ đến lúc đã chọn người thắng.
-            callAnswerPrepareStudentImages(students);
-        }
-    }
+    // Danh sách gọi đã được lọc theo điểm danh trong callAnswerSyncAttendanceForClass.
+    // Không nạp lại danh sách chưa lọc từ APP_STATE.students ở đây.
 }
 
 function callAnswerHandleGradeChange(value) {
@@ -11095,6 +11161,7 @@ async function initCallAnswer() {
         callAnswerSetOptions(document.getElementById('callAnswerSubjectSelect'),filterGameSubjectNamesByGradeAccess(getMillionaireSubjectsForGrade(CALL_ANSWER_STATE.grade), CALL_ANSWER_STATE.grade, CALL_ANSWER_STATE.classId),'-- Chọn môn học --');
         callAnswerSetOptions(document.getElementById('callAnswerTopicSelect'),millionaireGetLessonOptions(CALL_ANSWER_STATE.questions),'-- Chọn bài học / chủ đề --');
         callAnswerRestoreSession();
+        if (CALL_ANSWER_STATE.classId) callAnswerSyncAttendanceForClass(CALL_ANSWER_STATE.classId, {preserveSession:true});
     } else {
         CALL_ANSWER_STATE.grade='';CALL_ANSWER_STATE.classId='';CALL_ANSWER_STATE.subject='';CALL_ANSWER_STATE.topic='';CALL_ANSWER_STATE.questions=[];callAnswerResetCaller();
         callAnswerSetOptions(document.getElementById('callAnswerClassSelect'), [], '-- Chọn lớp --');
@@ -13784,7 +13851,7 @@ function getAuthorizedAttendanceClass({ className = '', classId = '' } = {}) {
 }
 
 function renderAttendance() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = gameAttendanceLocalDate();
     const attendanceClasses = (hasAssignedScope() ? getAccessibleClassesForSubject('') : (APP_STATE.allClasses?.length ? APP_STATE.allClasses : APP_STATE.classes) || [])
         .filter(c => !!getAuthorizedAttendanceClass({ classId: c.id }));
     const classOptions = attendanceClasses.map((c, i) => `<option value="${escapeHtml(c.name)}" ${i === 0 ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');

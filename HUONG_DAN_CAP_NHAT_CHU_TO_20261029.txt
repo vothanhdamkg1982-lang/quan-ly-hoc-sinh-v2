@@ -1,0 +1,33 @@
+WEB APP QUẢN LÝ HỌC SINH V2 — CHỮ TO CHO 2 TRÒ CHƠI
+Ngày chỉnh sửa: 29/10/2026
+Dựa trên bản QUAN_LY_HOC_SINH_V2_TRO_CHOI_DIEM_DANH_20261028.zip
+
+1. GỌI TÊN + TRẢ LỜI
+- Tăng cỡ chữ tên học sinh được gọi, nội dung câu hỏi, bốn phương án trả lời A/B/C/D.
+- Bố cục 2 cột trên màn hình rộng; xếp 1 cột ở màn hình nhỏ (<= 700 px).
+- Không chỉnh sửa cơ chế gọi tên, đồng bộ điểm danh, tính giờ và kết quả.
+
+2. TRẮC NGHIỆM HÌNH ẢNH (TRẢ LỜI BẰNG HÌNH ẢNH)
+- Tăng cỡ chữ câu hỏi và bốn đáp án, nhãn A/B/C/D.
+- Bảo toàn ảnh câu hỏi, cách chọn đáp án, chấm điểm và chức năng khác.
+- Cỡ chữ tự thích nghi màn hình/thiết bị.
+
+3. CÁC TỆP ĐÃ CHỈNH
+- script.js: bổ sung class CSS riêng cho câu hỏi, tên học sinh, đáp án phần Gọi tên + Trả lời.
+- style.css: thêm quy tắc cỡ chữ lớn cho hai trò chơi, đáp ứng màn hình nhỏ.
+- index.html: đổi chuỗi phiên bản cache của script.js/style.css để nhận cập nhật.
+- Các tệp khác giữ nguyên so với bản 28/10.
+
+4. CẬP NHẬT
+- Sao lưu website hiện tại trước khi thay thế.
+- Có thể chỉ cập nhật 3 tệp index.html, script.js, style.css trong thư mục gốc website.
+- Nếu muốn triển khai đầy đủ, sử dụng toàn bộ nội dung thư mục quan-ly-hoc-sinh-v2.
+- Mở lại trang và tải lại để nhận phiên bản CSS/JS mới.
+- Không cần chạy SQL hoặc thay đổi dữ liệu Supabase.
+
+5. KIỂM TRA
+- Node.js kiểm tra cú pháp script.js: ĐẠT.
+- Hai tệp kiểm thử có sẵn: test_teacher_control_attendance.mjs, test_adaptive_1754.mjs: ĐẠT.
+- Chromium kiểm tra CSS trên màn hình 1366px và 390px: ĐẠT, không tràn ngang trong mẫu thử.
+- Tính toàn vẹn ZIP và đối chiếu file với bản nền: ĐẠT.
+- CHƯA thử đăng nhập và vận hành trực tiếp với dữ liệu học sinh/Supabase thực tế.

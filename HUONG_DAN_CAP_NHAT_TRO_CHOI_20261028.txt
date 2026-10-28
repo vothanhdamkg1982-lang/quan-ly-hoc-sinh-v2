@@ -1,0 +1,34 @@
+WEB APP QUẢN LÝ HỌC SINH V2 – CẬP NHẬT TRÒ CHƠI VÀ ĐIỂM DANH
+Ngày: 28/10/2026
+
+1. AI LÀ TRIỆU PHÚ
+- Chữ câu hỏi và 4 lựa chọn được tăng cỡ, có điều chỉnh cho điện thoại.
+- Trả lời đúng/sai hoặc hết giờ: công bố đáp án và giữ nguyên màn hình.
+- Chỉ khi giáo viên bấm nút ở cuối câu, trò chơi mới chuyển câu hoặc xem kết quả.
+- Giữ nguyên luật: "Sai là dừng", "Sai vẫn tiếp tục", "Phải chọn đúng mới qua câu".
+  + Sai là dừng: bấm "Xem kết quả lượt chơi" mới kết thúc.
+  + Sai vẫn tiếp tục: bấm "Tiếp theo" mới sang câu tiếp.
+  + Phải chọn đúng mới qua câu: bấm "Thử lại câu này" để chọn lại.
+- Giữ trạng thái tạm dừng trong bộ nhớ trình duyệt để hạn chế mất màn hình kết quả khi tải lại.
+
+2. GỌI TÊN HÌNH ẢNH VÀ GỌI TÊN + TRẢ LỜI
+- Cả hai truy vấn bảng app3_attendance cho lớp được chọn và ngày theo giờ địa phương.
+- Không gọi học sinh có trạng thái Vắng, Phép, Không phép. Có mặt, Muộn vẫn được gọi.
+- Trước mỗi lượt gọi đều làm mới trạng thái điểm danh.
+- Nếu không tải được điểm danh, tạm ngưng gọi để tránh gọi nhầm học sinh vắng.
+- Gọi tên + Trả lời có nút "Tải lại điểm danh" khi không có dữ liệu.
+- Không thay đổi cấu trúc bảng hoặc dữ liệu Supabase; không cần chạy SQL mới.
+
+3. CÀI ĐẶT
+- Sao lưu bản đang dùng trước khi thay thế.
+- Triển khai toàn bộ nội dung thư mục quan-ly-hoc-sinh-v2 vào đúng thư mục gốc website.
+- Nếu chỉ cập nhật ba tệp: index.html, script.js, style.css (vì có mã mới và phiên bản chống cache).
+- Mở lại website, chọn Điểm danh, ghi trạng thái Vắng, lưu; sau đó vào các chức năng gọi tên và kiểm tra.
+- Chọn Ai là triệu phú, tạo lượt chơi có >=2 câu và xác nhận sau khi trả lời trò chơi không tự chuyển.
+
+4. KIỂM THỬ TRƯỚC KHI BÀN GIAO
+- Node.js kiểm tra cú pháp JavaScript chính: ĐẠT.
+- 11 phép thử logic/cấu trúc cho các thay đổi mới: ĐẠT, dùng dữ liệu mô phỏng.
+- tests/test_adaptive_1754.mjs: ĐẠT (bài kiểm thử có sẵn).
+- Ba bài kiểm thử thích ứng phiên bản cũ 175/1752/1753: KHÔNG ĐẠT do giả định cũ; không thuộc phạm vi thay đổi lần này.
+- CHƯA kiểm thử với đăng nhập thực tế, quyền Supabase, nhiều máy học sinh và đường truyền trường học.
