@@ -12053,52 +12053,81 @@ function toggleSelectAll() {
 // ============================================================
 // 7. CÁC HÀM XỬ LÝ AVATAR VÀ THÊM/SỬA HỌC SINH (có dùng Supabase)
 // ============================================================
+// 2026-10-29: xử lý ảnh chắc chắn trước khi lưu học sinh mới.
+// Nếu ảnh bị hỏng hoặc không hỗ trợ, không tạo hồ sơ mất ảnh một cách âm thầm.
 function resizeImage(dataUrl, maxWidth = 200, maxHeight = 200, quality = 0.7) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const img = new Image();
-        img.onload = function() {
-            let width = img.width;
-            let height = img.height;
-            if (width > height) {
-                if (width > maxWidth) {
-                    height = Math.round(height * maxWidth / width);
-                    width = maxWidth;
+        img.onerror = () => reject(new Error('Không đọc được ảnh. Hãy thử ảnh JPG hoặc PNG khác.'));
+        img.onload = () => {
+            try {
+                if (!img.width || !img.height) throw new Error('Ảnh không có kích thước hợp lệ.');
+                const ratio = Math.min(1, maxWidth / img.width, maxHeight / img.height);
+                const width = Math.max(1, Math.round(img.width * ratio));
+                const height = Math.max(1, Math.round(img.height * ratio));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('Trình duyệt không hỗ trợ xử lý ảnh.');
+                ctx.drawImage(img, 0, 0, width, height);
+                const resizedDataUrl = canvas.toDataURL('image/jpeg', quality);
+                if (!resizedDataUrl.startsWith('data:image/jpeg;base64,')) {
+                    throw new Error('Không thể chuyển ảnh sang định dạng JPG.');
                 }
-            } else {
-                if (height > maxHeight) {
-                    width = Math.round(width * maxHeight / height);
-                    height = maxHeight;
-                }
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            const resizedDataUrl = canvas.toDataURL('image/jpeg', quality);
-            resolve(resizedDataUrl);
+                resolve(resizedDataUrl);
+            } catch (error) { reject(error); }
         };
         img.src = dataUrl;
     });
 }
 
-function previewAvatar(input) {
-    const preview = document.getElementById('sfAvatarPreview');
-    if (preview) preview.dataset.avatarCleared = 'false';
-    if (input.files && input.files[0]) {
+function readStudentAvatarFile(file) {
+    if (!file) return Promise.resolve(null);
+    return new Promise((resolve, reject) => {
+        if (file.type && !file.type.startsWith('image/')) {
+            reject(new Error('Tệp được chọn không phải ảnh.'));
+            return;
+        }
         const reader = new FileReader();
-        reader.onload = async function(e) {
-            const dataUrl = e.target.result;
-            const resizedUrl = await resizeImage(dataUrl, 200, 200, 0.7);
-            preview.src = resizedUrl;
+        reader.onerror = () => reject(new Error('Không thể đọc tệp ảnh trên máy.'));
+        reader.onabort = () => reject(new Error('Thao tác đọc ảnh đã bị hủy.'));
+        reader.onload = async () => {
+            try { resolve(await resizeImage(String(reader.result || ''), 200, 200, 0.7)); }
+            catch (error) { reject(error); }
         };
-        reader.readAsDataURL(input.files[0]);
+        reader.readAsDataURL(file);
+    });
+}
+
+async function previewAvatar(input) {
+    const preview = document.getElementById('sfAvatarPreview');
+    if (!preview) return;
+    preview.dataset.avatarCleared = 'false';
+    const file = input?.files?.[0];
+    if (!file) return;
+    // Chống việc ảnh cũ tải chậm ghi đè ảnh vừa chọn.
+    const requestId = String((Number(preview.dataset.previewRequest || 0) + 1));
+    preview.dataset.previewRequest = requestId;
+    try {
+        const resized = await readStudentAvatarFile(file);
+        if (preview.dataset.previewRequest === requestId) preview.src = resized;
+    } catch (error) {
+        if (preview.dataset.previewRequest === requestId) {
+            input.value = '';
+            preview.src = DEFAULT_AVATAR;
+            showToast('Không thể tải ảnh: ' + (error?.message || error), 'error');
+        }
     }
 }
 
 function clearAvatar() {
     const preview = document.getElementById('sfAvatarPreview');
-    if (preview) { preview.src = DEFAULT_AVATAR; preview.dataset.avatarCleared = 'true'; }
+    if (preview) {
+        preview.dataset.previewRequest = String(Number(preview.dataset.previewRequest || 0) + 1);
+        preview.src = DEFAULT_AVATAR;
+        preview.dataset.avatarCleared = 'true';
+    }
     const input = document.getElementById('sfAvatarInput');
     if (input) input.value = '';
 }
@@ -12181,31 +12210,23 @@ function getStudentFormData() {
     };
 }
 
-async function addStudentToSupabase(data, avatarFile) {
+async function addStudentToSupabase(data, avatarFile, avatarCleared = false) {
     if (!requireEditPermission('thêm học sinh')) return null;
     const classObj = APP_STATE.classes.find(c => c.name === data.class);
     const classId = classObj ? classObj.id : null;
+    if (!classId) throw new Error('Chưa chọn lớp hợp lệ. Hãy chọn lớp trước khi thêm học sinh.');
 
     const maxCode = APP_STATE.students.reduce((max, s) => {
-        const num = parseInt(s.id.replace('HS', ''));
-        return num > max ? num : max;
+        const match = /^HS(\d+)$/.exec(String(s.id || ''));
+        return match ? Math.max(max, Number(match[1])) : max;
     }, 10000);
     const studentCode = `HS${String(maxCode + 1).padStart(5, '0')}`;
 
-    let avatarUrl = DEFAULT_AVATAR;
-    if (avatarFile) {
-        try {
-            const reader = new FileReader();
-            const base64 = await new Promise((resolve) => {
-                reader.onload = (e) => resolve(e.target.result);
-                reader.readAsDataURL(avatarFile);
-            });
-            const resized = await resizeImage(base64, 200, 200, 0.7);
-            avatarUrl = resized;
-        } catch (err) {
-            console.warn('Lỗi xử lý ảnh:', err);
-        }
-    }
+    // Không lưu ảnh mặc định dưới dạng base64; học sinh không có ảnh sẽ dùng ảnh mặc định ở giao diện.
+    // Chuyển/kiểm tra ảnh TRƯỚC khi INSERT: ảnh lỗi không được tạo hồ sơ thiếu ảnh.
+    const avatarUrl = avatarFile && !avatarCleared
+        ? await readStudentAvatarFile(avatarFile)
+        : null;
 
     const studentData = {
         student_code: studentCode,
@@ -12223,7 +12244,7 @@ async function addStudentToSupabase(data, avatarFile) {
         enrollment_date: data.enrollmentDate || null,
         status: data.status || 'Đang học',
         note: data.note,
-        avatar_url: (avatarCleared && !avatarFile) ? null : avatarUrl
+        avatar_url: avatarUrl
     };
 
     const { data: inserted, error } = await supabase
@@ -12231,31 +12252,30 @@ async function addStudentToSupabase(data, avatarFile) {
         .insert([studentData])
         .select()
         .single();
-
     if (error) throw error;
+    if (!inserted?.id) throw new Error('Supabase chưa trả về mã học sinh vừa tạo. Hãy kiểm tra danh sách trước khi thử thêm lại.');
 
-// Lưu Năng lực + Phẩm chất theo môn đang chọn vào app3_scores
-const subject =
-    APP_STATE.studentSubject ||
-    APP_STATE.subjectCatalog?.[0]?.name ||
-    SUBJECTS[0] ||
-    'Tin học';
+    // Học sinh đã được tạo: nếu lưu đánh giá lỗi, vẫn cập nhật danh sách và báo riêng.
+    // Tuyệt đối không báo "thêm học sinh thất bại" khiến giáo viên bấm lại gây trùng dữ liệu.
+    const subject = APP_STATE.studentSubject || APP_STATE.subjectCatalog?.[0]?.name || SUBJECTS[0] || 'Tin học';
+    let scoreSaveWarning = '';
+    if (data.competence || data.quality) {
+        try {
+            const { error: scoreError } = await supabase.from('app3_scores').upsert({
+                student_id: inserted.id,
+                subject,
+                subject_id: getSubjectId(subject),
+                competence: data.competence || '',
+                quality: data.quality || ''
+            }, { onConflict: 'student_id,subject' });
+            if (scoreError) throw scoreError;
+        } catch (error) {
+            scoreSaveWarning = error?.message || String(error);
+            console.warn('[THÊM HỌC SINH] Đã tạo hồ sơ, nhưng chưa lưu được năng lực/phẩm chất:', scoreSaveWarning);
+        }
+    }
 
-const { error: scoreError } = await supabase
-    .from('app3_scores')
-    .upsert({
-        student_id: inserted.id,
-        subject: subject,
-        subject_id: getSubjectId(subject),
-        competence: data.competence || '',
-        quality: data.quality || ''
-    }, {
-        onConflict: 'student_id,subject'
-    });
-
-if (scoreError) throw scoreError;
-
-const newStudent = {
+    const newStudent = {
         ...inserted,
         db_uuid: inserted.id,
         id: inserted.student_code,
@@ -12268,58 +12288,63 @@ const newStudent = {
         fatherName: inserted.father_name,
         motherName: inserted.mother_name,
         parentPhone: inserted.parent_phone,
-        competence: inserted.competence,
-        quality: inserted.quality,
+        competence: data.competence || '',
+        quality: data.quality || '',
         enrollmentDate: inserted.enrollment_date,
         status: inserted.status,
         note: inserted.note,
+        avatar_url: inserted.avatar_url || null,
         avatar: inserted.avatar_url || DEFAULT_AVATAR,
         _avatarLoaded: true,
         grade: inserted.grade,
         class: data.class,
-        class_id: inserted.class_id
+        class_id: inserted.class_id,
+        _scoreSaveWarning: scoreSaveWarning
     };
     APP_STATE.students.push(newStudent);
     APP_STATE.scores[newStudent.id] = {};
-    const studentSubjects =
-    APP_STATE.subjectCatalog?.length
-        ? APP_STATE.subjectCatalog.map(subject => subject.name)
-        : SUBJECTS;
-
-studentSubjects.forEach(sub => {
-    APP_STATE.scores[newStudent.id][sub] = {
-        giuaKy1: '',
-        cuoiKy1: null,
-        giuaKy2: '',
-        cuoiKy2: null,
-        competence: '',
-        quality: ''
-    };
-});
+    const studentSubjects = APP_STATE.subjectCatalog?.length
+        ? APP_STATE.subjectCatalog.map(s => s.name) : SUBJECTS;
+    studentSubjects.forEach(sub => {
+        APP_STATE.scores[newStudent.id][sub] = {
+            giuaKy1: '', cuoiKy1: null, giuaKy2: '', cuoiKy2: null,
+            competence: !scoreSaveWarning && sub === subject ? (data.competence || '') : '',
+            quality: !scoreSaveWarning && sub === subject ? (data.quality || '') : ''
+        };
+    });
     updateClassCounts();
     return newStudent;
 }
 
+let studentAddSubmitting = false;
 function openAddStudent() {
     if (!requireEditPermission('thêm học sinh')) return;
     captureStudentViewState();
     showModal('Thêm học sinh', getStudentFormHTML(null, true), 'Thêm', 'Hủy').then(async confirmed => {
-        if (confirmed) {
-            const data = getStudentFormData();
-            if (!data.fullName || !data.dob) {
-                showToast('Vui lòng điền đầy đủ thông tin!', 'error');
-                return;
-            }
-            const avatarInput = document.getElementById('sfAvatarInput');
-            const avatarFile = avatarInput && avatarInput.files.length ? avatarInput.files[0] : null;
-
-            try {
-                await addStudentToSupabase(data, avatarFile);
+        if (!confirmed || studentAddSubmitting) return;
+        const data = getStudentFormData();
+        if (!data.fullName || !data.dob) {
+            showToast('Vui lòng điền đầy đủ họ tên và ngày sinh!', 'error');
+            return;
+        }
+        const avatarInput = document.getElementById('sfAvatarInput');
+        const avatarFile = avatarInput?.files?.[0] || null;
+        const avatarCleared = document.getElementById('sfAvatarPreview')?.dataset?.avatarCleared === 'true';
+        studentAddSubmitting = true;
+        try {
+            const created = await addStudentToSupabase(data, avatarFile, avatarCleared);
+            if (!created) return;
+            if (created._scoreSaveWarning) {
+                showToast('Đã thêm học sinh thành công. Tuy nhiên năng lực/phẩm chất chưa lưu được: '
+                    + created._scoreSaveWarning + '. Hãy chỉnh sửa lại trong hồ sơ, không thêm trùng học sinh.', 'warning', 8000);
+            } else {
                 showToast('Thêm học sinh thành công!');
-                renderPage('students');
-            } catch (err) {
-                showToast('Lỗi khi thêm học sinh: ' + err.message, 'error');
             }
+            renderPage('students');
+        } catch (err) {
+            showToast('Chưa thêm được học sinh: ' + (err?.message || err), 'error', 6500);
+        } finally {
+            studentAddSubmitting = false;
         }
     });
 }

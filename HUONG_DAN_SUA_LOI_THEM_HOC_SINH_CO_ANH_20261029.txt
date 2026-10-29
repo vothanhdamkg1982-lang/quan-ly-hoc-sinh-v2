@@ -1,0 +1,36 @@
+WEB APP QUẢN LÝ HỌC SINH V2 - SỬA LỖI THÊM HỌC SINH THỦ CÔNG CÓ ẢNH
+Ngày cập nhật: 29/10/2026
+
+NGUYÊN NHÂN XÁC MINH TỪ MÃ NGUỒN
+- Hàm addStudentToSupabase tham chiếu biến avatarCleared chưa khai báo, khiến thao tác thêm mới báo lỗi trước khi ghi dữ liệu.
+- Sau khi INSERT học sinh thành công, một lỗi riêng tại bảng app3_scores trước đây làm hiển thị thông báo thêm thất bại, dẫn đến nguy cơ nhấn thêm lần nữa và tạo trùng.
+
+ĐÃ SỬA
+1. Xác định đúng trạng thái ảnh được chọn/xóa trong hộp thoại.
+2. Chuyển ảnh sang JPG tối đa 200 x 200 px trước khi ghi Supabase; xử lý lỗi đọc ảnh và không tạo hồ sơ nếu ảnh hỏng.
+3. Không gửi ảnh SVG mặc định dưới dạng base64 cho học sinh không có ảnh (avatar_url là NULL).
+4. Giữ hồ sơ học sinh đã tạo nếu phần lưu năng lực/phẩm chất lỗi, đồng thời hiển thị cảnh báo rõ để giáo viên KHÔNG thêm lại gây trùng.
+5. Chỉ lưu đánh giá vào app3_scores khi thực sự có năng lực/phẩm chất; dữ liệu khác giữ nguyên.
+6. Làm mới phiên bản script.js trên index.html để hạn chế cache mã cũ của trình duyệt.
+
+CẬP NHẬT VÀ SỬ DỤNG
+1. Sao lưu toàn bộ dự án/web hiện tại.
+2. Trong VS Code, ghi đè hai tệp index.html và script.js từ gói mới vào đúng thư mục gốc đang chạy (style.css không thay đổi).
+3. Chạy web như trước, tải lại trình duyệt bằng Ctrl + F5.
+4. Vào Quản lý học sinh -> Thêm học sinh -> chọn lớp -> nhập họ tên, ngày sinh -> Tải ảnh (JPG/PNG) -> Thêm.
+5. Kiểm tra học sinh mới có đúng ảnh trong danh sách và tại chức năng Gọi tên bằng hình ảnh. Đóng/mở lại để xác nhận ảnh vẫn còn.
+6. Nếu hiện cảnh báo chỉ phần Năng lực/Phẩm chất chưa được lưu: mở hồ sơ vừa tạo để cập nhật, KHÔNG bấm Thêm lần nữa.
+
+KHÔNG CẦN CHẠY LẠI SQL CHO LẦN SỬA NÀY.
+KHÔNG CẦN XÓA DỮ LIỆU SUPABASE.
+
+KIỂM THỬ TẠI MÔI TRƯỜNG PHÁT TRIỂN
+- node --check script.js: ĐẠT.
+- tests/test_manual_student_photo.mjs: 10/10 trường hợp giả lập ĐẠT.
+- tests/test_teacher_control_attendance.mjs: 11/11 trường hợp ĐẠT.
+- tests/test_adaptive_1754.mjs: ĐẠT.
+- Ba bộ kiểm thử học tập thích ứng cũ hơn có lỗi/giả định khác biệt từ trước, không phải bằng chứng lỗi tính năng ảnh.
+
+GIỚI HẠN KIỂM THỬ
+- Chưa xác minh giao dịch thật với Supabase đang triển khai và tình trạng phân quyền (RLS) của tài khoản tại trường.
+- Nếu Supabase từ chối INSERT hoặc ảnh không lưu được trên website thật, hãy chụp lại đúng thông báo lỗi để kiểm tra quyền/database.
